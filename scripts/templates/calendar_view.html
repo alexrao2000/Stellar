@@ -108,12 +108,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--todo-bg); o
 .board { display: grid; grid-auto-flow: column; gap: 8px; align-items: start; }
 .board.wk7 { grid-auto-columns: minmax(0, 1fr); }
 .board.wide { grid-auto-columns: 152px; }
+.board.three-day {
+  grid-auto-flow: initial;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.14fr) minmax(0, 1fr);
+}
 
 .col {
   background: var(--surface); border: 1px solid var(--rule); border-radius: 9px;
   overflow: hidden; box-shadow: var(--shadow); min-width: 0;
 }
 .col.is-today { border-color: var(--today); }
+.board.three-day .col.is-today {
+  border: 2px solid var(--today);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--today) 20%, transparent);
+}
 .col-head { padding: 9px 11px; border-bottom: 1px solid var(--rule); background: var(--surface-2); }
 .col-head .wd {
   font-family: ui-monospace, Menlo, monospace; font-size: .62rem; letter-spacing: .1em;
@@ -125,6 +133,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--todo-bg); o
 }
 .col-head .mo { font-size: .68rem; color: var(--ink-muted); margin-left: 5px; }
 .col.is-today .col-head .dm { color: var(--today); }
+.board.three-day .col.is-today .col-head { background: color-mix(in srgb, var(--today) 10%, var(--surface-2)); }
+.board.three-day .col.is-today .col-head .wd::after {
+  content: 'TODAY'; color: var(--today); font-weight: 800; margin-left: 6px;
+}
+.board.three-day .col.is-today .col-head .dm { font-size: 1.38rem; }
 .col-head .count {
   float: right; font-family: ui-monospace, Menlo, monospace; font-size: .64rem;
   color: var(--ink-muted); margin-top: 5px;
@@ -199,6 +212,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
 
   <div class="bar">
     <div class="seg" role="group" aria-label="Span">
+      <button type="button" data-span="3">3 days</button>
       <button type="button" data-span="7" class="active">Week</button>
       <button type="button" data-span="14">2 weeks</button>
       <button type="button" data-span="30">Month</button>
@@ -379,7 +393,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
 
   function render() {
     var board = document.getElementById('board');
-    board.className = 'board ' + (state.span === 7 ? 'wk7' : 'wide');
+    board.className = 'board ' + (state.span === 3 ? 'three-day' : state.span === 7 ? 'wk7' : 'wide');
     board.innerHTML = '';
 
     var todayStr = localToday();
@@ -505,6 +519,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
       document.querySelectorAll('[data-span]').forEach(function (x) { x.classList.remove('active'); });
       b.classList.add('active');
       state.span = +b.dataset.span;
+      if (state.span === 3) state.start = parseDay(localToday()) - DAY;
       render();
     });
   });
@@ -515,7 +530,11 @@ footer.foot b { color: var(--ink); font-weight: 600; }
     state.start += state.span * DAY; render();
   });
   document.getElementById('jump').addEventListener('change', function (e) {
-    if (e.target.value) { state.start = parseDay(e.target.value); render(); }
+    if (e.target.value) {
+      var selectedDay = parseDay(e.target.value);
+      state.start = state.span === 3 ? selectedDay - DAY : selectedDay;
+      render();
+    }
   });
   document.getElementById('only-daily').addEventListener('click', function () {
     state.dailyOnly = true;
