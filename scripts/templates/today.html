@@ -81,7 +81,7 @@ body.view-custom .daynav2 { display: none; }
 /* ---- range: one column per day, or a month grid ---------------------------- */
 #board { margin-top: 4px; }
 .summary { font-size: .8rem; color: var(--ink-muted); margin: 0 0 10px; font-family: ui-monospace, Menlo, monospace; }
-.cols { display: grid; gap: 10px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
+.cols { display: grid; grid-template-columns: repeat(var(--day-count), minmax(160px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 6px; align-items: start; }
 .month { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); gap: 8px; overflow-x: auto; align-items: start; }
 .month .wd { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-muted); padding: 0 4px; }
 .col {
@@ -114,6 +114,11 @@ body.view-custom .daynav2 { display: none; }
 .mini .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .mini .tag { flex: 0 0 auto; font-family: ui-monospace, Menlo, monospace; font-size: .64rem; font-weight: 400; opacity: .85; }
 .mini .tag.missed { background: var(--bad); color: #fff; padding: 1px 4px; border-radius: 3px; opacity: 1; }
+.mini:not(.field) { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; }
+.mini:not(.field) .mbox { grid-column: 1; grid-row: 1; margin-top: 2px; }
+.mini:not(.field) .t { grid-column: 2; grid-row: 1; }
+.mini:not(.field) .tag { grid-column: 2; justify-self: start; white-space: normal; }
+.month-hint, .inline-warning { display: none; }
 .mini .mbox {
   width: 13px; height: 13px; border-radius: 3px; flex: 0 0 auto; border: 1.5px solid currentColor;
 }
@@ -385,6 +390,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
             <span class="unit" aria-hidden="true">lbs</span>
           </div>
           <span class="due" id="due-weight"></span>
+          <span id="weight-inline-warning" class="inline-warning" role="status" hidden></span>
         </div>
       </div>
       <div class="item" id="item-wake">
@@ -678,6 +684,9 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var tip = document.getElementById('weight-warning-tip');
     icon.hidden = !msg;
     tip.textContent = msg || '';
+    var inline = document.getElementById('weight-inline-warning');
+    inline.textContent = msg || '';
+    inline.hidden = !msg;
     icon.setAttribute('aria-label', msg ? 'Weight warning: ' + msg : '');
   }
   function setDone(el, done) { el.classList.toggle('done', done); }
@@ -1366,6 +1375,12 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     sum.className = 'summary';
     sum.textContent = total ? done + ' of ' + total + ' done so far in view' : 'Nothing due yet in view';
     board.appendChild(sum);
+    if (VIEW === 'month') {
+      var hint = document.createElement('p');
+      hint.className = 'month-hint';
+      hint.textContent = 'Tap a date to open its tasks.';
+      board.appendChild(hint);
+    }
 
     var grid = document.createElement('div');
     if (VIEW === 'month') {
@@ -1378,7 +1393,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       }
     } else {
       grid.className = 'cols';
-      grid.style.gridTemplateColumns = 'repeat(' + days.length + ', minmax(160px, 1fr))';
+      grid.style.setProperty('--day-count', days.length);
     }
     days.forEach(function (d) { grid.appendChild(column(d)); });
     board.appendChild(grid);
@@ -1394,6 +1409,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     head.type = 'button';
     head.className = 'col-head';
     head.title = 'Open ' + day;
+    head.setAttribute('aria-label', 'Open ' + day + (rows.length && !future ? ', ' + nDone + ' of ' + owed(rows) + ' completed' : ''));
     head.innerHTML = '<span class="dn">' + parts(day)[2] + '</span><span class="dw">' +
       esc(label(day, { weekday: 'short' })) + '</span>' +
       (rows.length && !future ? '<span class="cnt">' + nDone + '/' + owed(rows) + '</span>' : '');

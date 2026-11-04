@@ -94,6 +94,36 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
 .pill.done { color: var(--done); background: color-mix(in srgb, var(--done) 16%, transparent); }
 .pill.miss { color: var(--miss); background: color-mix(in srgb, var(--miss) 16%, transparent); }
 .empty { padding: 30px; text-align: center; color: var(--ink-muted); font-size: .88rem; }
+.record-toggle, .record-action { display: none; }
+@media (max-width: 760px) {
+  .tablewrap { border: 0; background: transparent; box-shadow: none; overflow: visible; }
+  table { display: block; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  tbody { display: flex; flex-direction: column; gap: 12px; }
+  tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 14px;
+    border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+  tbody td { display: block; border: 0; padding: 4px 0; white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+  td.record-title { grid-column: 1 / -1; grid-row: 1; font-weight: 650; font-size: 15px; }
+  td.record-date { grid-row: 2; font-size: 13px; color: var(--ink-muted); }
+  td.record-state { grid-row: 2; text-align: right; }
+  td.record-details { grid-column: 1 / -1; }
+  tr:not(.expanded) td.record-details { display: none; }
+  td.record-details:empty { display: none; }
+  td.record-details::before { content: attr(data-label); display: block; color: var(--ink-muted); font: 11px/1.5 system-ui, sans-serif; }
+  td.record-action { display: block; grid-column: 1 / -1; padding-top: 8px; }
+  td.empty { grid-column: 1 / -1; }
+  .record-toggle { display: inline-flex; align-items: center; justify-content: center;
+    width: 100%; border: 1px solid var(--rule); border-radius: 7px;
+    background: var(--surface-2); color: var(--ink); font: inherit; }
+  td.notes { max-width: 100%; }
+  .bar label:has(input[type=checkbox]) { min-height: 44px; }
+  html body .pager { display: grid; grid-template-columns: 44px 44px minmax(0, 1fr) 44px 44px; gap: 4px; }
+  html body .pager button { padding: 0; }
+  .pager-word { display: none; }
+  .pager .count { font-size: 11px; text-align: center; margin: 0; }
+  .pagination-top { position: sticky; top: var(--mobile-nav-height); z-index: 5; }
+  .tablewrap { scroll-margin-top: calc(var(--mobile-nav-height) + 78px); }
+}
 </style>
 
 <div class="wrap">
@@ -110,7 +140,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
       <option value="miss">Not completed</option>
     </select>
     <select id="size" aria-label="Rows per page">
-      <option>50</option><option>100</option><option>200</option>
+      <option>20</option><option selected>50</option><option>100</option><option>200</option>
     </select>
     <label style="font-size:.8rem;color:var(--ink-muted);display:flex;gap:6px;align-items:center">
       <input type="checkbox" id="future"> show future
@@ -118,11 +148,19 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
     <span class="count mono" id="count"></span>
   </div>
 
+  <div class="bar pagination-top"><div class="pager">
+    <button type="button" data-page-action="first" aria-label="First page">&laquo;<span class="pager-word"> First</span></button>
+    <button type="button" data-page-action="prev" aria-label="Previous page">&lsaquo;<span class="pager-word"> Prev</span></button>
+    <span class="count mono page-counter"></span>
+    <button type="button" data-page-action="next" aria-label="Next page"><span class="pager-word">Next </span>&rsaquo;</button>
+    <button type="button" data-page-action="last" aria-label="Last page"><span class="pager-word">Last </span>&raquo;</button>
+  </div></div>
+
   <div class="tablewrap">
-    <table>
+    <table role="table" aria-label="Task records">
       <thead><tr>
         <th>Date</th><th>Task</th><th>List</th><th>Status</th>
-        <th>Weight</th><th>Source</th><th>Completed</th><th>Notes</th>
+        <th>Weight</th><th>Source</th><th>Completed</th><th>Notes</th><th class="record-toggle">Details</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -130,11 +168,11 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
 
   <div class="bar" style="margin-top:12px">
     <div class="pager">
-      <button id="first" type="button">&laquo; First</button>
-      <button id="prev" type="button">&lsaquo; Prev</button>
-      <span class="count mono" id="page"></span>
-      <button id="next" type="button">Next &rsaquo;</button>
-      <button id="last" type="button">Last &raquo;</button>
+      <button id="first" type="button" data-page-action="first" aria-label="First page">&laquo;<span class="pager-word"> First</span></button>
+      <button id="prev" type="button" data-page-action="prev" aria-label="Previous page">&lsaquo;<span class="pager-word"> Prev</span></button>
+      <span class="count mono page-counter" id="page"></span>
+      <button id="next" type="button" data-page-action="next" aria-label="Next page"><span class="pager-word">Next </span>&rsaquo;</button>
+      <button id="last" type="button" data-page-action="last" aria-label="Last page"><span class="pager-word">Last </span>&raquo;</button>
     </div>
   </div>
 </div>
@@ -144,6 +182,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
 (function () {
   var BOOT = JSON.parse(document.getElementById('bootstrap').textContent);
   var ALL = [], view = [], page = 0;
+  if (matchMedia('(max-width: 760px)').matches) document.getElementById('size').value = '20';
 
   /* Days are materialised ahead of time, so the table would otherwise open on a
      wall of empty placeholder rows months out. Hide anything past today unless
@@ -187,36 +226,47 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
           var w = r.weight_lbs === null || r.weight_lbs === undefined
             ? '' : Number(r.weight_lbs).toFixed(1);
           return '<tr>' +
-            '<td class="mono">' + esc(r.day) + '</td>' +
-            '<td>' + esc(r.title) + '</td>' +
-            '<td>' + esc(r.list_title || '') + '</td>' +
-            '<td><span class="pill ' + (r.is_completed ? 'done">Done' : 'miss">Not done') +
+            '<td class="mono record-date">' + esc(r.day) + '</td>' +
+            '<td class="record-title">' + esc(r.title) + '</td>' +
+            '<td class="record-details" data-label="List">' + esc(r.list_title || '') + '</td>' +
+            '<td class="record-state"><span class="pill ' + (r.is_completed ? 'done">Done' : 'miss">Not done') +
               '</span></td>' +
-            '<td class="mono">' + w + '</td>' +
-            '<td class="mono">' + esc(r.weight_source || '') + '</td>' +
-            '<td class="mono">' + esc((r.completed_at || '').replace('T', ' ').slice(0, 16)) + '</td>' +
-            '<td class="notes">' + esc(r.notes || '') + '</td>' +
+            '<td class="mono record-details" data-label="Weight">' + w + '</td>' +
+            '<td class="mono record-details" data-label="Source">' + esc(r.weight_source || '') + '</td>' +
+            '<td class="mono record-details" data-label="Completed">' + esc((r.completed_at || '').replace('T', ' ').slice(0, 16)) + '</td>' +
+            '<td class="notes record-details" data-label="Notes">' + esc(r.notes || '') + '</td>' +
+            '<td class="record-action"><button type="button" class="record-toggle" aria-expanded="false">Show details</button></td>' +
           '</tr>';
         }).join('')
       : '<tr><td colspan="8" class="empty">Nothing matches that filter.</td></tr>';
 
     document.getElementById('count').textContent =
       view.length.toLocaleString() + ' of ' + ALL.length.toLocaleString() + ' rows';
-    document.getElementById('page').textContent = 'page ' + (page + 1) + ' / ' + pages;
-    document.getElementById('first').disabled = page === 0;
-    document.getElementById('prev').disabled = page === 0;
-    document.getElementById('next').disabled = page >= pages - 1;
-    document.getElementById('last').disabled = page >= pages - 1;
+    document.querySelectorAll('.page-counter').forEach(function (el) { el.textContent = (page + 1) + ' / ' + pages; });
+    document.querySelectorAll('[data-page-action]').forEach(function (button) {
+      var first = button.dataset.pageAction === 'first' || button.dataset.pageAction === 'prev';
+      button.disabled = first ? page === 0 : page >= pages - 1;
+    });
   }
 
   ['q', 'status', 'size', 'future'].forEach(function (id) {
     document.getElementById(id).addEventListener('input', applyFilters);
   });
-  document.getElementById('first').addEventListener('click', function () { page = 0; render(); });
-  document.getElementById('prev').addEventListener('click', function () { page--; render(); });
-  document.getElementById('next').addEventListener('click', function () { page++; render(); });
-  document.getElementById('last').addEventListener('click', function () {
-    page = Math.ceil(view.length / size()) - 1; render();
+  document.getElementById('rows').addEventListener('click', function (e) {
+    var button = e.target.closest('.record-toggle');
+    if (!button) return;
+    var open = button.closest('tr').classList.toggle('expanded');
+    button.setAttribute('aria-expanded', String(open));
+    button.textContent = open ? 'Hide details' : 'Show details';
+  });
+  document.addEventListener('click', function (e) {
+    var button = e.target.closest('[data-page-action]');
+    if (!button) return;
+    var action = button.dataset.pageAction;
+    page = action === 'first' ? 0 : action === 'last' ? Math.ceil(view.length / size()) - 1
+      : page + (action === 'prev' ? -1 : 1);
+    render();
+    if (matchMedia('(max-width: 760px)').matches) document.querySelector('.tablewrap').scrollIntoView({ block: 'start' });
   });
 
   /* Inline: the server already had the rows and embedded them, so there is no

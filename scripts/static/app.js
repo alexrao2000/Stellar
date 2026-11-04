@@ -68,9 +68,34 @@
   }
   const nav = document.querySelector('.sidenav');
   if (nav) {
+    const toggle = nav.querySelector('.nav-toggle');
+    const setMenu = open => {
+      nav.classList.toggle('menu-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+    toggle.addEventListener('click', () => setMenu(toggle.getAttribute('aria-expanded') !== 'true'));
+    nav.querySelector('.nav-links').addEventListener('click', event => {
+      if (event.target.closest('a')) setMenu(false);
+    });
+    document.addEventListener('click', event => { if (!nav.contains(event.target)) setMenu(false); });
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+        setMenu(false);
+        toggle.focus();
+        event.stopPropagation();
+      }
+    }, true);
     const measure = () => document.documentElement.style.setProperty('--mobile-nav-height', nav.offsetHeight + 'px');
     new ResizeObserver(measure).observe(nav);
-    nav.querySelector('.here')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    matchMedia('(max-width: 760px)').addEventListener('change', () => setMenu(false));
     measure();
+  }
+  if (window.visualViewport) {
+    const measureViewport = () => document.documentElement.style.setProperty(
+      '--keyboard-inset', Math.max(0, innerHeight - visualViewport.height - visualViewport.offsetTop) + 'px'
+    );
+    visualViewport.addEventListener('resize', measureViewport);
+    visualViewport.addEventListener('scroll', measureViewport);
+    measureViewport();
   }
 })();
