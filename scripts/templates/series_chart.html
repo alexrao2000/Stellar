@@ -155,7 +155,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
     </div>
   </div>
   <div id="chart-empty" class="chart-empty" hidden>
-    <a href="/">Open daily check-in</a>
+    <a href="/?view=day" target="_top">Open daily check-in</a>
     <button id="chart-retry" type="button">Retry</button>
   </div>
 
@@ -307,6 +307,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
   }
 
   function setRange(days) {
+    try { localStorage.setItem('stellar:chart-range:' + BOOT.endpoint, String(days)); } catch (e) {}
     range = days;
     view = days ? ALL.filter(function (p) { return p.t >= last.t - days * DAY; }) : ALL;
     if (view.length < 2) view = ALL.slice(-2);
@@ -496,7 +497,14 @@ footer.foot b { color: var(--ink); font-weight: 600; }
     attributes: true, attributeFilter: ['data-theme']
   });
 
-  setRange(0);
+  var rememberedRange = 0;
+  try { rememberedRange = Number(localStorage.getItem('stellar:chart-range:' + BOOT.endpoint)); } catch (e) {}
+  if (![0, 30, 90, 180, 365].includes(rememberedRange)) rememberedRange = 0;
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    var active = Number(b.dataset.r) === rememberedRange;
+    b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active));
+  });
+  setRange(rememberedRange);
   }
 
   function unavailable(message, retry) {

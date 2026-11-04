@@ -372,9 +372,7 @@ def favicon() -> Response:
 # which is how /docs ended up linked from the check-in page and nowhere else.
 NAV_ITEMS = (
     ("/", "Tasks"),
-    ("/weight", "Weight"),
-    ("/wake", "Wake"),
-    ("/consistency", "Consistency"),
+    ("/metrics", "Metrics"),
     ("/data", "Data"),
     ("/pool", "Pool"),
     ("/tasks", "Settings"),
@@ -594,9 +592,12 @@ _BOOT_GATE_JS = """<script>
 
 
 def _nav(active: str) -> str:
+    if active in {"/weight", "/wake", "/consistency"}:
+        active = "/metrics"
+    icons = {"/": "▦", "/metrics": "▥", "/data": "▤", "/pool": "✦", "/tasks": "⚙", "/docs": "⌘"}
     links = "".join(
-        '<a href="{}"{}>{}</a>'.format(
-            href, ' class="here" aria-current="page"' if href == active else "",
+        '<a href="{}" title="{}" aria-label="{}"{}><span class="nav-icon" aria-hidden="true">{}</span><span class="nav-label">{}</span></a>'.format(
+            href, label, label, ' class="here" aria-current="page"' if href == active else "", icons[href],
             ('<span class="nav-task-label">Tasks</span><span class="nav-workspace-label">Tasks + Pool</span>'
              if href == "/" else label)
         )
@@ -606,11 +607,12 @@ def _nav(active: str) -> str:
     if load_config().auth_enabled:
         signout = (
             '<form class="signout" action="/auth/logout" method="post">'
-            '<button type="submit">Sign out</button></form>'
+            '<button type="submit" aria-label="Sign out" title="Sign out"><span class="nav-icon" aria-hidden="true">↪</span><span class="nav-label">Sign out</span></button></form>'
         )
     return (
         '<nav class="sidenav" aria-label="Views">'
-        '<div class="brand"><img src="/app-assets/stellar.svg" width="24" height="24" alt="">Stellar</div>'
+        '<div class="brand"><img src="/app-assets/stellar.svg" width="24" height="24" alt=""><span class="brand-name">Stellar</span></div>'
+        '<button type="button" class="sidebar-collapse" aria-expanded="true" aria-controls="app-nav-links" aria-label="Collapse sidebar" title="Collapse sidebar"><span aria-hidden="true">‹</span><span class="nav-label">Collapse</span></button>'
         '<button type="button" class="nav-toggle" aria-expanded="false" '
         'aria-controls="app-nav-links" aria-label="Navigation menu">'
         '<img src="/app-assets/stellar.svg" width="24" height="24" alt="">'
@@ -651,7 +653,7 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     if not path.exists():
         raise HTTPException(500, f"template missing: {template}")
     html = path.read_text(encoding="utf-8").replace(
-        "__BOOTSTRAP__", json.dumps(boot, separators=(",", ":"))
+        "__BOOTSTRAP__", json.dumps(boot, separators=(",", ":")).replace("<", "\\u003c")
     )
     # A page whose data is already in the markup has nothing to wait for, and
     # gating it would be strictly worse than not: the gate lifts on the first
@@ -1928,24 +1930,79 @@ WAKE_CFG = {
 
 
 @app.get("/weight", response_class=HTMLResponse)
-def page_weight() -> str:
+def page_weight(embedded: bool = False) -> str:
     return _render("series_chart.html", {
-        "mode": "live", "endpoint": "/api/weights", "cfg": WEIGHT_CFG,
+        "mode": "live", "endpoint": "/api/weights", "cfg": WEIGHT_CFG, "embedded": embedded,
     }, active="/weight")
 
 
 @app.get("/wake", response_class=HTMLResponse)
-def page_wake() -> str:
+def page_wake(embedded: bool = False) -> str:
     return _render("series_chart.html", {
-        "mode": "live", "endpoint": "/api/wake", "cfg": WAKE_CFG,
+        "mode": "live", "endpoint": "/api/wake", "cfg": WAKE_CFG, "embedded": embedded,
     }, active="/wake")
 
 
 @app.get("/consistency", response_class=HTMLResponse)
-def page_consistency() -> str:
+def page_consistency(embedded: bool = False, task: str | None = None, titles: str | None = None) -> str:
+    aliases = []
+    if titles:
+        try:
+            aliases = json.loads(titles)
+        except (ValueError, TypeError):
+            raise HTTPException(400, "invalid task titles")
+        if not isinstance(aliases, list) or len(aliases) > 100 or not all(isinstance(t, str) and len(t) <= 200 for t in aliases):
+            raise HTTPException(400, "invalid task titles")
     return _render("consistency.html", {
         "mode": "live", "endpoint": "/api/consistency",
+        "embedded": embedded, "task": task, "titles": aliases,
     }, active="/consistency")
+
+
+@app.get("/metrics", response_class=HTMLResponse)
+def page_metrics() -> str:
+    return _render("metrics.html", {"mode": "inline"}, active="/metrics")
+
+
+@app.get("/api/metrics")
+def api_metrics() -> dict:
+    from hashlib import sha256
+
+    rows = _task_projection("day,list_title,title,is_completed,weight_lbs,notes")
+    today = _today()
+    rows = [r for r in rows if r.get("list_title") == "Daily" and str(r.get("day", ""))[:10] <= today]
+    defs = _definitions()
+    hidden = _binned_titles(defs)
+    rows = [r for r in rows if r.get("title") not in hidden]
+    config = load_config()
+    modules = [{"id": "overview", "label": "Overview", "kind": "overview"}]
+    if any(r.get("title") == config.weight_task_title and r.get("weight_lbs") is not None for r in rows):
+        modules.append({"id": "weight", "label": "Weight", "kind": "weight"})
+    if any(r.get("title") == config.wake_up_task_title and parse_wake_up(r.get("notes") or "") for r in rows):
+        modules.append({"id": "wake", "label": "Wake", "kind": "wake"})
+    aliases = {}
+    for sid, versions in _series(defs).items():
+        current = _version_on(versions, _today())
+        module = {"id": "task-" + str(sid), "label": current["title"], "kind": "task",
+                  "titles": sorted({v["title"] for v in versions})}
+        for title in module["titles"]:
+            aliases[title] = module
+    seen = set()
+    measurements = _measurement_titles()
+    for row in rows:
+        title = row.get("title")
+        if not title or title in measurements:
+            continue
+        module = aliases.get(title) or {
+            "id": "task-" + sha256(title.encode()).hexdigest()[:16],
+            "label": title, "kind": "task", "titles": [title],
+        }
+        if module["id"] not in seen:
+            modules.append(module)
+            seen.add(module["id"])
+    modules[1:] = sorted(modules[1:], key=lambda m: ({"weight": 0, "wake": 1, "task": 2}[m["kind"]], m["label"].casefold()))
+    revision = sha256(json.dumps({"records": rows, "definitions": defs}, sort_keys=True, default=str).encode()).hexdigest()
+    return {"modules": modules, "revision": revision}
 
 
 @app.get("/data", response_class=HTMLResponse)

@@ -692,7 +692,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         throw new Error(j.detail || ('HTTP ' + res.status));
       });
     }).then(
-      function (v) { settled(); return v; },
+      function (v) { settled(); if (window.stellarRecordsChanged) window.stellarRecordsChanged(); return v; },
       function (e) { settled(); throw e; }
     );
   }

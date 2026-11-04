@@ -279,11 +279,13 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   var W = 0, H = 0;
   var writesInFlight = 0;
   var embeddedVisible = true;
+  var viewKey = 'stellar:pool-view:' + (BOOT.embedded ? 'workspace' : 'standalone');
+  try {
+    var rememberedView = localStorage.getItem(viewKey);
+    if (rememberedView === 'list' || rememberedView === 'map') sky.dataset.view = rememberedView;
+  } catch (e) {}
   if (BOOT.embedded) {
-    sky.dataset.view = 'map';
-    document.querySelectorAll('[data-pool-view]').forEach(function (b) {
-      b.setAttribute('aria-pressed', String(b.dataset.poolView === 'map'));
-    });
+    if (!rememberedView) sky.dataset.view = 'map';
     window.addEventListener('message', function (event) {
       if (event.origin !== location.origin || event.source !== parent ||
           !event.data || event.data.type !== 'stellar:pool-visibility') return;
@@ -291,6 +293,9 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       if (embeddedVisible) { resize(); pollPool(); }
     });
   }
+  document.querySelectorAll('[data-pool-view]').forEach(function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.poolView === sky.dataset.view));
+  });
 
   function note(msg, bad) {
     noteEl.textContent = msg || '';
@@ -962,6 +967,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     if (!button) return;
     closePanel();
     sky.dataset.view = button.dataset.poolView;
+    try { localStorage.setItem(viewKey, sky.dataset.view); } catch (err) {}
     document.querySelectorAll('[data-pool-view]').forEach(function (b) {
       b.setAttribute('aria-pressed', String(b === button));
     });

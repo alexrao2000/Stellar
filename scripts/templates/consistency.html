@@ -163,7 +163,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
   <div class="strip" id="strip"></div>
 
-  <div class="card">
+  <div class="card" id="ranking-card">
     <h2>Completion rate by task</h2>
     <div class="body">
       <div class="controls">
@@ -174,10 +174,10 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="detail-card">
     <h2>Per task</h2>
     <div class="body">
-      <div class="controls">
+      <div class="controls" id="task-picker">
         <select id="task"></select>
       </div>
       <div class="headline">
@@ -209,6 +209,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 <script>
 (function () {
   var BOOT = JSON.parse(document.getElementById('bootstrap').textContent);
+  document.body.classList.toggle('metric-detail', !!BOOT.task);
   var DAY = 86400000;
   var MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -294,6 +295,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
   function ranking() {
     var min = Number(document.getElementById('minocc').value);
+    try { localStorage.setItem('stellar:consistency-min', String(min)); } catch (e) {}
     document.getElementById('minocc-v').textContent = min;
     var stats = TITLES.map(function (t) {
       var past = byTitle[t].filter(function (r) { return r.day <= TODAY; });
@@ -325,6 +327,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
   function detail() {
     var t = document.getElementById('task').value;
+    if (!BOOT.task) { try { localStorage.setItem('stellar:consistency-task', t); } catch (e) {} }
     var all = byTitle[t] || [];
     var past = all.filter(function (r) { return r.day <= TODAY; });
     past.sort(function (a, b) { return a.day < b.day ? -1 : 1; });
@@ -358,6 +361,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
      to compare one year with another, which is most of the reason to look.
      Null until the first render chooses. */
   var HEAT_YEAR = null;
+  try { HEAT_YEAR = localStorage.getItem('stellar:heat-year'); } catch (e) {}
 
   function heatYears(rows) {
     var seen = {};
@@ -464,6 +468,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     var b = e.target.closest('button[data-year]');
     if (!b || b.dataset.year === HEAT_YEAR) return;
     HEAT_YEAR = b.dataset.year;
+    try { localStorage.setItem('stellar:heat-year', HEAT_YEAR); } catch (e) {}
     heatmap(byTitle[document.getElementById('task').value] || []);
   });
 
@@ -479,7 +484,9 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     : Promise.resolve(BOOT.data))
     .then(function (data) {
       /* Daily only. One-off tasks from other lists have no meaningful rate. */
-      ROWS = data.filter(function (r) { return r.list_title === 'Daily'; });
+      ROWS = data.filter(function (r) {
+        return r.list_title === 'Daily' && (!BOOT.task || (BOOT.titles.length ? BOOT.titles : [BOOT.task]).includes(r.title));
+      }).map(function (r) { return BOOT.task ? Object.assign({}, r, { title: BOOT.task }) : r; });
       ROWS.forEach(function (r) {
         (byTitle[r.title] = byTitle[r.title] || []).push(r);
       });
@@ -488,6 +495,13 @@ button:focus-visible, select:focus-visible, input:focus-visible {
       document.getElementById('task').innerHTML = TITLES.map(function (t) {
         return '<option>' + esc(t) + '</option>';
       }).join('');
+      if (BOOT.task) document.querySelector('#detail-card > h2').textContent = BOOT.task;
+      try {
+        var chosen = BOOT.task || localStorage.getItem('stellar:consistency-task');
+        if (TITLES.includes(chosen)) document.getElementById('task').value = chosen;
+        var threshold = Number(localStorage.getItem('stellar:consistency-min'));
+        if (threshold >= 1 && threshold <= 120) document.getElementById('minocc').value = threshold;
+      } catch (e) {}
 
       var future = ROWS.filter(function (r) { return r.day > TODAY; }).length;
       document.getElementById('note').innerHTML =

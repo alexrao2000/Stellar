@@ -20,7 +20,8 @@
     const columns = Math.max(1, Number(document.body.dataset.columns) || 1);
     const minimum = view === 'day' ? 380 : view === 'month' ? 7 * 150 + 48
       : Math.max(380, columns * (columns > 3 ? 168 : 200) + (columns - 1) * 10);
-    const available = Math.min(document.documentElement.clientWidth, innerWidth - 20) - 172 - 48;
+    const navWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-w')) || 172;
+    const available = Math.min(document.documentElement.clientWidth, innerWidth - 20) - navWidth - 48;
     const fits = desktop.matches && available >= minimum + 420 + 24;
     open = enabled && fits;
     toggle.hidden = !fits;
@@ -41,5 +42,6 @@
   frame.addEventListener('load', notify);
   new MutationObserver(layout).observe(document.body, { attributes: true, attributeFilter: ['data-range', 'data-columns'] });
   window.addEventListener('resize', layout);
+  window.addEventListener('stellar:sidebar', layout);
   layout();
 })();
