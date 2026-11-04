@@ -146,7 +146,97 @@ body[data-page=pool] { --surface: #111; --surface-2: #1d1d1d; --ink: #f4f4f4; --
   html body .sidenav .nav-links { border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 14px 14px; box-shadow: var(--shadow); }
   html body .wrap { padding-top: 28px; }
   html body .views, html body .bar, html body .card, html body .readout { border-radius: 14px; }
-  html body .task { padding: 15px 12px; }
+  html body[data-page=today] #day-card {
+    border: 0; background: transparent; box-shadow: none; overflow: visible;
+  }
+  html body[data-page=today] #day-card > h2 {
+    padding: 4px 4px 12px; border: 0; background: transparent;
+    font-size: 10px; letter-spacing: .14em;
+  }
+  html body[data-page=today] #tasks { padding: 0; gap: 12px; }
+  html body[data-page=today] #tasks > .item {
+    --tile-bg: var(--surface); --tile-ink: var(--ink);
+    display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 0;
+    border: 1px solid var(--rule); border-radius: 18px;
+    background: var(--tile-bg); color: var(--tile-ink);
+    overflow: hidden; box-shadow: var(--shadow);
+  }
+  html body[data-page=today] #tasks > .item:has(.todo),
+  html body[data-page=today] #tasks > .item:has(.task:not(.done)) {
+    --tile-bg: var(--todo-bg); --tile-ink: var(--todo-ink);
+    border-color: var(--todo-bg);
+  }
+  html body[data-page=today] #tasks > .item:has(.optional:not(.done)) {
+    --tile-bg: var(--opt-bg); --tile-ink: var(--opt-ink); border-color: var(--opt-bg);
+  }
+  html body[data-page=today] #tasks > .item:has(.done) {
+    --tile-bg: var(--done-bg); --tile-ink: var(--done-ink);
+  }
+  html body[data-page=today] #tasks > .item > .task,
+  html body[data-page=today] #tasks > .item > .field {
+    display: grid; grid-template-columns: 22px minmax(0, 1fr);
+    gap: 10px 12px; padding: 18px 0 18px 16px; min-height: 80px;
+    border: 0; border-radius: 0; background: transparent; color: inherit;
+    align-content: center; align-items: start;
+  }
+  html body[data-page=today] #tasks .box {
+    width: 22px; height: 22px; border-width: 1.5px; border-radius: 7px;
+    grid-column: 1; grid-row: 1; margin-top: 1px;
+  }
+  html body[data-page=today] #tasks .ttl {
+    font-size: 15px; line-height: 1.5; font-weight: 550;
+  }
+  html body[data-page=today] #tasks .optional:not(.done) .ttl::before {
+    content: "Optional"; display: block; margin-bottom: 4px;
+    font-size: 10px; line-height: 1.4; letter-spacing: .08em; text-transform: uppercase;
+  }
+  html body[data-page=today] #tasks .field label {
+    grid-column: 2; grid-row: 1; align-self: center; min-height: 22px;
+    font: 550 14px/1.5 system-ui, sans-serif; text-transform: none; letter-spacing: 0;
+  }
+  html body[data-page=today] #tasks .field .withunit,
+  html body[data-page=today] #tasks .field > input {
+    grid-column: 1 / -1; width: 100%; min-width: 0;
+  }
+  html body[data-page=today] #tasks .field input {
+    min-height: 52px; border-radius: 12px; padding: 12px;
+    font-size: 20px; line-height: 1.3;
+  }
+  html body[data-page=today] #tasks .field .withunit input { width: 100%; padding-right: 48px; }
+  html body[data-page=today] #tasks .field .unit { font-size: 13px; }
+  html body[data-page=today] #tasks .due {
+    grid-column: 2; justify-self: start; margin: 0; max-width: 100%;
+    font-size: 11px; line-height: 1.5; white-space: normal; border-radius: 7px;
+  }
+  html body[data-page=today] #tasks .field .due { grid-column: 1 / -1; }
+  html body[data-page=today] #tasks .due.missed { padding: 3px 7px; color: var(--surface); }
+  html body[data-page=today] #tasks .task.done .ttl { font-weight: 400; }
+  html body[data-page=today] .cols .col-body { padding: 8px; gap: 8px; }
+  html body[data-page=today] .cols .mini { border-radius: 12px; padding: 12px; min-height: 56px; }
+  html body[data-page=today] .cols .mini .mbox { width: 16px; height: 16px; border-radius: 5px; }
+  html body[data-page=today] #tasks .inline-warning { grid-column: 1 / -1; }
+  html body[data-page=today] #tasks .grip {
+    grid-column: 2; grid-row: 1; align-self: stretch; min-height: 44px;
+    border-radius: 0; color: inherit; background: transparent;
+  }
+  html body[data-page=today] #tasks .grip svg { width: 10px; opacity: .45; }
+  html body[data-page=today] #tasks .grip:focus-visible,
+  html body[data-page=today] #tasks .task:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
+  html body[data-page=today] #tasks .item.has-when .when {
+    grid-column: 1 / -1; position: static; display: flex; flex-wrap: wrap;
+    max-width: 100%; margin: 0; padding: 0 16px; border: 0;
+    border-top: 1px solid var(--rule); border-radius: 0;
+    background: transparent; color: inherit; box-shadow: none;
+    font: 12px/1.5 system-ui, sans-serif;
+  }
+  html body[data-page=today] #tasks .when > button { text-align: left; }
+  html body[data-page=today] #tasks .when.editing { padding: 12px 16px; gap: 8px; }
+  html body[data-page=today] #tasks .when.editing button {
+    border: 1px solid var(--rule); border-radius: 10px; text-align: center;
+  }
+  html body[data-page=today] #tasks .item.dragging { box-shadow: 0 8px 24px #0003; }
+  html body[data-page=today] #tasks .item.dragging > .task,
+  html body[data-page=today] #tasks .item.dragging > .field { box-shadow: none; }
   html body .sky .pool-view button[aria-pressed=true] { background: #f4f4f4; color: #111; border-color: #f4f4f4; }
   html body .sky .pool-view button, html body .sky .pool-list button { background: #10111e; border-color: var(--line); color: #ebe8f5; }
   html body .sky .pool-list small, html body .sky .pool-toolbar .hud { color: #aaa3c0; }

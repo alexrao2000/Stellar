@@ -45,7 +45,7 @@ HEAD = """<meta charset="utf-8">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="/app-assets/app.css?v=5">
-<link rel="stylesheet" href="/app-assets/stellar.css?v=2">
+<link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <script src="/app-assets/app.js?v=5" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" data-install hidden>Install app</button>'
