@@ -308,6 +308,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 </style>
 
 <div class="wrap">
+  <section class="dated-tasks" aria-label="Scheduled tasks">
   <header>
     <p class="eyebrow">Stellar</p>
     <h1>Tasks</h1>
@@ -318,6 +319,9 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       <button type="button" data-view="month">Month</button>
       <button type="button" data-view="custom">Custom</button>
     </div>
+    <button type="button" id="pool-toggle" class="pool-toggle" aria-pressed="false"
+            aria-controls="pool-pane" hidden>Show Pool</button>
+    <a href="/pool" id="pool-fallback" class="pool-toggle" hidden>Open Pool</a>
     <div class="daynav">
       <button class="step" id="prev-day" type="button" aria-label="Previous day">&larr;</button>
       <div class="date mono" id="date"></div>
@@ -368,6 +372,11 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   <div id="board"></div>
 
   <div id="status"></div>
+  </section>
+  <aside id="pool-pane" class="pool-pane" aria-label="Undated tasks" hidden>
+    <div class="pool-pane-head"><h2>Pool</h2><a href="/pool">Open full view ↗</a></div>
+    <iframe id="pool-frame" title="Undated task pool"></iframe>
+  </aside>
 </div>
 
 <script id="bootstrap" type="application/json">__BOOTSTRAP__</script>
@@ -1215,6 +1224,9 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   function go(view, day, opts) {
     opts = opts || {};
     VIEW = view;
+    document.body.dataset.range = view;
+    var span = rangeOf(view, day);
+    document.body.dataset.columns = view === 'month' ? 7 : daysBetween(span[0], span[1]) + 1;
     document.body.classList.toggle('ranged', view !== 'day');
     ['day', '3days', 'week', 'month', 'custom'].forEach(function (v) {
       document.body.classList.toggle('view-' + v, v === view);

@@ -278,6 +278,19 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   var veil = document.getElementById('veil');
   var W = 0, H = 0;
   var writesInFlight = 0;
+  var embeddedVisible = true;
+  if (BOOT.embedded) {
+    sky.dataset.view = 'map';
+    document.querySelectorAll('[data-pool-view]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.poolView === 'map'));
+    });
+    window.addEventListener('message', function (event) {
+      if (event.origin !== location.origin || event.source !== parent ||
+          !event.data || event.data.type !== 'stellar:pool-visibility') return;
+      embeddedVisible = event.data.visible === true;
+      if (embeddedVisible) { resize(); pollPool(); }
+    });
+  }
 
   function note(msg, bad) {
     noteEl.textContent = msg || '';
@@ -450,13 +463,16 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     visible().forEach(function (t) {
       if (t.pending) {
         var ghost = document.createElement('div');
-        ghost.className = 'star ghost' + (t.x > .74 ? ' flip' : '');
-        ghost.style.left = (t.x * W) + 'px';
-        ghost.style.top = (t.y * H) + 'px';
+        ghost.className = 'star ghost' + (t.x > .5 ? ' flip' : '');
+        var pendingPoint = screenPoint(t);
+        ghost.style.left = pendingPoint.x + 'px';
+        ghost.style.top = pendingPoint.y + 'px';
         ghost.innerHTML = starSVG('new', 1.2) +
           '<input maxlength="200" placeholder="name it" aria-label="Name this star">';
         mapField.appendChild(ghost);
         var box = ghost.querySelector('input');
+        box.style.width = Math.max(60, Math.min(178, (t.x > .5 ? pendingPoint.x : W - pendingPoint.x) - 28)) + 'px';
+        box.style.bottom = Math.min(4, pendingPoint.y - 52) + 'px';
         box.addEventListener('keydown', function (e) {
           if (e.key === 'Enter') { e.preventDefault(); commitNewStar(box.value); }
           else if (e.key === 'Escape') { e.preventDefault(); dropNewStar(); }
@@ -472,8 +488,9 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       el.className = 'star' + (done ? ' ember' : (waits.length ? ' dim' : '')) +
         (t.x > .74 ? ' flip' : '');
       el.dataset.id = t.id;
-      el.style.left = (t.x * W) + 'px';
-      el.style.top = (t.y * H) + 'px';
+      var point = screenPoint(t);
+      el.style.left = point.x + 'px';
+      el.style.top = point.y + 'px';
       el.innerHTML =
         (done ? emberSVG() : (waits.length ? unlitSVG() : starSVG(t.id, magnitude(t)))) +
         '<div class="hit"></div>' +
@@ -490,6 +507,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(t); }
       });
       mapField.appendChild(el);
+      fitLabel(el);
     });
     poolList.innerHTML = visible().filter(function (t) { return !t.pending; }).map(function (t) {
       var waits = prereqsOf(t.id).length;
@@ -530,7 +548,8 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     EDGES.forEach(function (e) {
       var a = byId[e.before_id], b = byId[e.after_id];
       if (!a || !b || !shown[a.id] || !shown[b.id]) return;
-      var ax = a.x * W, ay = a.y * H, bx = b.x * W, by = b.y * H;
+      var ap = screenPoint(a), bp = screenPoint(b);
+      var ax = ap.x, ay = ap.y, bx = bp.x, by = bp.y;
       var dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1;
       var pad = 13 / L;
       out += '<line x1="' + (ax + dx * pad) + '" y1="' + (ay + dy * pad) +
@@ -550,6 +569,23 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     W = r.width; H = r.height;
     drawDust();
     paint();
+  }
+
+  function fitLabel(el) {
+    var x = parseFloat(el.style.left), y = parseFloat(el.style.top);
+    var flip = x > W / 2;
+    el.classList.toggle('flip', flip);
+    var name = el.querySelector('.name');
+    name.style.width = Math.max(40, Math.min(220, (flip ? x : W - x) - 28)) + 'px';
+    var height = name.offsetHeight;
+    name.style.bottom = 'auto';
+    name.style.top = Math.max(8 - y, Math.min(-height - 9, H - y - height - 8)) + 'px';
+  }
+
+  function screenPoint(task) {
+    var mx = Math.min(34, W / 2), my = Math.min(34, H / 2);
+    return { x: Math.max(mx, Math.min(W - mx, task.x * W)),
+             y: Math.max(my, Math.min(H - my, task.y * H)) };
   }
 
   /* ---- dragging: move, or link ----------------------------------------- */
@@ -583,21 +619,22 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
          line to the target and leave the dragged star where it was. */
       drag.onto = byId[onto.dataset.id];
       drag.el.classList.add('linking');
-      drag.el.style.left = (drag.sx * W) + 'px';
-      drag.el.style.top = (drag.sy * H) + 'px';
-      drawLines({ x1: drag.sx * W, y1: drag.sy * H,
-                  x2: drag.onto.x * W, y2: drag.onto.y * H });
+      var origin = screenPoint({ x: drag.sx, y: drag.sy }), target = screenPoint(drag.onto);
+      drag.el.style.left = origin.x + 'px';
+      drag.el.style.top = origin.y + 'px';
+      fitLabel(drag.el);
+      drawLines({ x1: origin.x, y1: origin.y, x2: target.x, y2: target.y });
       note('link: ' + drag.t.title + ' before ' + drag.onto.title);
     } else {
       drag.onto = null;
       drag.el.classList.remove('linking');
       drag.t.x = Math.min(Math.max((e.clientX - r.left) / W, 0.02), 0.98);
       drag.t.y = Math.min(Math.max((e.clientY - r.top) / H, 0.02), 0.98);
-      drag.el.style.left = (drag.t.x * W) + 'px';
-      drag.el.style.top = (drag.t.y * H) + 'px';
-      drag.el.classList.toggle('flip', drag.t.x > .74);
-      drawLines({ x1: drag.t.x * W, y1: drag.t.y * H,
-                  x2: drag.t.x * W, y2: drag.t.y * H });
+      var point = screenPoint(drag.t);
+      drag.el.style.left = point.x + 'px';
+      drag.el.style.top = point.y + 'px';
+      fitLabel(drag.el);
+      drawLines();
       note('');
     }
   });
@@ -889,7 +926,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     return JSON.stringify([tasks, edges]);
   }
   function pollPool() {
-    if (document.hidden || pollBusy || writesInFlight || drag || PENDING ||
+    if (document.hidden || !embeddedVisible || pollBusy || writesInFlight || drag || PENDING ||
         panelEl.contains(document.activeElement)) return;
     pollBusy = true;
     fetch('/api/pool?resolved=true').then(function (res) {
@@ -930,12 +967,20 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     });
     resize();
   });
-  new ResizeObserver(function () {
-    var height = document.querySelector('.pool-toolbar').getBoundingClientRect().height;
-    sky.style.setProperty('--pool-toolbar-height', height + 'px');
-  }).observe(document.querySelector('.pool-toolbar'));
-  new ResizeObserver(resize).observe(mapField);
-  window.addEventListener('resize', resize);
+  var resizeQueued = false;
+  function scheduleResize() {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(function () {
+      resizeQueued = false;
+      var height = document.querySelector('.pool-toolbar').getBoundingClientRect().height;
+      sky.style.setProperty('--pool-toolbar-height', height + 'px');
+      resize();
+    });
+  }
+  new ResizeObserver(scheduleResize).observe(document.querySelector('.pool-toolbar'));
+  new ResizeObserver(scheduleResize).observe(mapField);
+  window.addEventListener('resize', scheduleResize);
   resize();
 })();
 </script>

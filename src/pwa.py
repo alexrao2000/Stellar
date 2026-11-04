@@ -14,6 +14,8 @@ ASSETS = Path(__file__).resolve().parent.parent / "scripts" / "static"
 ASSET_TYPES = {
     "app.css": "text/css",
     "stellar.css": "text/css",
+    "workspace.css": "text/css",
+    "workspace.js": "text/javascript",
     "app.js": "text/javascript",
     "icon-192.png": "image/png",
     "icon-512.png": "image/png",
@@ -46,6 +48,8 @@ HEAD = """<meta charset="utf-8">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
 <link rel="stylesheet" href="/app-assets/app.css?v=5">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
+<link rel="stylesheet" href="/app-assets/workspace.css?v=1">
+<script src="/app-assets/workspace.js?v=1" defer></script>
 <script src="/app-assets/app.js?v=5" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" data-install hidden>Install app</button>'

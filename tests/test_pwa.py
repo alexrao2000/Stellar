@@ -42,9 +42,10 @@ def test_manifest_and_icons_are_available_before_sign_in(client):
 
 
 def test_public_assets_do_not_open_the_auth_boundary(client):
-    for path in ("/sw.js", "/offline", "/app-assets/app.css", "/app-assets/stellar.css", "/app-assets/app.js"):
+    for path in ("/sw.js", "/offline", "/app-assets/app.css", "/app-assets/stellar.css", "/app-assets/app.js",
+                 "/app-assets/workspace.css", "/app-assets/workspace.js"):
         assert client.get(path).status_code == 200
-    for path in ("/", "/tasks", "/weight", "/pool"):
+    for path in ("/", "/tasks", "/weight", "/pool", "/pool?embedded=true"):
         assert client.get(path).status_code == 303
     assert client.get("/api/task_history").status_code == 401
     assert client.post("/api/day/2026-11-04/weight?lbs=150",
@@ -99,3 +100,31 @@ def test_all_views_and_login_have_a_real_mobile_document(client, monkeypatch):
         assert 'data-install hidden' in page
         assert "Stellar" in page
         assert "Task Tracker" not in page
+
+
+def test_embedded_pool_keeps_data_and_controls_without_duplicate_navigation(client, monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    monkeypatch.setattr(server, "_pool_state", lambda **kwargs: {
+        "tasks": [{"id": "7", "title": "Plan the week"}], "edges": [],
+    })
+    response = client.get("/pool?embedded=true")
+    assert response.status_code == 200
+    assert 'data-page="pool" data-embedded="true"' in response.text
+    assert 'class="sidenav"' not in response.text
+    assert 'id="pool-add"' in response.text
+    assert 'id="pool-map"' in response.text
+    assert '"title":"Plan the week"' in response.text
+    standalone = client.get("/pool")
+    assert 'class="sidenav"' in standalone.text
+    assert 'data-embedded="true"' not in standalone.text
+
+
+def test_tasks_page_does_not_read_pool_until_the_browser_opens_it(client, monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    def unexpected_pool_read(**kwargs):
+        raise AssertionError("Pool must load only when its pane is opened")
+    monkeypatch.setattr(server, "_pool_state", unexpected_pool_read)
+    response = client.get("/?view=week")
+    assert response.status_code == 200
+    assert 'aria-controls="pool-pane"' in response.text
+    assert '<iframe id="pool-frame" title="Undated task pool"></iframe>' in response.text
