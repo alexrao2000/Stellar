@@ -311,7 +311,12 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   <section class="dated-tasks" aria-label="Scheduled tasks">
   <header>
     <p class="eyebrow">Stellar</p>
-    <h1>Tasks</h1>
+    <div class="task-panel-heading">
+      <h1>Tasks</h1>
+      <button type="button" id="pool-toggle" class="pool-toggle" aria-pressed="false"
+              aria-controls="pool-pane" hidden>Show Pool</button>
+      <a href="/pool" id="pool-fallback" class="pool-toggle" hidden>Open Pool</a>
+    </div>
     <div class="views" id="views" role="group" aria-label="Range">
       <button type="button" data-view="day">Day</button>
       <button type="button" data-view="3days">3 days</button>
@@ -319,9 +324,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       <button type="button" data-view="month">Month</button>
       <button type="button" data-view="custom">Custom</button>
     </div>
-    <button type="button" id="pool-toggle" class="pool-toggle" aria-pressed="false"
-            aria-controls="pool-pane" hidden>Show Pool</button>
-    <a href="/pool" id="pool-fallback" class="pool-toggle" hidden>Open Pool</a>
+    <div class="day-controls">
     <div class="daynav">
       <button class="step" id="prev-day" type="button" aria-label="Previous day">&larr;</button>
       <div class="date mono" id="date"></div>
@@ -330,6 +333,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     <div class="daynav2">
       <input type="date" id="pick" aria-label="Jump to a date">
       <button class="step wide" id="go-today" type="button">Today</button>
+    </div>
     </div>
     <div class="custom">
       <input type="date" id="range-start" aria-label="First day">
@@ -922,9 +926,12 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     pill.innerHTML = '';
     var b = document.createElement('button');
     b.type = 'button';
-    b.innerHTML = 'Completed ' + esc(label) +
+    var timeLabel = hm(at);
+    b.innerHTML = '<span class="when-label">Completed </span><span class="when-day">' +
+      esc(label.slice(0, label.length - timeLabel.length)) + '</span>' + esc(timeLabel) +
       (writable(r.day) ? '<span class="pen" aria-hidden="true">&#9998;</span>' : '');
-    b.title = writable(r.day) ? 'Correct when this was done' : '';
+    b.setAttribute('aria-label', 'Completed ' + label + (writable(r.day) ? ', correct completion time' : ''));
+    b.title = 'Completed ' + label + (writable(r.day) ? ' — correct completion time' : '');
     b.addEventListener('click', function (e) {
       e.stopPropagation();
       if (writable(r.day)) editWhen(item, pill);
@@ -1045,9 +1052,17 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     function move(e) {
       var item = drag.item, before = null;
       var others = Array.prototype.filter.call(host.children, function (n) { return n !== item; });
-      for (var i = 0; i < others.length; i++) {
-        var r = others[i].getBoundingClientRect();
-        if (e.clientY < r.top + r.height / 2) { before = others[i]; break; }
+      if (getComputedStyle(host).display === 'grid') {
+        var hit = document.elementFromPoint(e.clientX, e.clientY);
+        var target = hit && hit.closest('.item');
+        if (!target || target.parentElement !== host || target === item) return;
+        var items = Array.prototype.slice.call(host.children);
+        before = items.indexOf(item) > items.indexOf(target) ? target : target.nextElementSibling;
+      } else {
+        for (var i = 0; i < others.length; i++) {
+          var r = others[i].getBoundingClientRect();
+          if (e.clientY < r.top + r.height / 2) { before = others[i]; break; }
+        }
       }
       if (item.nextElementSibling !== before) {
         host.insertBefore(item, before);

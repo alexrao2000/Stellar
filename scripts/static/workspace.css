@@ -2,10 +2,12 @@
    space around the panel. Compact views wrap labels and native controls. */
 .dated-tasks { min-width: 0; }
 .nav-workspace-label { display: none; }
-.pool-toggle { margin-top: 10px; padding: 8px 14px; border: 1px solid var(--rule);
+.task-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pool-toggle { margin: 0; padding: 6px 10px; border: 1px solid var(--rule);
   border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit;
-  font-size: 13px; min-height: 40px; cursor: pointer; }
-.pool-toggle[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  font-size: 12px; min-height: 34px; cursor: pointer; white-space: nowrap; }
+.pool-toggle[aria-pressed=true] { background: var(--surface-2); color: var(--ink); }
+.pool-toggle::before { content: '✦'; margin-right: 6px; }
 a.pool-toggle { display: inline-flex; align-items: center; text-decoration: none; }
 .pool-pane { position: sticky; top: 24px; height: calc(100dvh - 48px); min-height: 420px;
   display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--rule);
@@ -79,29 +81,99 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
     border: 0; border-radius: 0; }
   .workspace-open .pool-pane-head { display: none; }
   .workspace-open .dated-tasks { position: absolute; z-index: 2; top: 24px; left: 24px;
-    width: var(--workspace-task-width); max-height: calc(100% - 48px); padding: 20px;
+    width: var(--workspace-task-width); max-height: calc(100% - 48px); padding: 16px;
     overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--rule); border-radius: 20px;
     background: color-mix(in srgb, var(--surface) 94%, transparent);
     backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
     box-shadow: 0 12px 48px #0005, 0 2px 8px #0003; }
-  .workspace-open .dated-tasks > header { max-width: none; }
+  .workspace-open .dated-tasks > header { max-width: none; margin-bottom: 12px; }
   .workspace-open .dated-tasks > header > .eyebrow { display: none; }
-  html body .workspace-open .dated-tasks h1 { font-size: 24px; }
-  .workspace-open .views { display: flex; width: 100%; }
-  .workspace-open .views button { flex: 1; padding-left: 6px; padding-right: 6px; }
-  .workspace-open .task, .workspace-open #tasks .field { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px 12px; }
-  .workspace-open .task .ttl, .workspace-open .task .due { grid-column: 2; margin: 0; justify-self: start; }
-  .workspace-open #tasks .field label { min-width: 0; }
-  .workspace-open #tasks .field .withunit, .workspace-open #tasks .field > input,
-  .workspace-open #tasks .field .due { grid-column: 2; min-width: 0; width: 100%; margin: 0; }
-  .workspace-open #tasks .field input { width: 100%; }
-  .workspace-open #tasks .field .due { width: auto; justify-self: start; }
+  html body .workspace-open .dated-tasks h1 { font-size: 22px; }
+  .workspace-open .views { display: flex; width: 100%; padding: 3px; margin-top: 10px; border-radius: 10px; }
+  .workspace-open .views button { flex: 1; padding: 5px 6px; min-height: 30px; font-size: 12px; }
+  .workspace-open .day-controls { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto 32px; gap: 5px 6px; margin-top: 8px; }
+  .workspace-open .daynav, .workspace-open .daynav2 { display: contents; }
+  .workspace-open .date { grid-column: 1 / -1; grid-row: 1; font-size: 12px; line-height: 1.5; }
+  .workspace-open #prev-day { grid-column: 1; grid-row: 2; }
+  .workspace-open #next-day { grid-column: 4; grid-row: 2; }
+  .workspace-open #pick { grid-column: 2; grid-row: 2; padding: 5px 8px; width: 100%; min-height: 32px; font-size: 12px; }
+  .workspace-open #go-today { grid-column: 3; grid-row: 2; font-size: 11px; padding: 0 8px; }
+  .workspace-open .step { min-width: 32px; height: 32px; min-height: 32px; border-radius: 8px; font-size: 14px; }
+  .workspace-open #day-card { background: transparent; border: 0; box-shadow: none; margin: 0; overflow: visible; }
+  .workspace-open #day-card > h2 { display: none; }
+  .workspace-open #tasks { padding: 0; gap: 6px; }
+  .workspace-open #tasks > .item { --tile-bg: var(--todo-bg); --tile-ink: var(--todo-ink);
+    display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 0; align-items: stretch;
+    border: 1px solid transparent; border-radius: 11px; background: var(--tile-bg); color: var(--tile-ink); }
+  .workspace-open #tasks > .item:has(.optional:not(.done)) { --tile-bg: var(--opt-bg); --tile-ink: var(--opt-ink); }
+  .workspace-open #tasks > .item:has(.done) { --tile-bg: var(--done-bg); --tile-ink: var(--done-ink); border-color: var(--rule); }
+  .workspace-open #tasks > .item > .task, .workspace-open #tasks > .item > .field {
+    display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 4px 8px; min-height: 48px;
+    padding: 8px 0 8px 10px; border: 0; border-radius: 10px 0 0 10px; background: transparent; color: inherit; }
+  .workspace-open #tasks .box { width: 16px; height: 16px; border-width: 1.5px; border-radius: 5px; margin-top: 2px; }
+  .workspace-open #tasks .task .ttl { grid-column: 2; margin: 0; font-size: 13px; line-height: 1.4; font-weight: 500; }
+  .workspace-open #tasks .task.done .ttl { font-weight: 400; }
+  .workspace-open #tasks .due { grid-column: 2; margin: 0; justify-self: start; font-size: 10px; line-height: 1.4; }
+  .workspace-open #tasks .due.missed { padding: 2px 5px; background: color-mix(in srgb, var(--bad) 18%, var(--tile-bg)); color: inherit; }
+  .workspace-open #tasks .item:has(.done) .due.missed { color: var(--ink); }
+  .workspace-open #tasks .grip { grid-column: 2; grid-row: 1; min-width: 28px; border-radius: 0 10px 10px 0; color: inherit; }
+  .workspace-open #tasks .grip svg { width: 9px; opacity: .45; }
+  .workspace-open #tasks > .item > .field { grid-template-columns: 16px minmax(48px, 1fr) minmax(90px, 124px); align-items: center; }
+  .workspace-open #tasks .field label { min-width: 0; grid-column: 2; grid-row: 1; font: 500 13px/1.4 system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+  .workspace-open #tasks .field .withunit, .workspace-open #tasks .field > input { grid-column: 3; grid-row: 1; width: 100%; min-width: 0; }
+  .workspace-open #tasks .field input { width: 100%; min-height: 32px; height: 32px; padding: 5px 8px; border-radius: 7px; font-size: 14px; }
+  .workspace-open #tasks .field .withunit input { padding-right: 32px; }
+  .workspace-open #tasks .field .unit { right: 8px; font-size: 10px; }
+  .workspace-open #tasks .field .due { grid-column: 2 / -1; width: auto; justify-self: start; }
   .workspace-open #tasks .field .inline-warning { grid-column: 1 / -1; }
+  .workspace-open #tasks .item.has-when .when { position: absolute; top: auto; bottom: 6px; right: 28px;
+    display: flex; flex-wrap: wrap; grid-column: 1 / -1;
+    margin: 0; padding: 0; border: 0; border-radius: 0;
+    background: transparent; color: inherit; box-shadow: none; font: 10px/1.4 system-ui, sans-serif; }
+  .workspace-open #tasks .when-label, .workspace-open #tasks .when-day { display: none; }
+  .workspace-open #tasks .item.has-when .due { max-width: calc(100% - 76px); }
+  .workspace-open #tasks .when > button { min-height: 20px; }
+  .workspace-open #tasks .item.has-when > :is(.task,.field):has(.due:empty) { padding-bottom: 28px; }
+  .workspace-open #tasks .item.has-when .when.editing { position: static; padding: 8px 10px; gap: 6px; }
+  .workspace-open #tasks .when.editing > button { min-height: 28px; flex: 1; }
+  .workspace-open #tasks .when input { min-width: 0; width: 100%; flex: 1 0 100%; }
+  .workspace-open #status:empty { display: none; }
+  .workspace-open[data-task-columns='2'] #tasks, .workspace-open[data-task-columns='3'] #tasks {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .workspace-open[data-task-columns='3'] #tasks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .workspace-open .mini input { width: 100%; min-width: 0; }
-  .workspace-open .month { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .workspace-open .cols .mini { padding: 6px 7px; border-radius: 8px; font-size: 12px; }
+  .workspace-open .cols .col-body { gap: 4px; }
+  .workspace-open .summary, .workspace-open .month-hint { font-size: 11px; margin: 0 0 8px; }
+  .workspace-open .month-hint { display: block; }
+  .workspace-open .month { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .workspace-open .month .col-body, .workspace-open .month .col-head .dw { display: none; }
+  .workspace-open .month .col-head { display: grid; justify-items: center; gap: 3px; min-height: 48px; padding: 6px 2px; border-bottom: 0; }
+  .workspace-open .month .col-head .cnt { margin: 0; font-size: 10px; }
+  .workspace-open .month .col-head .dn { font-size: 15px; }
+  .workspace-open .month .wd { text-align: center; padding: 0; font-size: 10px; }
 }
 @media (max-width: 1099px) {
   .rank .row .name, .rank .row .name button { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+}
+@media (min-width: 1100px) and (pointer: coarse) {
+  .workspace-open .pool-toggle, .workspace-open .views button,
+  .workspace-open .step, .workspace-open #pick,
+  .workspace-open #tasks .field input { min-height: 44px; height: auto; }
+  .workspace-open #tasks .field input, .workspace-open #pick { font-size: 16px; }
+  .workspace-open .day-controls { grid-template-columns: 44px minmax(0, 1fr) auto 44px; }
+  .workspace-open .step { min-width: 44px; }
+  .workspace-open #tasks > .item > .field { grid-template-columns: 16px minmax(0, 1fr); }
+  .workspace-open #tasks .field .withunit, .workspace-open #tasks .field > input { grid-column: 1 / -1; grid-row: 2; }
+  .workspace-open #tasks .grip { min-width: 44px; }
+  .workspace-open #tasks > .item { grid-template-columns: minmax(0, 1fr) 44px; }
+  .workspace-open #tasks .item.has-when .when { position: static; padding: 0 10px; }
+  .workspace-open #tasks .when > button { min-height: 44px; }
+}
+@media (min-width: 1100px) and (max-height: 650px) and (pointer: fine) {
+  .workspace-open .dated-tasks { top: 16px; max-height: calc(100% - 32px); padding: 14px; }
+  body.view-day .workspace-open .date { display: none; }
+  body.view-day .workspace-open :is(#prev-day,#next-day,#pick,#go-today) { grid-row: 1; }
 }
 @media (min-width: 761px) and (max-width: 1099px) {
   .task { flex-wrap: wrap; }
