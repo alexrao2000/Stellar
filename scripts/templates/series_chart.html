@@ -1,47 +1,5 @@
 <title>Stellar</title>
 <style>
-:root {
-  --bg: #E9ECF0;
-  --surface: #FBFCFD;
-  --surface-2: #F1F4F7;
-  --ink: #0F151C;
-  --ink-muted: #5C6875;
-  --rule: #D2D9E1;
-  --grid: rgba(15,21,28,0.07);
-  --accent: #1B4F8A;
-  --accent-soft: #DCE7F3;
-  --trend: #B4571C;
-  --down: #2F6B4F;
-  --up: #A33A28;
-  --shadow: 0 1px 2px rgba(15,21,28,0.06), 0 2px 8px rgba(15,21,28,0.04);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0E1218; --surface: #161C24; --surface-2: #1D242E;
-    --ink: #E8EDF3; --ink-muted: #94A1B0; --rule: #2A3441;
-    --grid: rgba(232,237,243,0.08);
-    --accent: #6BA6E8; --accent-soft: #16283D; --trend: #E0904F;
-    --down: #6FBF95; --up: #E3806B;
-    --shadow: 0 1px 2px rgba(0,0,0,0.5), 0 2px 10px rgba(0,0,0,0.3);
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0E1218; --surface: #161C24; --surface-2: #1D242E;
-  --ink: #E8EDF3; --ink-muted: #94A1B0; --rule: #2A3441;
-  --grid: rgba(232,237,243,0.08);
-  --accent: #6BA6E8; --accent-soft: #16283D; --trend: #E0904F;
-  --down: #6FBF95; --up: #E3806B;
-  --shadow: 0 1px 2px rgba(0,0,0,0.5), 0 2px 10px rgba(0,0,0,0.3);
-}
-:root[data-theme="light"] {
-  --bg: #E9ECF0; --surface: #FBFCFD; --surface-2: #F1F4F7;
-  --ink: #0F151C; --ink-muted: #5C6875; --rule: #D2D9E1;
-  --grid: rgba(15,21,28,0.07);
-  --accent: #1B4F8A; --accent-soft: #DCE7F3; --trend: #B4571C;
-  --down: #2F6B4F; --up: #A33A28;
-  --shadow: 0 1px 2px rgba(15,21,28,0.06), 0 2px 8px rgba(15,21,28,0.04);
-}
-
 * { box-sizing: border-box; }
 html, body {
   margin: 0; padding: 0; background: var(--bg); color: var(--ink);
@@ -214,7 +172,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
       <h2 id="chart-title">All time</h2>
       <div class="legend">
         <span><i class="swatch dot" style="background:var(--accent)"></i><span id="lg-a">Daily</span></span>
-        <span><i class="swatch" style="background:var(--trend)"></i>7-day average</span>
+        <span><i class="swatch trend"></i>7-day average</span>
       </div>
       <div class="seg" role="group" aria-label="Time range">
         <button type="button" data-r="30">30D</button>
@@ -433,6 +391,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
 
     /* moving-average line */
     ctx.strokeStyle = cTr; ctx.lineWidth = 2.1;
+    ctx.setLineDash([5, 4]);
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
     view.forEach(function (p, i) {
@@ -440,6 +399,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
     ctx.stroke();
+    ctx.setLineDash([]);
 
     /* hover crosshair */
     if (hoverIdx >= 0 && hoverIdx < view.length) {

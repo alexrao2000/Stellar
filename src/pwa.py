@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 ASSETS = Path(__file__).resolve().parent.parent / "scripts" / "static"
 ASSET_TYPES = {
     "app.css": "text/css",
+    "stellar.css": "text/css",
     "app.js": "text/javascript",
     "icon-192.png": "image/png",
     "icon-512.png": "image/png",
@@ -34,8 +35,8 @@ router = APIRouter()
 
 HEAD = """<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#FCFBFE">
-<meta name="theme-color" content="#1B1826" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -43,8 +44,9 @@ HEAD = """<meta charset="utf-8">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/app-assets/stellar-apple-touch-icon.png">
-<link rel="stylesheet" href="/app-assets/app.css?v=4">
-<script src="/app-assets/app.js?v=4" defer></script>"""
+<link rel="stylesheet" href="/app-assets/app.css?v=5">
+<link rel="stylesheet" href="/app-assets/stellar.css?v=1">
+<script src="/app-assets/app.js?v=5" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" data-install hidden>Install app</button>'
 INSTALL_DIALOG = """<dialog id="install-dialog" class="install-ui" aria-labelledby="install-title">

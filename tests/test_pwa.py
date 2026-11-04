@@ -42,7 +42,7 @@ def test_manifest_and_icons_are_available_before_sign_in(client):
 
 
 def test_public_assets_do_not_open_the_auth_boundary(client):
-    for path in ("/sw.js", "/offline", "/app-assets/app.css", "/app-assets/app.js"):
+    for path in ("/sw.js", "/offline", "/app-assets/app.css", "/app-assets/stellar.css", "/app-assets/app.js"):
         assert client.get(path).status_code == 200
     for path in ("/", "/tasks", "/weight", "/pool"):
         assert client.get(path).status_code == 303

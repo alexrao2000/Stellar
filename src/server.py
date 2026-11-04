@@ -381,23 +381,9 @@ NAV_ITEMS = (
     ("/docs", "API"),
 )
 
-# Only variables every template already defines are used here, so the sidebar
-# picks up each page's light/dark palette without carrying its own.
+# The shared theme supplies the sidebar palette.
 _NAV_CSS = """<style>
-:root { --nav-w: 172px; --nav-accent: #7A4FD8; }
-/* Fallback palette for a page that brings none of its own -- /docs is Swagger
-   UI, not one of our templates. Declared first, so a template's own :root,
-   which comes later in the document, overrides every one of these. */
-:root {
-  --surface: #FCFBFE; --surface-2: #F4F2F9; --rule: #DCD8E6;
-  --ink: #191627; --ink-muted: #6A6480;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #1B1826; --surface-2: #232032; --rule: #2E2A3D;
-    --ink: #EBE8F5; --ink-muted: #948DAD;
-  }
-}
+:root { --nav-w: 172px; --nav-accent: var(--accent); }
 /* `html body` beats the templates' own `html, body { padding: 0 }`, so this
    holds no matter which order the two stylesheets land in. */
 html body { padding-left: var(--nav-w); }
