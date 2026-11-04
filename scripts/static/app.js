@@ -18,7 +18,7 @@
     if (installed && dialog.open) dialog.close();
     native.hidden = !prompt;
     instructions.innerHTML = prompt
-      ? '<p>Tap <strong>Install app</strong> below to add Task Tracker to your device.</p>'
+      ? '<p>Tap <strong>Install app</strong> below to add Stellar to your device.</p>'
       : ios
         ? '<ol><li>Open <strong>Share</strong> in your current browser. It may be inside the <strong>⋯</strong> menu.</li>' +
           '<li>Choose <strong>Add to Home Screen</strong>.</li>' +

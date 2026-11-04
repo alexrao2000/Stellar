@@ -1,4 +1,4 @@
-# cal-task-sync
+# Stellar
 
 Pulls your daily **Google Tasks**, records every task's completion status, and parses
 the special "Wake Up" and "Weigh yourself" notes into clean time-series so you can graph

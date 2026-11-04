@@ -11,6 +11,9 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button, a { touch-action: manipulation; }
 button:focus-visible, a:focus-visible { outline: 2px solid #7a4fd8; outline-offset: 2px; }
 [hidden] { display: none !important; }
+.sidenav .brand, .stellar-wordmark { display: flex; align-items: center; gap: 10px; }
+.stellar-wordmark { color: var(--ink, #191627); }
+.stellar-wordmark img, .sidenav .brand img, .nav-toggle img { flex: 0 0 auto; border-radius: 6px; }
 .sidenav .nav-links { display: flex; flex: 1; flex-direction: column; gap: 1px; }
 .sidenav .install-button {
   border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink);
@@ -37,6 +40,7 @@ main > .install-button { background: transparent; color: #6d4ac4; border: 1px so
 #install-native { width: 100%; border: 0; background: #6d4ac4; color: white; padding: 10px; }
 #install-feedback:empty { display: none; }
 @media (prefers-color-scheme: dark) {
+  .stellar-wordmark { color: var(--ink, #ebe8f5); }
   .install-ui { background: #1b1826; color: #ebe8f5; border-color: #2e2a3d; }
   main > .install-button { color: #b69ae8; border-color: #49405d; }
 }
@@ -46,6 +50,7 @@ main > .install-button { background: transparent; color: #6d4ac4; border: 1px so
     padding: calc(6px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left));
     align-items: center; overflow: visible; gap: 10px;
   }
+  html body .sidenav .brand { display: none; }
   html body .sidenav .nav-links {
     display: none; position: absolute; top: 100%; left: 0; right: 0;
     grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 12px;

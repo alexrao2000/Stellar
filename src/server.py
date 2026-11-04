@@ -29,7 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import load_config
 from .parsers import parse_wake_up
-from .pwa import INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, document, router as pwa_router
+from .pwa import ASSETS, INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, document, router as pwa_router
 from .postgrest import PostgrestError
 from .read import read_rows
 from .web_auth import AuthError, AuthSession, web_auth
@@ -63,7 +63,7 @@ _refresh_failed: dict[str, float] = {}
 # docs_url=None: /docs is served below instead, so that the API reference gets
 # the same sidebar as every other view. FastAPI's own page has no way back to
 # the app, which made the nav's last link a one-way door.
-app = FastAPI(title="Task Tracker", docs_url=None)
+app = FastAPI(title="Stellar", docs_url=None)
 app.include_router(pwa_router)
 
 
@@ -359,20 +359,10 @@ def _cache_apply(changed: list[dict]) -> None:
         _cache["task_history"] = (ts, rows)
 
 
-# A bare checkmark in the app's accent purple -- no plate behind it, so the tab
-# reads the same on a light or a dark browser chrome. Split between the two
-# theme purples would be worse than either: the tab bar does not necessarily
-# match the page.
-FAVICON_SVG = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
-    '<path d="M5 17l8 8L27 8" fill="none" stroke="#7A4FD8" stroke-width="5.5"'
-    ' stroke-linecap="round" stroke-linejoin="round"/></svg>'
-)
-
 @app.get("/favicon.svg")
 def favicon() -> Response:
     return Response(
-        FAVICON_SVG,
+        (ASSETS / "stellar.svg").read_text(encoding="utf-8"),
         media_type="image/svg+xml",
         headers={"Cache-Control": "public, max-age=86400"},
     )
@@ -632,11 +622,11 @@ def _nav(active: str) -> str:
         )
     return (
         '<nav class="sidenav" aria-label="Views">'
-        '<div class="brand">Task Tracker</div>'
+        '<div class="brand"><img src="/app-assets/stellar.svg" width="24" height="24" alt="">Stellar</div>'
         '<button type="button" class="nav-toggle" aria-expanded="false" '
         'aria-controls="app-nav-links" aria-label="Navigation menu">'
-        '<span aria-hidden="true">☰</span><span class="nav-current">'
-        + dict(NAV_ITEMS).get(active, "Views") + '</span><span class="nav-hint">Menu</span></button>'
+        '<img src="/app-assets/stellar.svg" width="24" height="24" alt="">'
+        '<span class="nav-current">Stellar</span><span class="nav-hint">Menu</span></button>'
         '<div class="nav-links" id="app-nav-links">' + links + signout + '</div>' + INSTALL_BUTTON + "</nav>"
     )
 
@@ -654,8 +644,8 @@ def swagger_docs() -> HTMLResponse:
 
     page = get_swagger_ui_html(
         openapi_url=app.openapi_url,
-        title="Task Tracker API",
-        swagger_favicon_url="/favicon.svg",
+        title="Stellar API",
+        swagger_favicon_url="/favicon.svg?v=stellar-1",
     ).body.decode()
     # Swagger UI is a complete document, DOCTYPE included. Prepending to it the
     # way _render does would put the page in quirks mode, so this goes just
@@ -1918,7 +1908,7 @@ def page_tasks() -> str:
 # than in a second copy of a 500-line template.
 WEIGHT_CFG = {
     "title": "Weight Log",
-    "eyebrow": "task_history \u00b7 weight",
+    "eyebrow": "Stellar \u00b7 weight",
     "sub": "Every weigh-in on record, read from the reconciled data.",
     "unit": "lbs",
     "format": "number",
@@ -1929,7 +1919,7 @@ WEIGHT_CFG = {
 
 WAKE_CFG = {
     "title": "Wake-up Time",
-    "eyebrow": "task_history \u00b7 wake up",
+    "eyebrow": "Stellar \u00b7 wake up",
     "sub": "When the day started. Lower on the chart is earlier.",
     "unit": "",
     "format": "time",
