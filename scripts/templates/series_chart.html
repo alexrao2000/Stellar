@@ -171,7 +171,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
     <div class="card-head">
       <h2 id="chart-title">All time</h2>
       <div class="legend">
-        <span><i class="swatch dot" style="background:var(--accent)"></i><span id="lg-a">Daily</span></span>
+        <span><i class="swatch dot" style="background:var(--series)"></i><span id="lg-a">Daily</span></span>
         <span><i class="swatch trend"></i>7-day average</span>
       </div>
       <div class="seg" role="group" aria-label="Time range">
@@ -337,7 +337,7 @@ footer.foot b { color: var(--ink); font-weight: 600; }
     ctx.clearRect(0, 0, w, h);
 
     var cInk = css('--ink'), cMut = css('--ink-muted'), cGrid = css('--grid');
-    var cAcc = css('--accent'), cTr = css('--trend'), cSurf = css('--surface');
+    var cAcc = css('--series'), cTr = css('--trend'), cSurf = css('--surface');
 
     var padL = 46, padR = 14, padT = 14, padB = 30;
     var iw = w - padL - padR, ih = h - padT - padB;
