@@ -1,6 +1,6 @@
-/* A shared Pool stays mounted while ranges change, preserving unfinished edits.
-   Split views use minimum readable column widths; smaller screens keep both
-   original views. Preferences survive reloads without changing task data. */
+/* Tasks float within the Pool canvas while its editable stars retain clear
+   space beside the panel. Pool stays mounted across range changes so edits
+   survive. Compact screens keep the individual views. */
 (() => {
   const toggle = document.getElementById('pool-toggle');
   if (!toggle) return;
@@ -13,7 +13,8 @@
   try { enabled = localStorage.getItem('stellar:show-pool') !== 'false'; } catch {}
   let open = false;
   const notify = () => {
-    if (frame.contentWindow) frame.contentWindow.postMessage({ type: 'stellar:pool-visibility', visible: open }, location.origin);
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: 'stellar:pool-visibility', visible: open,
+      inset: open ? host.querySelector('.dated-tasks').offsetWidth + 48 : 0 }, location.origin);
   };
   const layout = () => {
     const view = document.body.dataset.range || 'day';

@@ -26,6 +26,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 }
 @media (max-width: 760px) { .sky { inset: 0; } }
 .sky canvas, .sky svg { position: absolute; inset: 0; }
+.sky #dust { width: 100%; height: 100%; pointer-events: none; }
 .sky svg { pointer-events: none; }
 
 .star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
@@ -235,8 +236,8 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 </style>
 
 <div class="sky" id="sky" data-view="list">
-  <div class="pool-map" id="pool-map">
   <canvas id="dust"></canvas>
+  <div class="pool-map" id="pool-map">
   <svg id="lines"></svg>
   </div>
   <div class="pool-toolbar">
@@ -290,7 +291,10 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       if (event.origin !== location.origin || event.source !== parent ||
           !event.data || event.data.type !== 'stellar:pool-visibility') return;
       embeddedVisible = event.data.visible === true;
-      if (embeddedVisible) { resize(); pollPool(); }
+      var inset = Math.max(0, Math.min(Number(event.data.inset) || 0, innerWidth - 300));
+      document.body.dataset.workspaceOverlay = String(inset > 0);
+      sky.style.setProperty('--workspace-inset', inset + 'px');
+      if (embeddedVisible) { scheduleResize(); pollPool(); }
     });
   }
   document.querySelectorAll('[data-pool-view]').forEach(function (b) {
@@ -335,16 +339,17 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
      itself on every resize. */
   function drawDust() {
     var dpr = window.devicePixelRatio || 1;
-    dust.width = W * dpr; dust.height = H * dpr;
+    var width = sky.clientWidth, height = sky.clientHeight;
+    dust.width = width * dpr; dust.height = height * dpr;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, W, H);
+    g.clearRect(0, 0, width, height);
     var seed = 21;
     function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
     [[900, .34, .45], [320, .55, .8], [90, .8, 1.35]].forEach(function (L) {
       for (var i = 0; i < L[0]; i++) {
         var a = rnd() * L[1] + .04, r = rnd() * L[2] + .16;
         g.beginPath();
-        g.arc(rnd() * W, rnd() * H, r, 0, 6.283);
+        g.arc(rnd() * width, rnd() * height, r, 0, 6.283);
         g.fillStyle = 'rgba(232,236,255,' + a.toFixed(3) + ')';
         g.fill();
       }
