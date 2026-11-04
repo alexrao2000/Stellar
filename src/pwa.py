@@ -17,6 +17,15 @@ ASSET_TYPES = {
     "icon-192.png": "image/png",
     "icon-512.png": "image/png",
     "apple-touch-icon.png": "image/png",
+    "stellar.svg": "image/svg+xml",
+    "stellar-192.png": "image/png",
+    "stellar-512.png": "image/png",
+    "stellar-apple-touch-icon.png": "image/png",
+}
+LEGACY_ICONS = {
+    "icon-192.png": "stellar-192.png",
+    "icon-512.png": "stellar-512.png",
+    "apple-touch-icon.png": "stellar-apple-touch-icon.png",
 }
 PUBLIC_PATHS = {"/manifest.webmanifest", "/sw.js", "/offline"} | {
     f"/app-assets/{name}" for name in ASSET_TYPES
@@ -25,23 +34,23 @@ router = APIRouter()
 
 HEAD = """<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#6D4AC4">
+<meta name="theme-color" content="#FCFBFE">
 <meta name="theme-color" content="#1B1826" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Task Tracker">
+<meta name="apple-mobile-web-app-title" content="Stellar">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/app-assets/apple-touch-icon.png">
-<link rel="stylesheet" href="/app-assets/app.css?v=3">
-<script src="/app-assets/app.js?v=3" defer></script>"""
+<link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/app-assets/stellar-apple-touch-icon.png">
+<link rel="stylesheet" href="/app-assets/app.css?v=4">
+<script src="/app-assets/app.js?v=4" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" data-install hidden>Install app</button>'
 INSTALL_DIALOG = """<dialog id="install-dialog" class="install-ui" aria-labelledby="install-title">
   <form method="dialog"><button class="install-close" aria-label="Close install instructions">×</button></form>
-  <img src="/app-assets/icon-192.png" width="64" height="64" alt="">
-  <h2 id="install-title">Task Tracker on your phone</h2>
+  <img src="/app-assets/stellar-192.png" width="64" height="64" alt="">
+  <h2 id="install-title">Stellar on your phone</h2>
   <p>Keep your daily check-in a tap away. Open it from your home screen in its own window.</p>
   <div id="install-instructions"></div>
   <button type="button" id="install-native" hidden>Install app</button>
@@ -65,12 +74,12 @@ def document(html: str, shell: str = "", extra_head: str = "") -> str:
 @router.get("/manifest.webmanifest", include_in_schema=False)
 def manifest() -> JSONResponse:
     return JSONResponse({
-        "id": "/", "name": "Task Tracker", "short_name": "Tasks",
+        "id": "/", "name": "Stellar", "short_name": "Stellar",
         "description": "Your daily tasks, weight, wake times, and progress.",
         "start_url": "/", "scope": "/", "display": "standalone", "lang": "en",
-        "background_color": "#EFEEF4", "theme_color": "#6D4AC4",
+        "background_color": "#000000", "theme_color": "#000000",
         "icons": [
-            {"src": f"/app-assets/icon-{size}.png", "sizes": f"{size}x{size}",
+            {"src": f"/app-assets/stellar-{size}.png", "sizes": f"{size}x{size}",
              "type": "image/png", "purpose": "any maskable"}
             for size in (192, 512)
         ],
@@ -98,5 +107,5 @@ def offline() -> Response:
 def asset(name: str) -> FileResponse:
     if name not in ASSET_TYPES:
         raise HTTPException(404)
-    return FileResponse(ASSETS / name, media_type=ASSET_TYPES[name],
+    return FileResponse(ASSETS / LEGACY_ICONS.get(name, name), media_type=ASSET_TYPES[name],
                         headers={"Cache-Control": "public, max-age=3600"})

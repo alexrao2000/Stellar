@@ -22,6 +22,9 @@ def test_manifest_and_icons_are_available_before_sign_in(client):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/manifest+json")
     manifest = response.json()
+    assert manifest["name"] == "Stellar"
+    assert manifest["short_name"] == "Stellar"
+    assert manifest["id"] == "/"
     assert manifest["display"] == "standalone"
     assert manifest["start_url"] == "/"
     assert manifest["scope"] == "/"
@@ -33,6 +36,9 @@ def test_manifest_and_icons_are_available_before_sign_in(client):
         width, height = struct.unpack(">II", png.content[16:24])
         assert f"{width}x{height}" == icon["sizes"]
     assert client.get("/app-assets/apple-touch-icon.png").status_code == 200
+    assert client.get("/app-assets/icon-192.png").content == client.get(manifest["icons"][0]["src"]).content
+    assert client.get("/app-assets/apple-touch-icon.png").content == client.get("/app-assets/stellar-apple-touch-icon.png").content
+    assert client.get("/favicon.svg").content == client.get("/app-assets/stellar.svg").content
 
 
 def test_public_assets_do_not_open_the_auth_boundary(client):
@@ -91,3 +97,5 @@ def test_all_views_and_login_have_a_real_mobile_document(client, monkeypatch):
         assert head.manifests == ["/manifest.webmanifest"]
         assert 'id="install-dialog"' in page
         assert 'data-install hidden' in page
+        assert "Stellar" in page
+        assert "Task Tracker" not in page

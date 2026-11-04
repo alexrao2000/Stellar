@@ -1,15 +1,15 @@
 /* Cache only public installation files. Private pages and API data never enter
    Cache Storage, and failed writes are never queued or reported as saved. */
-const CACHE = 'task-tracker-public-v1';
-const PUBLIC = ['/offline', '/app-assets/icon-192.png', '/app-assets/icon-512.png',
-  '/app-assets/apple-touch-icon.png'];
+const CACHE = 'stellar-public-v1';
+const PUBLIC = ['/offline', '/app-assets/stellar-192.png', '/app-assets/stellar-512.png',
+  '/app-assets/stellar-apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PUBLIC)));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PUBLIC)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(
-    keys.filter(key => key.startsWith('task-tracker-public-') && key !== CACHE)
+    keys.filter(key => (key.startsWith('task-tracker-public-') || key.startsWith('stellar-public-')) && key !== CACHE)
       .map(key => caches.delete(key))
   )).then(() => self.clients.claim()));
 });
