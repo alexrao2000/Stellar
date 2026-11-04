@@ -100,11 +100,16 @@ main > .install-button { background: transparent; color: #6d4ac4; border: 1px so
   }
   html body main { padding: 24px; }
 }
-@media (pointer: coarse) {
+@media (max-width: 760px), (pointer: coarse) {
   html body button, html body .sidenav a,
   html body input:not([type=checkbox]):not([type=radio]), html body select { min-height: 44px; }
   html body input:not([type=checkbox]):not([type=radio]), html body select, html body textarea { font-size: 16px; }
-  .item.has-when { padding-bottom: 42px; }
-  html body .item.has-when .when { display: flex; top: auto; bottom: 0; right: 44px; max-width: calc(100% - 44px); flex-wrap: wrap; }
+  .item.has-when { flex-wrap: wrap; row-gap: 4px; }
+  html body .item.has-when .when {
+    position: static; display: flex; flex: 0 0 calc(100% - 50px);
+    max-width: calc(100% - 50px); margin-right: 50px; flex-wrap: wrap;
+  }
+  html body .when input { width: 100%; min-width: 0; max-width: 100%; flex: 1 0 100%; }
+  html body .when.editing button { flex: 1; min-width: 44px; }
 }
 @media print { [data-install], .install-ui { display: none !important; } }
