@@ -50,7 +50,7 @@ body.view-custom .daynav2 { display: none; }
   box-shadow: var(--shadow); overflow: hidden; min-width: 0;
 }
 .col.is-today { border-color: var(--todo-bg); box-shadow: 0 0 0 1px var(--todo-bg), var(--shadow); }
-.col.blank { visibility: hidden; }
+.col.blank { align-self: stretch; background: transparent; border-style: dashed; box-shadow: none; }
 .col-head {
   display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
   border: none; border-bottom: 1px solid var(--rule); background: var(--surface-2);
@@ -1350,13 +1350,20 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         var h = document.createElement('div'); h.className = 'wd'; h.textContent = w; grid.appendChild(h);
       });
       for (var i = 0; i < (weekday(days[0]) + 6) % 7; i++) {
-        var blank = document.createElement('div'); blank.className = 'col blank'; grid.appendChild(blank);
+        var blank = document.createElement('div'); blank.className = 'col blank';
+        blank.setAttribute('aria-hidden', 'true'); grid.appendChild(blank);
       }
     } else {
       grid.className = 'cols';
       grid.style.setProperty('--day-count', days.length);
     }
     days.forEach(function (d) { grid.appendChild(column(d)); });
+    if (VIEW === 'month') {
+      while (grid.children.length % 7) {
+        var trailing = document.createElement('div'); trailing.className = 'col blank';
+        trailing.setAttribute('aria-hidden', 'true'); grid.appendChild(trailing);
+      }
+    }
     board.appendChild(grid);
   }
 
