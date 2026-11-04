@@ -1,8 +1,8 @@
 /* Cache only public installation files. Private pages and API data never enter
    Cache Storage, and failed writes are never queued or reported as saved. */
-const CACHE = 'stellar-public-v2';
+const CACHE = 'stellar-public-v3';
 const PUBLIC = ['/offline', '/app-assets/stellar-192.png', '/app-assets/stellar-512.png',
-  '/app-assets/stellar-apple-touch-icon.png'];
+  '/app-assets/stellar-apple-touch-icon.png?v=2'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PUBLIC)).then(() => self.skipWaiting()));
