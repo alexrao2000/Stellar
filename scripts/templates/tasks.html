@@ -165,6 +165,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   function act(row, promise, done) {
     if (row) row.classList.add('busy');
     return promise.then(function (j) {
+      if (window.stellarRecordsChanged) window.stellarRecordsChanged();
       try { sessionStorage.setItem('settings-said', done(j)); } catch (e) {}
       location.reload();
     }).catch(function (e) {

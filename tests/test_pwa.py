@@ -43,7 +43,8 @@ def test_manifest_and_icons_are_available_before_sign_in(client):
 
 def test_public_assets_do_not_open_the_auth_boundary(client):
     for path in ("/sw.js", "/offline", "/app-assets/app.css", "/app-assets/stellar.css", "/app-assets/app.js",
-                 "/app-assets/workspace.css", "/app-assets/workspace.js"):
+                 "/app-assets/workspace.css", "/app-assets/workspace.js", "/app-assets/navigation.js",
+                 "/app-assets/navigation.css", "/app-assets/metrics.js"):
         assert client.get(path).status_code == 200
     for path in ("/", "/tasks", "/weight", "/pool", "/pool?embedded=true"):
         assert client.get(path).status_code == 303
@@ -86,7 +87,7 @@ def test_all_views_and_login_have_a_real_mobile_document(client, monkeypatch):
     monkeypatch.setattr(server, "_pool_state", lambda **kwargs: {"tasks": [], "edges": []})
     pages = [client.get("/login").text]
     monkeypatch.setenv("AUTH_ENABLED", "false")
-    for path in ("/", "/tasks", "/weight", "/wake", "/consistency", "/data", "/pool", "/docs"):
+    for path in ("/", "/tasks", "/metrics", "/weight", "/wake", "/consistency", "/data", "/pool", "/docs"):
         response = client.get(path)
         assert response.status_code == 200
         pages.append(response.text)

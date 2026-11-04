@@ -1,0 +1,51 @@
+/* Sidebar widths are shared with the workspace. Metric modules resize to their
+   content so the page has one scroll surface on phones and desktop. */
+.sidenav .nav-icon { display: inline-flex; justify-content: center; align-items: center;
+  width: 22px; flex: 0 0 22px; font: 20px/1 system-ui, sans-serif; }
+.sidenav a, .sidenav .signout button { gap: 10px; }
+.sidenav .signout button { display: flex; align-items: center; }
+.sidebar-collapse { display: flex; align-items: center; gap: 10px; min-height: 40px;
+  margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--surface); color: var(--ink-muted); font: inherit; cursor: pointer; }
+.sidebar-collapse > span:first-child { width: 22px; font-size: 24px; line-height: 1; }
+@media (min-width: 761px) {
+  :root.sidebar-collapsed { --nav-w: 64px; }
+  .sidebar-collapsed .sidenav { padding-left: 8px; padding-right: 8px; }
+  .sidebar-collapsed .sidenav .nav-label, .sidebar-collapsed .sidenav .brand-name { display: none; }
+  .sidebar-collapsed .sidenav .brand { padding: 4px 0 20px; justify-content: center; }
+  .sidebar-collapsed .sidenav a, .sidebar-collapsed .sidenav .signout button,
+  .sidebar-collapsed .sidebar-collapse { justify-content: center; padding: 10px 0; min-height: 44px; gap: 0; }
+  .sidebar-collapsed .sidenav a { border-left-width: 0; }
+  .sidebar-collapsed .sidenav .install-button { font-size: 0; padding: 10px 0; }
+  .sidebar-collapsed .sidenav .install-button::before { content: '↓'; font: 22px/1 system-ui, sans-serif; }
+}
+@media (max-width: 760px) { .sidebar-collapse { display: none; } .sidenav .nav-icon { display: none; } }
+html body[data-page=metrics] { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; }
+body[data-page=metrics] * { box-sizing: border-box; }
+.metrics-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 20px 48px; }
+.metrics-wrap > .eyebrow { color: var(--ink-muted); font: 11px/1.5 ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.metrics-wrap > h1 { margin: 0 0 8px; }
+.metrics-wrap > .sub { color: var(--ink-muted); font-size: 14px; margin: 0 0 20px; }
+.metric-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0 12px; max-width: 100%; }
+.metric-tabs button { flex: 0 0 auto; max-width: 240px; min-height: 44px; padding: 10px 16px;
+  border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink-muted);
+  font: 550 14px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; cursor: pointer; }
+.metric-tabs button[aria-selected=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+#metric-frame { border: 0; display: block; width: 100%; height: 180px; }
+#metric-status { color: var(--ink-muted); font-size: 14px; line-height: 1.5; }
+#metric-status:empty { display: none; }
+#metric-retry { min-height: 44px; padding: 8px 16px; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; }
+html body[data-embedded=true]:is([data-page=weight],[data-page=wake],[data-page=consistency]) { min-height: 0; height: auto; }
+body[data-embedded=true]:is([data-page=weight],[data-page=wake],[data-page=consistency]) > .wrap {
+  max-width: none; margin: 0; padding: 4px 0 20px;
+}
+body[data-embedded=true]:is([data-page=weight],[data-page=wake],[data-page=consistency]) > .wrap > :is(.eyebrow,h1) { display: none; }
+body[data-embedded=true] .heat-inspector { display: block; }
+body.metric-detail #strip, body.metric-detail #ranking-card,
+body.metric-detail #task-picker, body.metric-detail .wrap > .sub { display: none; }
+body.metric-detail #detail-card { margin-top: 0; }
+@media (max-width: 760px) {
+  html body[data-page=metrics] .wrap { padding: 24px 16px; }
+  .metric-tabs button { max-width: 220px; }
+  body[data-embedded=true] .rank .row .name, body[data-embedded=true] .rank .row .name button { white-space: normal; overflow-wrap: anywhere; }
+}

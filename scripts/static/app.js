@@ -105,4 +105,20 @@
     visualViewport.addEventListener('scroll', measureViewport);
     measureViewport();
   }
+  if (window.parent !== window && ['weight', 'wake', 'consistency'].includes(document.body.dataset.page)) {
+    let queued = false;
+    const resize = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        parent.postMessage({ type: 'stellar:metric-height', url: location.pathname + location.search,
+          height: document.body.getBoundingClientRect().height }, location.origin);
+      });
+    };
+    new ResizeObserver(resize).observe(document.body);
+    new MutationObserver(resize).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('load', resize);
+    resize();
+  }
 })();

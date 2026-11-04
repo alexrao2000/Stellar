@@ -16,6 +16,9 @@ ASSET_TYPES = {
     "stellar.css": "text/css",
     "workspace.css": "text/css",
     "workspace.js": "text/javascript",
+    "navigation.js": "text/javascript",
+    "navigation.css": "text/css",
+    "metrics.js": "text/javascript",
     "app.js": "text/javascript",
     "icon-192.png": "image/png",
     "icon-512.png": "image/png",
@@ -46,13 +49,15 @@ HEAD = """<meta charset="utf-8">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
+<script src="/app-assets/navigation.js?v=1"></script>
 <link rel="stylesheet" href="/app-assets/app.css?v=5">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=1">
-<script src="/app-assets/workspace.js?v=1" defer></script>
-<script src="/app-assets/app.js?v=5" defer></script>"""
+<link rel="stylesheet" href="/app-assets/navigation.css?v=1">
+<script src="/app-assets/workspace.js?v=2" defer></script>
+<script src="/app-assets/app.js?v=6" defer></script>"""
 
-INSTALL_BUTTON = '<button type="button" class="install-button" data-install hidden>Install app</button>'
+INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'
 INSTALL_DIALOG = """<dialog id="install-dialog" class="install-ui" aria-labelledby="install-title">
   <form method="dialog"><button class="install-close" aria-label="Close install instructions">×</button></form>
   <img src="/app-assets/stellar-192.png" width="64" height="64" alt="">
@@ -91,8 +96,8 @@ def manifest() -> JSONResponse:
         ],
         "shortcuts": [
             {"name": "Daily check-in", "url": "/"},
-            {"name": "Weight", "url": "/weight"},
-            {"name": "Wake time", "url": "/wake"},
+            {"name": "Weight", "url": "/metrics?tab=weight"},
+            {"name": "Wake time", "url": "/metrics?tab=wake"},
         ],
     }, media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
