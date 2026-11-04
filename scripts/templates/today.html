@@ -1,44 +1,5 @@
 <title>Tasks · Stellar</title>
 <style>
-:root {
-  --bg: #EFEEF4; --surface: #FCFBFE; --surface-2: #F4F2F9;
-  --ink: #191627; --ink-muted: #6A6480; --rule: #DCD8E6;
-  --done-bg: #EDEAF4; --done-ink: #8B84A6;
-  --todo-bg: #6D4AC4; --todo-ink: #FFFFFF;
-  --opt-bg: #2563C9; --opt-ink: #FFFFFF;
-  --ok: #2F6B4F; --warn: #8A5A00; --bad: #A33A28;
-  --shadow: 0 1px 2px rgba(25,22,39,.06), 0 2px 8px rgba(25,22,39,.04);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #131019; --surface: #1B1826; --surface-2: #232032;
-    --ink: #EBE8F5; --ink-muted: #948DAD; --rule: #2E2A3D;
-    --done-bg: #221E30; --done-ink: #7B7496;
-    --todo-bg: #8B63E8; --todo-ink: #120E1C;
-    --opt-bg: #5B9BF0; --opt-ink: #0B1424;
-    --ok: #6FBF95; --warn: #E8B85C; --bad: #E3806B;
-    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 2px 10px rgba(0,0,0,.3);
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #131019; --surface: #1B1826; --surface-2: #232032;
-  --ink: #EBE8F5; --ink-muted: #948DAD; --rule: #2E2A3D;
-  --done-bg: #221E30; --done-ink: #7B7496;
-  --todo-bg: #8B63E8; --todo-ink: #120E1C;
-  --opt-bg: #5B9BF0; --opt-ink: #0B1424;
-  --ok: #6FBF95; --warn: #E8B85C; --bad: #E3806B;
-  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 2px 10px rgba(0,0,0,.3);
-}
-:root[data-theme="light"] {
-  --bg: #EFEEF4; --surface: #FCFBFE; --surface-2: #F4F2F9;
-  --ink: #191627; --ink-muted: #6A6480; --rule: #DCD8E6;
-  --done-bg: #EDEAF4; --done-ink: #8B84A6;
-  --todo-bg: #6D4AC4; --todo-ink: #FFFFFF;
-  --opt-bg: #2563C9; --opt-ink: #FFFFFF;
-  --ok: #2F6B4F; --warn: #8A5A00; --bad: #A33A28;
-  --shadow: 0 1px 2px rgba(25,22,39,.06), 0 2px 8px rgba(25,22,39,.04);
-}
-
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0; padding: 0; background: var(--bg); color: var(--ink);

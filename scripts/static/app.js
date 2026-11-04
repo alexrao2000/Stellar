@@ -1,6 +1,13 @@
 /* Installation stays optional. Browsers without an install prompt receive
    platform instructions, and installed windows hide the install controls. */
 (() => {
+  const syncTheme = () => {
+    const color = getComputedStyle(document.body).getPropertyValue('--surface').trim();
+    if (color) document.querySelectorAll('meta[name=theme-color]').forEach(meta => { meta.content = color; });
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
+  new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  syncTheme();
   const standalone = matchMedia('(display-mode: standalone)');
   const dialog = document.getElementById('install-dialog');
   const buttons = document.querySelectorAll('[data-install]');

@@ -1,6 +1,6 @@
 /* Cache only public installation files. Private pages and API data never enter
    Cache Storage, and failed writes are never queued or reported as saved. */
-const CACHE = 'stellar-public-v1';
+const CACHE = 'stellar-public-v2';
 const PUBLIC = ['/offline', '/app-assets/stellar-192.png', '/app-assets/stellar-512.png',
   '/app-assets/stellar-apple-touch-icon.png'];
 
