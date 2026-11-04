@@ -632,7 +632,8 @@ def _nav(active: str) -> str:
         )
     return (
         '<nav class="sidenav" aria-label="Views">'
-        '<div class="brand">Task Tracker</div>' + links + INSTALL_BUTTON + signout + "</nav>"
+        '<div class="brand">Task Tracker</div>'
+        '<div class="nav-links">' + links + signout + '</div>' + INSTALL_BUTTON + "</nav>"
     )
 
 

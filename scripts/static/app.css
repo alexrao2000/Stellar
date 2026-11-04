@@ -7,6 +7,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button, a { touch-action: manipulation; }
 button:focus-visible, a:focus-visible { outline: 2px solid #7a4fd8; outline-offset: 2px; }
 [hidden] { display: none !important; }
+.sidenav .nav-links { display: flex; flex: 1; flex-direction: column; gap: 1px; }
 .sidenav .install-button {
   border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink);
   border-radius: 8px; padding: 10px; margin-top: 14px; font: inherit; cursor: pointer;
@@ -39,16 +40,20 @@ main > .install-button { background: transparent; color: #6d4ac4; border: 1px so
   html body { padding-left: 0; }
   html body .sidenav {
     padding: calc(6px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left));
-    align-items: center; scrollbar-width: none; overscroll-behavior-x: contain;
+    align-items: center; overflow: visible; gap: 10px;
   }
-  .sidenav::-webkit-scrollbar { display: none; }
+  html body .sidenav .nav-links {
+    flex-direction: row; gap: 2px; min-width: 0;
+    overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+  }
+  .sidenav .nav-links::-webkit-scrollbar { display: none; }
+  html body .sidenav .signout { flex: 0 0 auto; }
   html body .sidenav a, html body .sidenav .signout button, html body .sidenav .install-button {
     display: inline-flex; align-items: center; justify-content: center;
     flex: 0 0 auto; min-height: 44px; padding: 10px 12px; margin-top: 0; white-space: nowrap;
   }
   html body .sidenav .install-button {
-    position: sticky; right: 0; order: 1; margin-left: auto;
-    background: var(--surface); box-shadow: -8px 0 10px var(--surface);
+    margin-left: 0;
   }
   html body .wrap {
     width: 100%; min-width: 0; padding-top: 20px;
