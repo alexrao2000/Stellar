@@ -229,6 +229,18 @@ the browser. Days before `WRITE_FLOOR` (`src/server.py`) are read-only.
 Each new day materialises itself on load from `recurring_tasks` — that table is
 what replaces Google's recurrence, which its API neither exposes nor can create.
 
+## Install on a phone
+
+Open the deployed app in your phone's browser and tap **Install app**. Android
+browsers that support installation offer an install prompt. On iPhone, open the
+page in Safari, tap **Share → Add to Home Screen**, and leave **Open as Web App**
+on if that option appears. The app opens from its home-screen icon in its own
+window. Sign in with the same account as on the website.
+
+Check-ins need an internet connection. If the app is opened offline, it shows
+a reconnect screen. The service worker caches only public artwork and that
+screen; it does not cache authenticated pages or API responses, or queue writes.
+
 ## Notes / customization
 
 - The metric tasks are matched by title via `WAKE_UP_TASK_TITLE` and `WEIGHT_TASK_TITLE` in `.env`.

@@ -1,0 +1,110 @@
+/* Shared mobile rules load after each view's styles. Horizontal scrolling stays
+   inside calendars and data tables; device safe areas remain clear. */
+:root { --mobile-nav-height: 60px; }
+html { -webkit-text-size-adjust: 100%; }
+body { min-height: 100vh; min-height: 100dvh; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, a { touch-action: manipulation; }
+button:focus-visible, a:focus-visible { outline: 2px solid #7a4fd8; outline-offset: 2px; }
+[hidden] { display: none !important; }
+.sidenav .install-button {
+  border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink);
+  border-radius: 8px; padding: 10px; margin-top: 14px; font: inherit; cursor: pointer;
+}
+main > .install-button { background: transparent; color: #6d4ac4; border: 1px solid #dcd8e6; }
+.install-ui {
+  box-sizing: border-box; width: min(420px, calc(100% - 32px)); max-height: calc(100dvh - 48px);
+  border: 1px solid #dcd8e6; border-radius: 20px; padding: 28px;
+  background: #fcfbfe; color: #191627; box-shadow: 0 20px 80px #0004;
+  font: 16px/1.6 system-ui, -apple-system, sans-serif; overflow-y: auto;
+}
+.install-ui::backdrop { background: #13101999; }
+.install-ui h2 { font-size: 1.4rem; line-height: 1.25; margin: 20px 0 12px; }
+.install-ui img { border-radius: 16px; }
+.install-ui p { margin: 12px 0; }
+.install-ui ol { padding-left: 24px; }
+.install-ui li { padding: 5px 0 5px 4px; }
+.install-ui button { min-height: 44px; cursor: pointer; font: inherit; border-radius: 10px; }
+.install-ui .install-close {
+  position: absolute; right: 12px; top: 12px; min-width: 44px;
+  border: 0; background: transparent; color: inherit; font-size: 24px;
+}
+#install-native { width: 100%; border: 0; background: #6d4ac4; color: white; padding: 10px; }
+#install-feedback:empty { display: none; }
+@media (prefers-color-scheme: dark) {
+  .install-ui { background: #1b1826; color: #ebe8f5; border-color: #2e2a3d; }
+  main > .install-button { color: #b69ae8; border-color: #49405d; }
+}
+@media (max-width: 760px) {
+  html body { padding-left: 0; }
+  html body .sidenav {
+    padding: calc(6px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left));
+    align-items: center; scrollbar-width: none; overscroll-behavior-x: contain;
+  }
+  .sidenav::-webkit-scrollbar { display: none; }
+  html body .sidenav a, html body .sidenav .signout button, html body .sidenav .install-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 auto; min-height: 44px; padding: 10px 12px; margin-top: 0; white-space: nowrap;
+  }
+  html body .sidenav .install-button {
+    position: sticky; right: 0; order: 1; margin-left: auto;
+    background: var(--surface); box-shadow: -8px 0 10px var(--surface);
+  }
+  html body .wrap {
+    width: 100%; min-width: 0; padding-top: 20px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  }
+  html body button:not(.toggle), html body input:not([type=checkbox]):not([type=radio]), html body select {
+    min-height: 44px;
+  }
+  html body input:not([type=checkbox]):not([type=radio]), html body select, html body textarea { font-size: 16px; }
+  html body .views { display: flex; width: 100%; }
+  html body .views button { flex: 1; min-width: 0; padding: 7px 4px; font-size: 12px; }
+  html body .custom { flex-wrap: wrap; }
+  html body .custom input { min-width: 0; flex: 1; width: 0; }
+  html body .field { flex-wrap: wrap; gap: 8px; padding: 10px; }
+  html body .field label { min-width: 0; flex: 1; }
+  html body .field .withunit, html body .field > input { flex: 1 0 100%; width: 100%; }
+  html body .field .due { margin-left: 28px; }
+  html body .grip { flex-basis: 44px; }
+  html body .task { gap: 8px; flex-wrap: wrap; overflow-wrap: anywhere; }
+  html body .task .ttl { min-width: 0; }
+  html body .step { height: 44px; }
+  html body .cols, html body .month { max-width: 100%; overscroll-behavior-x: contain; }
+  html body .cols { scroll-snap-type: x proximity; }
+  html body .col { scroll-snap-align: start; }
+  html body .mini { min-height: 44px; }
+  html body .bar > input[type=search] { flex-basis: 100%; min-width: 0; }
+  html body .pager { flex-wrap: wrap; width: 100%; }
+  html body .pager .count { margin-left: 0; }
+  html body .tablewrap { max-width: 100%; overscroll-behavior-x: contain; }
+  html body .rank .row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  html body .rank .row .name { grid-column: 1; white-space: normal; }
+  html body .rank .row .num { grid-column: 2; grid-row: 1; }
+  html body .rank .row .track { grid-column: 1 / -1; grid-row: 2; }
+  html body .controls select { max-width: 100%; min-width: 0; }
+  html body .sky { inset: var(--mobile-nav-height) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  html body .sky .new { left: 14px; right: 14px; top: 48px; }
+  html body .sky .new input { width: 100%; }
+  html body .sky .key { left: 14px; right: 14px; bottom: 12px; font-size: 10px; }
+  html body .sky #panel { max-height: calc(100% - 16px); overflow-y: auto; touch-action: pan-y; }
+  html body .sky .hud, html body .sky #note { left: 14px; }
+  html body .sky .star.ghost input { font-size: 16px; letter-spacing: 0; }
+  html body .sky .star .name { max-width: min(150px, 35vw); white-space: normal; overflow-wrap: anywhere; }
+  html body .sky .star.ember .name, html body .sky .star.ember .resolvedwhen { opacity: 1; }
+  html body:has(> main) {
+    padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+      max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  html body main { padding: 24px; }
+}
+@media (pointer: coarse) {
+  html body button, html body .sidenav a,
+  html body input:not([type=checkbox]):not([type=radio]), html body select { min-height: 44px; }
+  html body input:not([type=checkbox]):not([type=radio]), html body select, html body textarea { font-size: 16px; }
+  .item.has-when { padding-bottom: 42px; }
+  html body .item.has-when .when { display: flex; top: auto; bottom: 0; right: 44px; max-width: calc(100% - 44px); flex-wrap: wrap; }
+}
+@media print { [data-install], .install-ui { display: none !important; } }
