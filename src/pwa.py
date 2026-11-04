@@ -52,9 +52,9 @@ HEAD = """<meta charset="utf-8">
 <script src="/app-assets/navigation.js?v=1"></script>
 <link rel="stylesheet" href="/app-assets/app.css?v=5">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
-<link rel="stylesheet" href="/app-assets/workspace.css?v=1">
+<link rel="stylesheet" href="/app-assets/workspace.css?v=2">
 <link rel="stylesheet" href="/app-assets/navigation.css?v=1">
-<script src="/app-assets/workspace.js?v=2" defer></script>
+<script src="/app-assets/workspace.js?v=3" defer></script>
 <script src="/app-assets/app.js?v=6" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'

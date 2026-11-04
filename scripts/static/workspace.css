@@ -1,6 +1,5 @@
-/* Desktop combines scheduled and undated work when both retain usable widths.
-   Compact layouts wrap labels and native date/time controls rather than hiding
-   overflow. Pool's embedded document shares the same authenticated routes. */
+/* Tasks float inside a full Pool canvas; its controls and stars reserve clear
+   space around the panel. Compact views wrap labels and native controls. */
 .dated-tasks { min-width: 0; }
 .nav-workspace-label { display: none; }
 .pool-toggle { margin-top: 10px; padding: 8px 14px; border: 1px solid var(--rule);
@@ -49,6 +48,18 @@ body[data-embedded=true] .sky #panel { left: auto !important; right: 12px; top: 
   width: min(420px, calc(100% - 24px)); max-height: calc(100% - 24px); }
 body[data-embedded=true] .sky #panel textarea { font-size: 16px; }
 body[data-embedded=true] .sky #panel button { min-height: 44px; }
+body[data-workspace-overlay=true] .sky .pool-toolbar {
+  left: calc(var(--workspace-inset) + 14px); top: 24px;
+}
+body[data-workspace-overlay=true] .sky .hud,
+body[data-workspace-overlay=true] .sky .new input::placeholder { color: #aaa3c0; }
+body[data-workspace-overlay=true] .sky .pool-map {
+  left: var(--workspace-inset); right: 14px; top: calc(var(--pool-toolbar-height, 150px) + 36px);
+}
+body[data-workspace-overlay=true] .sky .pool-list { left: calc(var(--workspace-inset) + 14px); }
+body[data-workspace-overlay=true] .sky .key { left: calc(var(--workspace-inset) + 14px); right: 14px; }
+body[data-workspace-overlay=true] .sky #panel { max-width: calc(100% - var(--workspace-inset) - 24px); }
+body[data-workspace-overlay=true] .sky #veil { left: var(--workspace-inset); }
 .task .ttl { min-width: 0; overflow-wrap: anywhere; }
 .due, .mini .tag { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 input[type=date], input[type=time], input[type=datetime-local] { min-width: 0; max-width: 100%; }
@@ -62,9 +73,20 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
 @media (min-width: 1100px) {
   .sidenav .nav-task-label, html body .sidenav a[href="/pool"] { display: none; }
   .sidenav .nav-workspace-label { display: inline; }
-  html body .wrap.workspace-open { display: grid; grid-template-columns: minmax(0, var(--workspace-task-width)) minmax(420px, 1fr);
-    max-width: none; width: 100%; gap: 24px; padding: 24px; align-items: start; }
+  html body .wrap.workspace-open { position: fixed; inset: 0 0 0 var(--nav-w); display: block;
+    max-width: none; width: auto; margin: 0; padding: 0; overflow: hidden; background: #04050a; }
+  .workspace-open .pool-pane { position: absolute; inset: 0; height: 100%; min-height: 0;
+    border: 0; border-radius: 0; }
+  .workspace-open .pool-pane-head { display: none; }
+  .workspace-open .dated-tasks { position: absolute; z-index: 2; top: 24px; left: 24px;
+    width: var(--workspace-task-width); max-height: calc(100% - 48px); padding: 20px;
+    overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--rule); border-radius: 20px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 12px 48px #0005, 0 2px 8px #0003; }
   .workspace-open .dated-tasks > header { max-width: none; }
+  .workspace-open .dated-tasks > header > .eyebrow { display: none; }
+  html body .workspace-open .dated-tasks h1 { font-size: 24px; }
   .workspace-open .views { display: flex; width: 100%; }
   .workspace-open .views button { flex: 1; padding-left: 6px; padding-right: 6px; }
   .workspace-open .task, .workspace-open #tasks .field { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px 12px; }
