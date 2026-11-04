@@ -29,6 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import load_config
 from .parsers import parse_wake_up
+from .pwa import INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, document, router as pwa_router
 from .postgrest import PostgrestError
 from .read import read_rows
 from .web_auth import AuthError, AuthSession, web_auth
@@ -63,6 +64,7 @@ _refresh_failed: dict[str, float] = {}
 # the same sidebar as every other view. FastAPI's own page has no way back to
 # the app, which made the nav's last link a one-way door.
 app = FastAPI(title="Task Tracker", docs_url=None)
+app.include_router(pwa_router)
 
 
 @app.exception_handler(PostgrestError)
@@ -81,7 +83,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 ACCESS_COOKIE = "task_access"
 REFRESH_COOKIE = "task_refresh"
-PUBLIC_PATHS = {"/favicon.svg", "/login", "/auth/login", "/auth/logout"}
+PUBLIC_PATHS = {"/favicon.svg", "/login", "/auth/login", "/auth/logout"} | PWA_PUBLIC_PATHS
 
 
 def _auth_configured(config) -> bool:
@@ -207,7 +209,7 @@ def page_login(request: Request) -> Response:
     if not target.startswith("/") or target.startswith("//"):
         target = "/"
     html = (TEMPLATES / "login.html").read_text(encoding="utf-8")
-    return HTMLResponse(html.replace("__NEXT__", json.dumps(target)))
+    return HTMLResponse(document(html.replace("__NEXT__", json.dumps(target))))
 
 
 @app.post("/auth/login", include_in_schema=False)
@@ -367,9 +369,6 @@ FAVICON_SVG = (
     ' stroke-linecap="round" stroke-linejoin="round"/></svg>'
 )
 
-_FAVICON_LINK = '<link rel="icon" href="/favicon.svg" type="image/svg+xml">'
-
-
 @app.get("/favicon.svg")
 def favicon() -> Response:
     return Response(
@@ -482,7 +481,7 @@ html body { padding-left: var(--nav-w); }
    `visibility`, not `display`. The weight chart measures its container and
    draws nothing at zero size, which is exactly what `display: none` would
    hand it -- hidden layout is still laid out. */
-html.app-booting body > *:not(.sidenav):not(.app-skeleton) { visibility: hidden; }
+html.app-booting body > *:not(.sidenav):not(.app-skeleton):not(.install-ui) { visibility: hidden; }
 html:not(.app-booting) .app-skeleton { display: none; }
 
 /* Pinned to the content area rather than placed in the flow. Hidden content is
@@ -633,7 +632,7 @@ def _nav(active: str) -> str:
         )
     return (
         '<nav class="sidenav" aria-label="Views">'
-        '<div class="brand">Task Tracker</div>' + links + signout + "</nav>"
+        '<div class="brand">Task Tracker</div>' + links + INSTALL_BUTTON + signout + "</nav>"
     )
 
 
@@ -659,8 +658,7 @@ def swagger_docs() -> HTMLResponse:
     if "<body>" not in page:  # pragma: no cover - guards a FastAPI upgrade
         log.warning("swagger html shape changed; serving /docs without the nav")
         return HTMLResponse(page)
-    shell = _NAV_CSS + _nav("/docs") + _BOOT_GATE_JS
-    return HTMLResponse(page.replace("<body>", "<body>" + shell, 1))
+    return HTMLResponse(document(page, _nav("/docs") + _BOOT_GATE_JS, _NAV_CSS))
 
 
 def _render(template: str, boot: dict, active: str = "") -> str:
@@ -680,7 +678,7 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     # Injected here rather than in each template: every page goes through this
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.
-    return _FAVICON_LINK + _NAV_CSS + _nav(active) + gate + html
+    return document(html, _nav(active) + gate, _NAV_CSS)
 
 
 # --------------------------------------------------------------------------- #
