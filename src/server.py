@@ -373,7 +373,7 @@ def favicon() -> Response:
 NAV_ITEMS = (
     ("/", "Tasks"),
     ("/metrics", "Metrics"),
-    ("/data", "Data"),
+    ("/data", "Activity"),
     ("/pool", "Pool"),
     ("/tasks", "Settings"),
     ("/docs", "API"),
