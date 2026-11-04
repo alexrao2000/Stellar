@@ -596,7 +596,9 @@ _BOOT_GATE_JS = """<script>
 def _nav(active: str) -> str:
     links = "".join(
         '<a href="{}"{}>{}</a>'.format(
-            href, ' class="here" aria-current="page"' if href == active else "", label
+            href, ' class="here" aria-current="page"' if href == active else "",
+            ('<span class="nav-task-label">Tasks</span><span class="nav-workspace-label">Tasks + Pool</span>'
+             if href == "/" else label)
         )
         for href, label in NAV_ITEMS
     )
@@ -659,8 +661,10 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     # Injected here rather than in each template: every page goes through this
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.
-    return document(html, _nav(active) + gate, _NAV_CSS).replace(
-        "<body>", '<body data-page="' + (active.strip("/") or "today") + '">', 1
+    embedded = bool(boot.get("embedded"))
+    return document(html, ("" if embedded else _nav(active)) + gate, _NAV_CSS).replace(
+        "<body>", '<body data-page="' + (active.strip("/") or "today") +
+        ('" data-embedded="true">' if embedded else '">'), 1
     )
 
 
@@ -2197,14 +2201,14 @@ def api_pool_unlink(before_id: int, after_id: int) -> dict:
 
 
 @app.get("/pool", response_class=HTMLResponse)
-def page_pool() -> str:
+def page_pool(embedded: bool = False) -> str:
     try:
         state = _pool_state(include_resolved=True)
     except Exception as exc:  # noqa: BLE001
         if not _pool_missing(exc):
             raise
         state = {"tasks": [], "edges": [], "schema_missing": True}
-    return _render("pool.html", {"mode": "inline", **state}, active="/pool")
+    return _render("pool.html", {"mode": "inline", **state, "embedded": embedded}, active="/pool")
 
 
 @app.get("/health")
