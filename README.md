@@ -232,10 +232,10 @@ what replaces Google's recurrence, which its API neither exposes nor can create.
 ## Install on a phone
 
 Open the deployed app in your phone's browser and tap **Install app**. Android
-browsers that support installation offer an install prompt. On iPhone, open the
-page in Safari, tap **Share → Add to Home Screen**, and leave **Open as Web App**
-on if that option appears. The app opens from its home-screen icon in its own
-window. Sign in with the same account as on the website.
+browsers that support installation offer an install prompt. On iPhone or iPad,
+open **Share** in your current browser, choose **Add to Home Screen**, and leave
+**Open as Web App** on if that option appears. The app opens from its home-screen
+icon in its own window. Sign in with the same account as on the website.
 
 Check-ins need an internet connection. If the app is opened offline, it shows
 a reconnect screen. The service worker caches only public artwork and that

@@ -34,8 +34,8 @@ HEAD = """<meta charset="utf-8">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/app-assets/apple-touch-icon.png">
-<link rel="stylesheet" href="/app-assets/app.css?v=1">
-<script src="/app-assets/app.js?v=1" defer></script>"""
+<link rel="stylesheet" href="/app-assets/app.css?v=2">
+<script src="/app-assets/app.js?v=2" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" data-install hidden>Install app</button>'
 INSTALL_DIALOG = """<dialog id="install-dialog" class="install-ui" aria-labelledby="install-title">

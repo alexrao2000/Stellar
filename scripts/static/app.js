@@ -9,20 +9,26 @@
   const feedback = document.getElementById('install-feedback');
   let prompt = null;
 
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
   function sync() {
     const installed = standalone.matches || navigator.standalone === true;
     buttons.forEach(button => { button.hidden = installed; });
     if (installed && dialog.open) dialog.close();
     native.hidden = !prompt;
+    instructions.innerHTML = prompt
+      ? '<p>Tap <strong>Install app</strong> below to add Task Tracker to your device.</p>'
+      : ios
+        ? '<ol><li>Open <strong>Share</strong> in your current browser. It may be inside the <strong>⋯</strong> menu.</li>' +
+          '<li>Choose <strong>Add to Home Screen</strong>.</li>' +
+          '<li>Keep <strong>Open as Web App</strong> on, if shown, then tap <strong>Add</strong>.</li></ol>' +
+          '<p>If the option is missing, update your browser or open this page in a browser that supports home-screen apps.</p>'
+        : '<ol><li>Open your browser menu or its install icon in the address bar.</li>' +
+          '<li>Choose <strong>Install app</strong>, <strong>Install</strong>, or <strong>Add to Home Screen</strong>.</li>' +
+          '<li>Confirm with <strong>Install</strong> or <strong>Add</strong>.</li></ol>';
   }
 
-  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  instructions.innerHTML = ios
-    ? '<ol><li>Open this page in Safari.</li><li>Tap the Share button in the browser menu.</li>' +
-      '<li>Choose <strong>Add to Home Screen</strong>.</li><li>Keep <strong>Open as Web App</strong> on, if shown, and tap <strong>Add</strong>.</li></ol>'
-    : '<p>Tap <strong>Install app</strong> below when available. You can also use your browser menu ' +
-      'and choose <strong>Install app</strong> or <strong>Add to Home Screen</strong>.</p>';
   buttons.forEach(button => button.addEventListener('click', () => {
     feedback.textContent = '';
     sync();
@@ -32,7 +38,7 @@
     const pending = prompt;
     if (!pending) return;
     prompt = null;
-    native.hidden = true;
+    sync();
     try {
       await pending.prompt();
       const choice = await pending.userChoice;
