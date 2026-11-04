@@ -620,7 +620,7 @@ _BOOT_GATE_JS = """<script>
 def _nav(active: str) -> str:
     links = "".join(
         '<a href="{}"{}>{}</a>'.format(
-            href, ' class="here"' if href == active else "", label
+            href, ' class="here" aria-current="page"' if href == active else "", label
         )
         for href, label in NAV_ITEMS
     )
@@ -633,7 +633,11 @@ def _nav(active: str) -> str:
     return (
         '<nav class="sidenav" aria-label="Views">'
         '<div class="brand">Task Tracker</div>'
-        '<div class="nav-links">' + links + signout + '</div>' + INSTALL_BUTTON + "</nav>"
+        '<button type="button" class="nav-toggle" aria-expanded="false" '
+        'aria-controls="app-nav-links" aria-label="Navigation menu">'
+        '<span aria-hidden="true">☰</span><span class="nav-current">'
+        + dict(NAV_ITEMS).get(active, "Views") + '</span><span class="nav-hint">Menu</span></button>'
+        '<div class="nav-links" id="app-nav-links">' + links + signout + '</div>' + INSTALL_BUTTON + "</nav>"
     )
 
 
@@ -679,7 +683,9 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     # Injected here rather than in each template: every page goes through this
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.
-    return document(html, _nav(active) + gate, _NAV_CSS)
+    return document(html, _nav(active) + gate, _NAV_CSS).replace(
+        "<body>", '<body data-page="' + (active.strip("/") or "today") + '">', 1
+    )
 
 
 # --------------------------------------------------------------------------- #

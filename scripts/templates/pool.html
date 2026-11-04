@@ -17,7 +17,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 /* The pool owns the whole field, so the page furniture the other views use --
    a centred column, a card, a heading -- would only get in the way of it. */
 .sky {
-  position: fixed; inset: 0 0 0 var(--nav-w); overflow: hidden; touch-action: none;
+  position: fixed; inset: 0 0 0 var(--nav-w); overflow: hidden;
   background:
     radial-gradient(1400px 900px at 78% 8%,  rgba(70,84,150,.16), transparent 62%),
     radial-gradient(1100px 800px at 12% 92%, rgba(120,80,190,.10), transparent 62%),
@@ -28,7 +28,8 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 .sky canvas, .sky svg { position: absolute; inset: 0; }
 .sky svg { pointer-events: none; }
 
-.star { position: absolute; transform: translate(-50%, -50%); cursor: grab; }
+.star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
+.star:focus-visible .hit { outline: 2px solid var(--line-live); outline-offset: 2px; }
 .star.held { cursor: grabbing; }
 /* Generous, and deliberately so. Empty sky now creates a star, which only
    works if hitting a star is easy -- the two changes hold each other up. */
@@ -86,6 +87,14 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 }
 .new input::placeholder { color: rgba(150,146,185,.45); }
 .new input:focus { outline: none; border-color: var(--line-live); }
+.new button { min-height: 44px; padding: 8px 14px; border: 1px solid rgba(150,146,200,.3);
+  border-radius: 8px; background: #29203f; color: #efeaff; font: inherit; cursor: pointer; }
+.pool-map { position: absolute; inset: 0; overflow: hidden; }
+.pool-view, .pool-list { display: none; }
+.key summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer;
+  padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; color: #c4c0d6;
+  background: #10111e; letter-spacing: .04em; }
+.key p { margin: 6px 0 0; padding: 10px; background: #10111e; color: #c4c0d6; letter-spacing: .04em; }
 @media (max-width: 760px) { .new { right: 14px; } .new input { width: 150px; } }
 
 /* An ember: what is left where a resolved star was. Visible only while
@@ -107,6 +116,8 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 .toggle {
   margin-left: 18px; cursor: pointer; user-select: none;
   color: rgba(140,136,180,.5); border-bottom: 1px dotted rgba(140,136,180,.3);
+  min-height: 44px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: #10111e; font: inherit; letter-spacing: .04em;
 }
 .toggle.on { color: rgba(196,178,255,.85); border-bottom-color: rgba(196,178,255,.5); }
 
@@ -223,24 +234,32 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
-<div class="sky" id="sky">
+<div class="sky" id="sky" data-view="list">
+  <div class="pool-map" id="pool-map">
   <canvas id="dust"></canvas>
   <svg id="lines"></svg>
-  <div class="hud" id="hud">Pool</div>
-  <div id="note"></div>
-  <div class="new">
-    <input id="add" type="text" placeholder="name a star, press enter" maxlength="200"
-           aria-label="Add a task to the pool">
   </div>
-  <div id="panel"></div>
+  <div class="pool-toolbar">
+  <div class="hud" id="hud">Pool</div>
+  <div id="note" role="status" aria-live="polite"></div>
+  <form class="new" id="pool-add">
+    <input id="add" type="text" placeholder="Name a task" maxlength="200" enterkeyhint="done"
+           aria-label="Add a task to the pool">
+    <button type="submit">Add</button>
+  </form>
+  <div class="pool-view" role="group" aria-label="Pool view">
+    <button type="button" data-pool-view="list" aria-pressed="true">List</button>
+    <button type="button" data-pool-view="map" aria-pressed="false">Map</button>
+  </div>
+  </div>
+  <ul class="pool-list" id="pool-list" aria-label="Pool tasks"></ul>
+  <div id="panel" role="dialog" aria-labelledby="pool-title"></div>
   <div id="veil"><div class="box" role="alertdialog" aria-modal="true"
        aria-labelledby="veilh"></div></div>
-  <div class="key">
-    click empty sky to add &nbsp;&middot;&nbsp; drag to move
-    &nbsp;&middot;&nbsp; drag one star onto another to link
-    &nbsp;&middot;&nbsp; click a star to open it<br>
-    unlit = waiting on something else, and still resolvable
-  </div>
+  <details class="key"><summary>How to use the pool</summary>
+    <p>Select a star to edit it. Drag to move; drag onto another star to link them.
+    Select empty sky to add a task there. An unlit star is waiting on another task.</p>
+  </details>
 </div>
 
 <script id="bootstrap" type="application/json">__BOOTSTRAP__</script>
@@ -251,6 +270,8 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   var EDGES = BOOT.edges || [];
 
   var sky = document.getElementById('sky');
+  var mapField = document.getElementById('pool-map');
+  var poolList = document.getElementById('pool-list');
   var svg = document.getElementById('lines');
   var noteEl = document.getElementById('note');
   var panelEl = document.getElementById('panel');
@@ -434,7 +455,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
         ghost.style.top = (t.y * H) + 'px';
         ghost.innerHTML = starSVG('new', 1.2) +
           '<input maxlength="200" placeholder="name it" aria-label="Name this star">';
-        sky.appendChild(ghost);
+        mapField.appendChild(ghost);
         var box = ghost.querySelector('input');
         box.addEventListener('keydown', function (e) {
           if (e.key === 'Enter') { e.preventDefault(); commitNewStar(box.value); }
@@ -462,19 +483,32 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       el.title = waits.length
         ? 'waiting on ' + waits.map(function (b) { return byId[b].title; }).join(', ')
         : t.title;
-      sky.appendChild(el);
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', t.title + (done ? ', resolved' : ''));
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(t); }
+      });
+      mapField.appendChild(el);
     });
+    poolList.innerHTML = visible().filter(function (t) { return !t.pending; }).map(function (t) {
+      var waits = prereqsOf(t.id).length;
+      return '<li><button type="button" data-open-task="' + esc(t.id) + '">' +
+        '<span>' + esc(t.title) + '</span><small>' +
+        (!isOpen(t) ? 'Resolved' : waits ? 'Waiting on ' + waits + ' task' + (waits === 1 ? '' : 's') : 'Ready') +
+        '</small></button></li>';
+    }).join('') || '<li class="pool-empty">No tasks here yet. Add one above.</li>';
 
     drawLines();
     var open = TASKS.filter(isOpen);
     var waiting = open.filter(function (t) { return prereqsOf(t.id).length; }).length;
     var done = TASKS.length - open.length;
     document.getElementById('hud').innerHTML =
-      'Pool &nbsp;&middot;&nbsp; ' + open.length + ' open' +
+      '<span class="pool-count">Pool &nbsp;&middot;&nbsp; ' + open.length + ' open' +
       (waiting ? ' &nbsp;&middot;&nbsp; ' + waiting + ' waiting' : '') +
-      (done ? ' &nbsp;&middot;&nbsp; ' + done + ' resolved' +
-        '<span class="toggle' + (SHOW_RESOLVED ? ' on' : '') + '" id="toggle">' +
-        (SHOW_RESOLVED ? 'hide' : 'show') + '</span>' : '');
+      (done ? ' &nbsp;&middot;&nbsp; ' + done + ' resolved</span>' +
+        '<button type="button" class="toggle' + (SHOW_RESOLVED ? ' on' : '') + '" id="toggle" aria-pressed="' + SHOW_RESOLVED + '">' +
+        (SHOW_RESOLVED ? 'Hide resolved' : 'Show resolved') + '</button>' : '</span>');
     var tg = document.getElementById('toggle');
     if (tg) tg.addEventListener('click', function () {
       SHOW_RESOLVED = !SHOW_RESOLVED;
@@ -488,6 +522,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
      are graph-diagram furniture; a chart just joins the stars, and direction
      is carried by which end is lit. */
   function drawLines(live) {
+    if (!W || !H) { svg.innerHTML = ''; return; }
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     var out = '';
     var shown = {};
@@ -511,7 +546,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   }
 
   function resize() {
-    var r = sky.getBoundingClientRect();
+    var r = mapField.getBoundingClientRect();
     W = r.width; H = r.height;
     drawDust();
     paint();
@@ -538,7 +573,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;   // a click, not a drag
     drag.moved = true;
 
-    var r = sky.getBoundingClientRect();
+    var r = mapField.getBoundingClientRect();
     var over = document.elementFromPoint(e.clientX, e.clientY);
     var onto = over && over.closest ? over.closest('.star') : null;
     if (onto === drag.el) onto = null;
@@ -571,6 +606,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     if (!drag || e.pointerId !== drag.id) return;
     var d = drag; drag = null;
     d.el.classList.remove('held', 'linking');
+    if (e.type === 'pointercancel') { d.t.x = d.sx; d.t.y = d.sy; paint(); return; }
 
     if (!d.moved) { openPanel(d.t); return; }        // a click opens it
 
@@ -602,14 +638,21 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   veil.addEventListener('pointerdown', function (e) {
     if (e.target === veil) closeVeil();          // backdrop only
   });
+  veil.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') return;
+    var buttons = veil.querySelectorAll('button');
+    var first = buttons[0], last = buttons[buttons.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 
   /* Empty sky. A press that dismisses something open is only a dismissal --
      you were closing the panel, not asking for a star. Anything else is a
      request to make one where you clicked. */
   var bgPress = null;
-  sky.addEventListener('pointerdown', function (e) {
+  mapField.addEventListener('pointerdown', function (e) {
     if (!e.target.closest) return;
-    if (e.target.closest('.star') || e.target.closest('#panel') ||
+    if (e.target.closest('.star, .new, .key, .hud, #note') || e.target.closest('#panel') ||
         e.target.closest('#veil')) return;
     var dismissing = panelEl.classList.contains('open') ||
                      veil.classList.contains('open') || !!PENDING;
@@ -617,15 +660,15 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     bgPress = dismissing ? null : { x: e.clientX, y: e.clientY };
   });
 
-  sky.addEventListener('pointerup', function (e) {
+  mapField.addEventListener('pointerup', function (e) {
     var press = bgPress;
     bgPress = null;
     if (!press || PENDING) return;
     if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) return;   // a drag
     if (e.target.closest &&
-        (e.target.closest('.star') || e.target.closest('#panel') ||
+        (e.target.closest('.star, .new, .key, .hud, #note') || e.target.closest('#panel') ||
          e.target.closest('#veil'))) return;
-    var r = sky.getBoundingClientRect();
+    var r = mapField.getBoundingClientRect();
     beginNewStar(
       Math.min(Math.max((e.clientX - r.left) / W, 0.03), 0.97),
       Math.min(Math.max((e.clientY - r.top) / H, 0.05), 0.95)
@@ -662,16 +705,16 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       when = isNaN(c) ? '' : 'added ' + c.toISOString().slice(0, 10);
     }
 
-    var html = '<div class="ptitle">' + esc(t.title) + '</div>' +
+    var html = '<div class="ptitle" id="pool-title">' + esc(t.title) + '</div>' +
       '<div class="pmeta">' + esc(when) + '</div>' +
-      '<textarea id="pnotes" placeholder="what this actually involves">' +
+      '<textarea id="pnotes" aria-label="Task description" placeholder="what this actually involves">' +
         esc(t.notes || '') + '</textarea>';
 
     if (waits.length) {
       html += '<div class="waits"><h4>waits on</h4>' + waits.map(function (w) {
         return '<div><span>' + esc(w.title) + '</span>' +
           (isOpen(w) ? '' : ' <span style="opacity:.5;font-size:.7rem">(resolved)</span>') +
-          '<button data-unlink="' + w.id + '" title="remove this link">&times;</button></div>';
+          '<button data-unlink="' + w.id + '" aria-label="Remove link to ' + esc(w.title) + '">&times;</button></div>';
       }).join('') + '</div>';
     }
 
@@ -730,6 +773,8 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   function closeVeil() {
     veil.className = '';
     veil.querySelector('.box').innerHTML = '';
+    var button = document.getElementById('pdelete');
+    if (button) button.focus();
   }
 
   function confirmDelete(t) {
@@ -794,12 +839,14 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 
 
   /* ---- adding ---------------------------------------------------------- */
-  document.getElementById('add').addEventListener('keydown', function (e) {
-    if (e.key !== 'Enter') return;
-    var title = this.value.trim();
+  document.getElementById('pool-add').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var self = document.getElementById('add');
+    var button = this.querySelector('button');
+    var title = self.value.trim();
     if (!title) return;
-    var self = this;
     self.disabled = true;
+    button.disabled = true;
     /* New stars land somewhere empty-ish rather than on top of an existing
        one: the sky is mostly empty, so a few tries is enough. */
     var spot = freeSpot();
@@ -813,7 +860,10 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
         paint();
       })
       .catch(function (err) { note(err.message, true); })
-      .then(function () { self.disabled = false; self.focus(); });
+      .then(function () {
+        self.disabled = false; button.disabled = false;
+        if (!matchMedia('(max-width: 760px)').matches) self.focus();
+      });
   });
 
   function freeSpot() {
@@ -866,6 +916,25 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     if (!document.hidden) pollPool();
   });
 
+  poolList.addEventListener('click', function (e) {
+    var button = e.target.closest('[data-open-task]');
+    if (button && byId[button.dataset.openTask]) openPanel(byId[button.dataset.openTask]);
+  });
+  document.querySelector('.pool-view').addEventListener('click', function (e) {
+    var button = e.target.closest('[data-pool-view]');
+    if (!button) return;
+    closePanel();
+    sky.dataset.view = button.dataset.poolView;
+    document.querySelectorAll('[data-pool-view]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b === button));
+    });
+    resize();
+  });
+  new ResizeObserver(function () {
+    var height = document.querySelector('.pool-toolbar').getBoundingClientRect().height;
+    sky.style.setProperty('--pool-toolbar-height', height + 'px');
+  }).observe(document.querySelector('.pool-toolbar'));
+  new ResizeObserver(resize).observe(mapField);
   window.addEventListener('resize', resize);
   resize();
 })();

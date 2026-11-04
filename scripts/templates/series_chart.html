@@ -157,6 +157,11 @@ canvas { display: block; width: 100%; height: 340px; touch-action: pan-y; }
 .tip.on { opacity: 1; }
 .tip .tw { font-size: 0.95rem; font-weight: 700; }
 .tip .tt { color: var(--trend); }
+.chart-hint { display: none; padding: 0 14px; font-size: 13px; color: var(--ink-muted); }
+.chart-empty { margin-top: 16px; }
+.chart-empty a, .chart-empty button { display: inline-flex; align-items: center; min-height: 44px;
+  padding: 8px 12px; border: 1px solid var(--rule); border-radius: 7px; font: inherit;
+  background: var(--surface); color: var(--ink); text-decoration: none; cursor: pointer; }
 
 footer.foot {
   margin-top: 20px; font-size: 0.75rem; color: var(--ink-muted); line-height: 1.6;
@@ -191,6 +196,10 @@ footer.foot b { color: var(--ink); font-weight: 600; }
       <div class="delta"><span class="lbl">From peak</span><span class="v mono" id="r-peak"></span></div>
     </div>
   </div>
+  <div id="chart-empty" class="chart-empty" hidden>
+    <a href="/">Open daily check-in</a>
+    <button id="chart-retry" type="button">Retry</button>
+  </div>
 
   <div class="strip">
     <div class="cell"><span class="lbl" id="lbl-start">Start</span><span class="v mono" id="s-start"></span><span class="sub2" id="s-start-d"></span></div>
@@ -216,8 +225,9 @@ footer.foot b { color: var(--ink); font-weight: 600; }
       </div>
     </div>
     <div class="chart-host">
-      <canvas id="chart" aria-label="Weight over time"></canvas>
-      <div class="tip mono" id="tip"></div>
+      <p class="chart-hint">Tap a point to inspect it. Tap outside the chart to dismiss.</p>
+      <canvas id="chart" tabindex="0" aria-describedby="tip"></canvas>
+      <div class="tip mono" id="tip" role="status" aria-live="polite"></div>
     </div>
   </div>
 
@@ -256,6 +266,8 @@ footer.foot b { color: var(--ink); font-weight: 600; }
   document.getElementById('page-sub').textContent = CFG.sub;
   document.getElementById('lg-a').textContent = CFG.legend || 'Daily';
   document.getElementById('f-noun').textContent = CFG.noun || 'entries';
+  document.getElementById('chart').setAttribute('aria-label', CFG.title + ' over time. Use left and right arrow keys to inspect readings.');
+  document.getElementById('chart-retry').addEventListener('click', function () { location.reload(); });
   if (CFG.statLabels) {
     Object.keys(CFG.statLabels).forEach(function (id) {
       var el = document.getElementById(id);
@@ -478,16 +490,25 @@ footer.foot b { color: var(--ink); font-weight: 600; }
   }
   function hideTip() { hoverIdx = -1; tip.classList.remove('on'); draw(); }
 
-  cv.addEventListener('mousemove', function (e) { showTip(e.clientX); });
-  cv.addEventListener('mouseleave', hideTip);
-  cv.addEventListener('touchstart', function (e) { showTip(e.touches[0].clientX); }, { passive: true });
-  cv.addEventListener('touchmove', function (e) { showTip(e.touches[0].clientX); }, { passive: true });
-  cv.addEventListener('touchend', hideTip);
+  cv.addEventListener('pointerdown', function (e) { showTip(e.clientX); });
+  cv.addEventListener('pointermove', function (e) { showTip(e.clientX); });
+  cv.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hideTip(); });
+  cv.addEventListener('pointercancel', hideTip);
+  document.addEventListener('pointerdown', function (e) { if (e.target !== cv) hideTip(); });
+  cv.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    var i = hoverIdx < 0 ? view.length - 1 : hoverIdx + (e.key === 'ArrowLeft' ? -1 : 1);
+    i = Math.max(0, Math.min(view.length - 1, i));
+    showTip(cv.getBoundingClientRect().left + geo.X(view[i].t));
+  });
 
   Array.prototype.forEach.call(document.querySelectorAll('.seg button'), function (b) {
+    b.setAttribute('aria-pressed', String(b.classList.contains('active')));
     b.addEventListener('click', function () {
-      document.querySelectorAll('.seg button').forEach(function (x) { x.classList.remove('active'); });
+      document.querySelectorAll('.seg button').forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-pressed', 'false'); });
       b.classList.add('active');
+      b.setAttribute('aria-pressed', 'true');
       hoverIdx = -1; tip.classList.remove('on');
       setRange(Number(b.dataset.r));
     });
@@ -518,6 +539,16 @@ footer.foot b { color: var(--ink); font-weight: 600; }
   setRange(0);
   }
 
+  function unavailable(message, retry) {
+    document.getElementById('r-now').textContent = '\u2014';
+    document.getElementById('r-when').textContent = message;
+    ['.deltas', '.strip', '.card', 'footer.foot'].forEach(function (selector) {
+      document.querySelector(selector).hidden = true;
+    });
+    document.getElementById('chart-empty').hidden = false;
+    document.getElementById('chart-retry').hidden = !retry;
+  }
+
   if (BOOT.mode === 'live') {
     fetch(BOOT.endpoint, { headers: BOOT.headers || {} })
       .then(function (res) {
@@ -525,14 +556,12 @@ footer.foot b { color: var(--ink); font-weight: 600; }
         return res.json();
       })
       .then(function (data) {
-        if (!data.length) throw new Error('no data returned');
+        if (!data.length) { unavailable('No readings yet. Record one in your daily check-in.', false); return; }
         ALL = data;
         start();
       })
       .catch(function (err) {
-        document.getElementById('r-now').textContent = '--';
-        document.getElementById('r-when').textContent =
-          'Could not load: ' + (err && err.message ? err.message : String(err));
+        unavailable('Could not load your readings. Check your connection and retry.', true);
       });
   } else {
     ALL = BOOT.data;

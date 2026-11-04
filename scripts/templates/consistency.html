@@ -179,6 +179,11 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   border-top: 1px solid var(--rule); padding-top: 12px; margin-top: 18px;
 }
 .empty { padding: 28px; text-align: center; color: var(--ink-muted); font-size: .88rem; }
+.heat-inspector { display: none; margin-top: 14px; }
+.heat-inspector label { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+.heat-inspector input { min-width: 0; flex: 1; padding: 8px; border: 1px solid var(--rule);
+  border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; }
+.heat-inspector p { font-size: 13px; line-height: 1.5; }
 </style>
 
 <div class="wrap">
@@ -215,6 +220,10 @@ button:focus-visible, select:focus-visible, input:focus-visible {
         <div class="heatscroll"><div class="heatgrid" id="heat" role="img" aria-label="Completion by day"></div></div>
         <div class="years" id="years"></div>
       </div>
+      <div class="heat-inspector">
+        <label for="heat-day">Inspect day <input type="date" id="heat-day"></label>
+        <p id="heat-status" role="status" aria-live="polite"></p>
+      </div>
       <div class="legend">
         <span><i style="background:var(--done)"></i>Completed</span>
         <span><i style="background:var(--miss)"></i>Missed</span>
@@ -241,6 +250,18 @@ button:focus-visible, select:focus-visible, input:focus-visible {
               '-' + String(n.getDate()).padStart(2, '0');
 
   var ROWS = [], TITLES = [], byTitle = {};
+  document.getElementById('heat-day').value = TODAY;
+
+  function inspectDay() {
+    var day = document.getElementById('heat-day').value;
+    if (!day) { document.getElementById('heat-status').textContent = ''; return; }
+    var rows = byTitle[document.getElementById('task').value] || [];
+    var row = rows.find(function (r) { return r.day === day; });
+    var status = !row ? 'Not scheduled' : day > TODAY ? 'Upcoming'
+      : row.is_completed ? 'Completed' : row.optional ? 'Skipped (optional)' : 'Missed';
+    document.getElementById('heat-status').textContent = day + ' · ' + status;
+  }
+  document.getElementById('heat-day').addEventListener('change', inspectDay);
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -360,6 +381,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     ].join('');
 
     heatmap(all);
+    inspectDay();
   }
 
   /* Which year the grid shows. The current calendar year, not a rolling 365

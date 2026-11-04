@@ -67,11 +67,12 @@ h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 4p
 .name { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
 .dot { width: 10px; height: 10px; border-radius: 3px; background: var(--todo-bg); flex: 0 0 auto; }
 .row.optional .dot { background: var(--opt-bg); }
-.name input[type=text] {
+.name .title {
   flex: 1; min-width: 0; font: inherit; font-weight: 600; padding: 5px 7px;
   border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink);
 }
-.name input[type=text]:hover, .name input[type=text]:focus { border-color: var(--rule); background: var(--bg); }
+.name .title { resize: none; overflow: hidden; line-height: 1.5; }
+.name .title:hover, .name .title:focus { border-color: var(--rule); background: var(--bg); }
 .meta { font-size: .76rem; color: var(--ink-muted); font-weight: 400; }
 .ctl { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; }
 .ctl input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--opt-bg); }
@@ -130,7 +131,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
 
   <div class="card"><h2>Add a task</h2>
     <div class="add">
-      <input type="text" id="new-title" placeholder="Task name" maxlength="200">
+      <input type="text" id="new-title" placeholder="Task name" aria-label="New task name" maxlength="200" enterkeyhint="done">
       <label class="ctl"><input type="checkbox" id="new-optional"> Optional</label>
       <label class="ctl">Deadline <input type="time" id="new-time"></label>
       <label class="ctl"><input type="checkbox" id="new-next"> next day</label>
@@ -244,11 +245,11 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
       '<div class="name"><span class="dot"></span>' +
         (t.measurement
           ? '<span>' + esc(t.title) + ' <span class="meta">measurement</span></span>'
-          : '<input type="text" class="title" maxlength="200" aria-label="Name">') +
+          : '<textarea class="title" rows="1" maxlength="200" aria-label="Name"></textarea>') +
         (t.ends_on ? '<span class="meta">last day ' + esc(fmtDay(t.ends_on)) + '</span>' : '') +
       '</div>' +
       '<label class="ctl"><input type="checkbox" class="opt"> Optional</label>' +
-      '<span class="dl"><span class="ctl">Deadline <input type="time" class="time"></span>' +
+      '<span class="dl"><label class="ctl">Deadline <input type="time" class="time"></label>' +
       '<label class="ctl"><input type="checkbox" class="next"> next day</label>' +
       '<button type="button" class="link clear">clear</button></span>' +
       '<span class="actions">' +
@@ -256,7 +257,13 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
         (t.measurement ? '' : '<button type="button" class="btn danger bin">Delete</button>') +
       '</span>';
     var title = row.querySelector('.title');
-    if (title) title.value = t.title;
+    if (title) {
+      title.value = t.title; title.setAttribute('aria-label', 'Name: ' + t.title);
+      var fit = function () { title.style.height = 'auto'; title.style.height = (title.scrollHeight + 2) + 'px'; };
+      requestAnimationFrame(fit);
+      title.addEventListener('input', fit);
+      window.addEventListener('resize', fit);
+    }
     row.querySelector('.opt').checked = t.optional;
     row.querySelector('.time').value = s[0];
     row.querySelector('.next').checked = s[1];

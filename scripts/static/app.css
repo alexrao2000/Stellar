@@ -1,8 +1,12 @@
 /* Shared mobile rules load after each view's styles. Horizontal scrolling stays
    inside calendars and data tables; device safe areas remain clear. */
-:root { --mobile-nav-height: 60px; }
+:root { --mobile-nav-height: 60px; color-scheme: light dark; }
+:root[data-theme=light] { color-scheme: light; }
+:root[data-theme=dark] { color-scheme: dark; }
 html { -webkit-text-size-adjust: 100%; }
 body { min-height: 100vh; min-height: 100dvh; }
+.nav-toggle { display: none; }
+.controls select { max-width: 100%; min-width: 0; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 button, a { touch-action: manipulation; }
 button:focus-visible, a:focus-visible { outline: 2px solid #7a4fd8; outline-offset: 2px; }
@@ -27,7 +31,7 @@ main > .install-button { background: transparent; color: #6d4ac4; border: 1px so
 .install-ui li { padding: 5px 0 5px 4px; }
 .install-ui button { min-height: 44px; cursor: pointer; font: inherit; border-radius: 10px; }
 .install-ui .install-close {
-  position: absolute; right: 12px; top: 12px; min-width: 44px;
+  position: absolute; right: 12px; top: 12px; width: 44px; height: 44px; margin: 0; padding: 0;
   border: 0; background: transparent; color: inherit; font-size: 24px;
 }
 #install-native { width: 100%; border: 0; background: #6d4ac4; color: white; padding: 10px; }
@@ -43,11 +47,21 @@ main > .install-button { background: transparent; color: #6d4ac4; border: 1px so
     align-items: center; overflow: visible; gap: 10px;
   }
   html body .sidenav .nav-links {
-    flex-direction: row; gap: 2px; min-width: 0;
-    overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 12px;
+    max-height: calc(100dvh - var(--mobile-nav-height) - 12px); overflow-y: auto;
+    background: var(--surface); border-bottom: 1px solid var(--rule);
+    box-shadow: 0 10px 20px #0002;
   }
-  .sidenav .nav-links::-webkit-scrollbar { display: none; }
-  html body .sidenav .signout { flex: 0 0 auto; }
+  html body .sidenav.menu-open .nav-links { display: grid; }
+  html body .sidenav .nav-toggle {
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+    border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px;
+    font: inherit; color: var(--ink); background: var(--surface-2); cursor: pointer;
+  }
+  .nav-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-hint { margin-left: auto; font-size: 12px; color: var(--ink-muted); }
+  html body .sidenav .signout { grid-column: 1 / -1; }
   html body .sidenav a, html body .sidenav .signout button, html body .sidenav .install-button {
     display: inline-flex; align-items: center; justify-content: center;
     flex: 0 0 auto; min-height: 44px; padding: 10px 12px; margin-top: 0; white-space: nowrap;
@@ -73,37 +87,119 @@ main > .install-button { background: transparent; color: #6d4ac4; border: 1px so
   html body .field label { min-width: 0; flex: 1; }
   html body .field .withunit, html body .field > input { flex: 1 0 100%; width: 100%; }
   html body .field .due { margin-left: 28px; }
+  html body #weight-warning { display: none; }
+  html body .field .inline-warning {
+    display: block; flex: 1 0 100%; padding: 8px; border-radius: 6px;
+    background: var(--surface); color: var(--ink); font: 13px/1.5 system-ui, sans-serif;
+    overflow-wrap: anywhere;
+  }
   html body .grip { flex-basis: 44px; }
-  html body .task { gap: 8px; flex-wrap: wrap; overflow-wrap: anywhere; }
-  html body .task .ttl { min-width: 0; }
+  html body .task { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; overflow-wrap: anywhere; }
+  html body .task .box { grid-column: 1; grid-row: 1; }
+  html body .task .ttl { min-width: 0; grid-column: 2; grid-row: 1; }
+  html body .task .due { grid-column: 2; justify-self: start; margin-left: 0; }
   html body .step { height: 44px; }
   html body .cols, html body .month { max-width: 100%; overscroll-behavior-x: contain; }
   html body .cols { scroll-snap-type: x proximity; }
+  html body .cols { grid-template-columns: repeat(var(--day-count), minmax(min(280px, calc(100vw - 48px)), 1fr)); }
   html body .col { scroll-snap-align: start; }
+  html body .month { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; overflow: visible; }
+  html body .month .col-head { flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px; }
+  html body .month .col-head .dw, html body .month .col-body { display: none; }
+  html body .month .col-head .cnt { margin-left: 0; font-size: 10px; }
+  html body .month .wd { padding: 0; text-align: center; font-size: 10px; letter-spacing: 0; }
+  html body .month-hint { display: block; font-size: 13px; color: var(--ink-muted); }
   html body .mini { min-height: 44px; }
   html body .bar > input[type=search] { flex-basis: 100%; min-width: 0; }
   html body .pager { flex-wrap: wrap; width: 100%; }
   html body .pager .count { margin-left: 0; }
   html body .tablewrap { max-width: 100%; overscroll-behavior-x: contain; }
+  html body .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html body .strip .cell:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  html body .cell { min-width: 0; overflow-wrap: anywhere; }
   html body .rank .row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
   html body .rank .row .name { grid-column: 1; white-space: normal; }
+  html body .rank .row .name button { overflow-wrap: anywhere; }
   html body .rank .row .num { grid-column: 2; grid-row: 1; }
   html body .rank .row .track { grid-column: 1 / -1; grid-row: 2; }
   html body .controls select { max-width: 100%; min-width: 0; }
-  html body .sky { inset: var(--mobile-nav-height) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  html body .sky .new { left: 14px; right: 14px; top: 48px; }
-  html body .sky .new input { width: 100%; }
-  html body .sky .key { left: 14px; right: 14px; bottom: 12px; font-size: 10px; }
-  html body .sky #panel { max-height: calc(100% - 16px); overflow-y: auto; touch-action: pan-y; }
+  html body .sky { inset: var(--mobile-nav-height) env(safe-area-inset-right) max(env(safe-area-inset-bottom), var(--keyboard-inset, 0px)) env(safe-area-inset-left); }
+  html body .sky .pool-toolbar { position: absolute; top: 12px; left: 14px; right: 14px; z-index: 3; display: grid; gap: 8px; }
+  html body .sky .pool-toolbar .hud { position: static; display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .04em; color: #aaa3c0; }
+  html body .sky .pool-count { flex: 1; min-width: 0; line-height: 1.6; }
+  html body .sky .toggle { margin-left: 0; flex: 0 0 auto; font-size: 11px; color: #c4c0d6; }
+  html body .sky .pool-toolbar .new { position: static; margin: 0; }
+  html body .sky .pool-toolbar #note { position: static; min-height: 0; font-size: 12px; letter-spacing: 0; overflow-wrap: anywhere; }
+  html body .sky .pool-view { display: flex; gap: 6px; }
+  html body .sky .pool-view button { flex: 1; border: 1px solid var(--line); border-radius: 7px;
+    background: #10111e; color: #c4c0d6; font: inherit; }
+  html body .sky .pool-view button[aria-pressed=true] { background: #30234d; color: #fff; border-color: #8b63e8; }
+  html body .sky .pool-list { position: absolute; top: calc(var(--pool-toolbar-height, 150px) + 24px);
+    bottom: 12px; left: 14px; right: 14px; margin: 0; padding: 0; list-style: none; overflow-y: auto; }
+  html body .sky[data-view=list] .pool-list { display: block; }
+  html body .sky[data-view=list] .pool-map, html body .sky[data-view=list] .key { display: none; }
+  html body .sky .pool-map { top: calc(var(--pool-toolbar-height, 150px) + 24px); bottom: 68px; }
+  html body .sky .pool-list li + li { margin-top: 10px; }
+  html body .sky .pool-list button { display: flex; flex-direction: column; gap: 8px; text-align: left;
+    width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 14px;
+    background: #10111e; color: #ebe8f5; font: 15px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
+  html body .sky .pool-list small { color: #aaa3c0; font-size: 12px; }
+  html body .sky .pool-empty { color: #c4c0d6; font: 14px/1.6 system-ui, sans-serif; }
+  html body .sky #note:empty { display: none; }
+  html body .sky .new input { flex: 1; min-width: 0; width: 0; }
+  html body .sky .new input::placeholder, html body .sky #panel textarea::placeholder { color: #a29ab8; }
+  html body .sky .key { left: 14px; right: 14px; bottom: 12px; font-size: 12px; max-height: calc(100% - 110px); overflow-y: auto; }
+  html body .sky #panel {
+    left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto;
+    max-height: calc(100% - 16px); overflow-y: auto; touch-action: pan-y;
+  }
+  html body .sky #panel .ptitle { font-size: 13px; letter-spacing: .04em; }
+  html body .sky #panel .pmeta { font-size: 11px; letter-spacing: .04em; color: #aaa3c0; }
+  html body .sky #panel .waits div { overflow-wrap: anywhere; }
+  html body .sky #panel .waits button { min-width: 44px; flex: 0 0 44px; color: #c4c0d6; }
+  html body .sky #panel .danger { font-size: 12px; color: #dfb1aa; }
+  html body .sky #veil { padding: 12px; overflow-y: auto; }
+  html body .sky #veil .box { max-height: 100%; overflow-y: auto; max-width: 100%; }
+  html body .sky #veil p { overflow-wrap: anywhere; }
   html body .sky .hud, html body .sky #note { left: 14px; }
   html body .sky .star.ghost input { font-size: 16px; letter-spacing: 0; }
-  html body .sky .star .name { max-width: min(150px, 35vw); white-space: normal; overflow-wrap: anywhere; }
+  html body .sky .star .name { width: min(160px, 40vw); max-width: none; white-space: normal; overflow-wrap: anywhere; font-size: 11px; letter-spacing: .04em; }
   html body .sky .star.ember .name, html body .sky .star.ember .resolvedwhen { opacity: 1; }
   html body:has(> main) {
     padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
       max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
   html body main { padding: 24px; }
+  body[data-page="tasks"] .ctl { min-height: 44px; flex-wrap: wrap; }
+  body[data-page="tasks"] .ctl input[type=checkbox], body[data-page="data"] input[type=checkbox] { width: 22px; height: 22px; }
+  body[data-page="tasks"] .dl { flex: 1 0 100%; flex-wrap: wrap; white-space: normal; }
+  body[data-page="tasks"] .dl > .ctl:first-child { flex: 1 0 100%; }
+  body[data-page="tasks"] .dl .time { flex: 1; min-width: 0; }
+  body[data-page="tasks"] .dl .clear { min-width: 60px; margin-left: auto; }
+  body[data-page="tasks"] .actions { width: 100%; flex-wrap: wrap; margin-left: 0; }
+  body[data-page="tasks"] .actions .ctl { flex-basis: 100%; }
+  body[data-page="tasks"] .actions button { flex: 1; }
+  body[data-page="tasks"] .name { overflow-wrap: anywhere; }
+  body[data-page="tasks"] .add input[type=text] { width: 100%; min-width: 0; flex-basis: 100%; }
+  body[data-page="tasks"] #new-add { width: 100%; }
+  body[data-page="tasks"] .bar > .ctl { flex-basis: 100%; }
+  body[data-page="tasks"] #from { width: 100%; min-width: 0; }
+  body[data-page="tasks"] .add .ctl { flex-basis: 100%; }
+  body[data-page="tasks"] .add input[type=time], body[data-page="tasks"] .add input[type=date] { flex: 1; min-width: 0; }
+  body[data-page="weight"] .card-head, body[data-page="wake"] .card-head { padding: 14px; }
+  html body .card-head .seg { display: flex; width: 100%; }
+  html body .card-head .seg button { flex: 1; min-width: 0; padding: 5px 4px; }
+  html body .readout { padding: 20px; gap: 20px; }
+  html body .chart-hint { display: block; }
+  html body #error { overflow-wrap: anywhere; }
+}
+@media (max-width: 1024px) {
+  html body button, html body input:not([type=checkbox]):not([type=radio]), html body select { min-height: 44px; }
+  html body input:not([type=checkbox]):not([type=radio]), html body select, html body textarea { font-size: 16px; }
+  body[data-page="consistency"] .heatwrap { flex-direction: column-reverse; }
+  body[data-page="consistency"] .years { flex-direction: row; flex-wrap: wrap; }
+  body[data-page="consistency"] .heat-inspector { display: block; }
+  body[data-page="tasks"] .ctl, body[data-page="data"] label:has(input[type=checkbox]) { min-height: 44px; }
 }
 @media (max-width: 760px), (pointer: coarse) {
   html body button, html body .sidenav a,
