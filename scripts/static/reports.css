@@ -40,3 +40,5 @@ html body button.box { position: relative; }
 html body button.box::before, html body button.report-measure-status::before { content: ''; position: absolute; inset: -12px; }
 html body button.report-measure-status { position: relative; background: transparent; }
 .range-editor > .report-field-status { margin-top: 12px; width: 100%; }
+
+.report-picker:not([popover]) { inset: 0; margin: auto; }

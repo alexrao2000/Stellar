@@ -78,7 +78,7 @@
   const bind = (button, row, update) => {
     let timer, origin, pointer = null, pressOpened = false, suppressUntil = 0;
     const current = () => typeof row === 'function' ? row() : row;
-    const open = () => { const existing = document.querySelector('.report-picker'); if (existing?._opener === button && (existing.matches(':popover-open') || existing.open)) return; if (!button.disabled && current()) choose(current(), button).then(value => { if (value && (value !== (current().is_completed ? 'done' : current().status === 'incomplete' ? 'incomplete' : 'unreported') || value === 'unreported')) update(value); }); };
+    const open = () => { const existing = document.querySelector('.report-picker'); if (existing?._opener === button && (existing.hasAttribute('popover') && existing.matches(':popover-open') || existing.open)) return; if (!button.disabled && current()) choose(current(), button).then(value => { if (value && (value !== (current().is_completed ? 'done' : current().status === 'incomplete' ? 'incomplete' : 'unreported') || value === 'unreported')) update(value); }); };
     button.addEventListener('click', event => {
       if (button.disabled || performance.now() < suppressUntil) { event.preventDefault(); return; }
       if (current()) update(state(current()) === 'done' ? 'incomplete' : 'done');
