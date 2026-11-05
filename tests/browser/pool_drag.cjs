@@ -1,7 +1,8 @@
 /* Run against a local Stellar server with AUTH_ENABLED=false and VERCEL=1.
    Install playwright separately; PLAYWRIGHT_MODULE can select its module path.
    All API traffic is replaced with demo data. Delayed writes and stale reads
-   exercise position persistence, including redraws while a star is held. */
+   exercise position persistence, including redraws while a star is held.
+   Fast releases cover missing move samples and interrupted pointer capture. */
 const assert = require('node:assert/strict');
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
@@ -52,9 +53,9 @@ async function check(engine) {
     await page.waitForTimeout(300);
     const star = page.locator('.star[data-id="1"]');
     const point = () => star.evaluate(el => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top) }));
-    const near = async expected => {
+    const near = async (expected, tolerance = .2) => {
       const actual = await point();
-      assert(Math.abs(actual.x - expected.x) < .2 && Math.abs(actual.y - expected.y) < .2, JSON.stringify({ actual, expected }));
+      assert(Math.abs(actual.x - expected.x) < tolerance && Math.abs(actual.y - expected.y) < tolerance, JSON.stringify({ actual, expected }));
     };
     const drag = async (dx, dy, release = true) => {
       const box = await star.locator('.hit').boundingBox();
@@ -69,6 +70,55 @@ async function check(engine) {
       await page.evaluate(() => window.refreshPool());
       await page.waitForTimeout(100);
     };
+    await page.evaluate(() => document.addEventListener('pointerdown', event => {
+      window.testPointerId = event.pointerId;
+    }, true));
+    const desktopInput = engine === 'chromium' ? await context.newCDPSession(page) : null;
+    for (let i = 0; i < 12; i++) {
+      const start = await point(), box = await star.locator('.hit').boundingBox();
+      const x = box.x + box.width / 2 + 12, y = box.y + box.height / 2 - 8;
+      const dx = i % 2 ? -95 : 95, dy = i % 2 ? -65 : 65;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      if (i % 3) await page.mouse.move(x + dx / 3, y + dy / 3);
+      if (desktopInput) {
+        await desktopInput.send('Input.dispatchMouseEvent', {
+          type: 'mouseReleased', x: x + dx, y: y + dy,
+          button: 'left', buttons: 0, clickCount: 1,
+        });
+      } else {
+        await page.evaluate(({ x, y }) => document.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, pointerId: window.testPointerId, pointerType: 'mouse',
+          clientX: x, clientY: y, button: 0, buttons: 0,
+        })), { x: x + dx, y: y + dy });
+        await page.mouse.up();
+      }
+      await near({ x: start.x + dx, y: start.y + dy }, 1);
+      assert.equal(await page.locator('#panel.open').count(), 0, 'Fast release must not become a click');
+      assert.equal(await page.locator('.held').count(), 0);
+    }
+    await page.waitForTimeout(100);
+    await refresh();
+    for (const interruption of ['capture', 'blur', 'pointercancel']) {
+      await drag(25, 20, false);
+      const last = await point();
+      await page.evaluate(interruption => {
+        if (interruption === 'capture') document.querySelector('.held').releasePointerCapture(window.testPointerId);
+        else if (interruption === 'blur') window.dispatchEvent(new Event('blur'));
+        else document.dispatchEvent(new PointerEvent('pointercancel', { pointerId: window.testPointerId }));
+      }, interruption);
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+      await near(last);
+      assert.equal(await page.locator('.held').count(), 0);
+      await refresh();
+      await near(last);
+    }
+    const beforeEscape = await point();
+    await drag(-30, 20, false);
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+    await near(beforeEscape);
     await drag(100, 70);
     const dropped = await point();
     stale = true;
@@ -127,7 +177,7 @@ async function check(engine) {
     await page.locator('.star[data-id="2"] .hit').waitFor();
     assert.equal(await page.locator('.held').count(), 0);
     assert.deepEqual(errors, []);
-    console.log(engine + ': stale reads, ordered writes, failed-save retry, resize and add during drag passed');
+    console.log(engine + ': fast releases, capture loss, Escape, stale reads, ordered writes, retries and redraws passed');
   } finally { await browser.close(); }
 }
 (async () => { for (const engine of ['chromium', 'webkit']) await check(engine); })().catch(error => { console.error(error); process.exitCode = 1; });
