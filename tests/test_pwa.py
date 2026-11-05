@@ -46,10 +46,12 @@ def test_public_assets_do_not_open_the_auth_boundary(client):
                  "/app-assets/workspace.css", "/app-assets/workspace.js", "/app-assets/navigation.js",
                  "/app-assets/navigation.css", "/app-assets/metrics.js",
                  "/app-assets/sections.js", "/app-assets/sections.css",
-                 "/app-assets/ranges.js", "/app-assets/ranges.css"):
+                 "/app-assets/ranges.js", "/app-assets/ranges.css",
+                 "/app-assets/reports.js", "/app-assets/reports.css"):
         assert client.get(path).status_code == 200
     for path in ("/", "/tasks", "/weight", "/pool", "/pool?embedded=true", "/metrics?tab_frame=true", "/data?tab_frame=true", "/tasks?tab_frame=true"):
         assert client.get(path).status_code == 303
+    assert client.post("/api/day/2026-11-04/report", headers={"Origin": "http://testserver"}, json={"title": "Run", "state": "incomplete"}).status_code == 401
     assert client.get("/api/task_history").status_code == 401
     assert client.post("/api/day/2026-11-04/weight?lbs=150",
                        headers={"Origin": "http://testserver"}).status_code == 401
@@ -158,6 +160,6 @@ def test_range_assets_load_only_for_the_selected_layout(client, monkeypatch):
     for view in ("day", "month", "3days", "week", "custom"):
         html = client.get("/?view=" + view).text
         selected = view in {"3days", "week", "custom"}
-        assert ('<link rel="preload" as="script" href="/app-assets/ranges.js?v=2">' in html) == selected
+        assert ('<link rel="preload" as="script" href="/app-assets/ranges.js?v=3">' in html) == selected
         assert ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=3">' in html) == selected
         assert "__RANGE_ASSETS__" not in html

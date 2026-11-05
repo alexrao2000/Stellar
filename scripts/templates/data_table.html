@@ -110,7 +110,8 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
     <select id="status" aria-label="Status">
       <option value="">All</option>
       <option value="done">Completed</option>
-      <option value="miss">Not completed</option>
+      <option value="incomplete">Incomplete</option>
+      <option value="unreported">Unreported</option>
     </select>
     <select id="size" aria-label="Rows per page">
       <option>20</option><option selected>50</option><option>100</option><option>200</option>
@@ -178,8 +179,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
     var showFuture = document.getElementById('future').checked;
     view = ALL.filter(function (r) {
       if (!showFuture && r.day > TODAY) return false;
-      if (st === 'done' && !r.is_completed) return false;
-      if (st === 'miss' && r.is_completed) return false;
+      if (st && StellarReports.state(r) !== st) return false;
       if (!q) return true;
       return (r.day + ' ' + r.title + ' ' + (r.list_title || '') + ' ' +
               (r.notes || '')).toLowerCase().indexOf(q) !== -1;
@@ -202,8 +202,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
             '<td class="mono record-date">' + esc(r.day) + '</td>' +
             '<td class="record-title">' + esc(r.title) + '</td>' +
             '<td class="record-details" data-label="List">' + esc(r.list_title || '') + '</td>' +
-            '<td class="record-state"><span class="pill ' + (r.is_completed ? 'done">Done' : 'miss">Not done') +
-              '</span></td>' +
+            '<td class="record-state"><span class="pill ' + StellarReports.state(r) + '">' + StellarReports.labels[StellarReports.state(r)] + '</span></td>' +
             '<td class="mono record-details" data-label="Weight">' + w + '</td>' +
             '<td class="mono record-details" data-label="Source">' + esc(r.weight_source || '') + '</td>' +
             '<td class="mono record-details" data-label="Completed">' + esc((r.completed_at || '').replace('T', ' ').slice(0, 16)) + '</td>' +
@@ -266,6 +265,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
   function changed() { dirty = true; load(); }
   window.addEventListener('stellar:records-changed', changed);
   window.addEventListener('storage', function (event) { if (event.key === 'stellar:records-changed') changed(); });
+  window.addEventListener('stellar:report-clock', function () { TODAY = StellarReports.today(); if (loaded) applyFilters(true); });
   window.addEventListener('stellar:visibility', load);
   document.addEventListener('visibilitychange', load);
   window.addEventListener('focus', load);

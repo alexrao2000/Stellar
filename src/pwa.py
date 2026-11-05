@@ -20,6 +20,8 @@ ASSET_TYPES = {
     "navigation.js": "text/javascript",
     "sections.js": "text/javascript",
     "sections.css": "text/css",
+    "reports.js": "text/javascript",
+    "reports.css": "text/css",
     "ranges.js": "text/javascript",
     "ranges.css": "text/css",
     "navigation.css": "text/css",
@@ -59,6 +61,8 @@ HEAD = """<meta charset="utf-8">
 <script src="/app-assets/navigation.js?v=4"></script>
 <script src="/app-assets/sections.js?v=1"></script>
 <link rel="stylesheet" href="/app-assets/sections.css?v=1">
+<script src="/app-assets/reports.js?v=1"></script>
+<link rel="stylesheet" href="/app-assets/reports.css?v=1">
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=7">

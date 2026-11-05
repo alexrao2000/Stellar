@@ -77,8 +77,8 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   <p class="eyebrow">Stellar</p>
   <h1>Settings</h1>
   <p class="sub">Changes apply from the day below onward, so earlier days keep the settings
-    they had. Optional tasks show blue and an unticked one is never a miss. A deadline marks
-    a task missed if it is ticked late or still unticked when the deadline passes.</p>
+    they had. Optional tasks are extra: they do not change the required daily target and stay
+    unreported until you enter an outcome. Their metrics show frequency. Required tasks become incomplete after their deadline.</p>
   <div id="notice"></div>
 
   <div class="bar">
@@ -93,7 +93,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   <div class="card"><h2>Add a task</h2>
     <div class="add">
       <input type="text" id="new-title" placeholder="Task name" aria-label="New task name" maxlength="200" enterkeyhint="done">
-      <label class="ctl"><input type="checkbox" id="new-optional"> Optional</label>
+      <label class="ctl"><input type="checkbox" id="new-optional" title="Extra task: excluded from the required daily target; unreported until you enter an outcome"> Optional</label>
       <label class="ctl">Deadline <input type="time" id="new-time"></label>
       <label class="ctl"><input type="checkbox" id="new-next"> next day</label>
       <label class="ctl">Starts <input type="date" id="new-start"></label>
@@ -227,6 +227,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
       window.addEventListener('resize', fit);
     }
     row.querySelector('.opt').checked = t.optional;
+    row.querySelector('.opt').title = 'Extra task: excluded from the required daily target; unreported until you enter an outcome';
     row.querySelector('.time').value = s[0];
     row.querySelector('.next').checked = s[1];
 

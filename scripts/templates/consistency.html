@@ -159,12 +159,12 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
   <p class="eyebrow">Stellar</p>
   <h1>Consistency</h1>
-  <p class="sub">How reliably each task got done, and when it slipped. Days that haven't happened yet are excluded — they aren't misses.</p>
+  <p class="sub">Required-task completion and optional-task frequency, with unreported outcomes shown separately.</p>
 
   <div class="strip" id="strip"></div>
 
   <div class="card" id="ranking-card">
-    <h2>Completion rate by task</h2>
+    <h2>Completion and frequency by task</h2>
     <div class="body">
       <div class="controls">
         <label for="minocc">Only tasks with at least <b id="minocc-v" class="mono">10</b> scheduled days</label>
@@ -195,9 +195,10 @@ button:focus-visible, select:focus-visible, input:focus-visible {
       </div>
       <div class="legend">
         <span><i style="background:var(--done)"></i>Completed</span>
-        <span><i class="legend-miss"></i>Missed</span>
+        <span><i class="legend-miss"></i>Incomplete</span>
         <span><i style="background:var(--empty)"></i>Not scheduled</span>
         <span><i style="background:transparent;box-shadow:inset 0 0 0 1px var(--rule)"></i>Upcoming</span>
+        <span><i style="background:transparent;box-shadow:inset 0 0 0 1px var(--ink-muted)"></i>Unreported</span>
       </div>
     </div>
   </div>
@@ -228,7 +229,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     var rows = byTitle[document.getElementById('task').value] || [];
     var row = rows.find(function (r) { return r.day === day; });
     var status = !row ? 'Not scheduled' : day > TODAY ? 'Upcoming'
-      : row.is_completed ? 'Completed' : row.optional ? 'Skipped (optional)' : 'Missed';
+      : StellarReports.labels[StellarReports.state(row)] + (row.optional ? ' (optional)' : '');
     document.getElementById('heat-status').textContent = day + ' · ' + status;
   }
   document.getElementById('heat-day').addEventListener('change', inspectDay);
@@ -265,28 +266,34 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     return [longest, cur];
   }
 
+  function frequencyLabel(rows) {
+    if (!rows.length) return '—';
+    var days = rows.map(function (r) { return r.day; }).sort();
+    var span = Math.round((parseDay(days[days.length - 1]) - parseDay(days[0])) / DAY) + 1;
+    var done = rows.filter(function (r) { return StellarReports.state(r) === 'done'; }).length;
+    return span < 7 ? done + ' in ' + span + 'd' : StellarReports.frequency(rows).toFixed(1) + '/week';
+  }
+  function optionalTask(rows) { return !!(rows.length && rows.slice().sort(function (a, b) { return a.day.localeCompare(b.day); }).at(-1).optional); }
   function summary() {
-    /* An unticked optional task is not owed, so it is left out of the rate. */
-    var past = ROWS.filter(function (r) { return r.day <= TODAY && (r.is_completed || !r.optional); });
+    var past = ROWS.filter(function (r) { return r.day <= TODAY; });
     var done = past.filter(function (r) { return r.is_completed; });
-    var perDay = {};
+    var required = past.filter(function (r) { return !r.optional && StellarReports.state(r) !== 'unreported'; });
+    var perDay = {}, allDays = {};
+    past.forEach(function (r) { (allDays[r.day] = allDays[r.day] || []).push(r); });
     done.forEach(function (r) { perDay[r.day] = (perDay[r.day] || 0) + 1; });
     var days = Object.keys(perDay);
-    var best = days.reduce(function (a, b) {
-      return (perDay[b] > (perDay[a] || 0)) ? b : a;
-    }, days[0]);
-    var avg = days.length ? (done.length / days.length) : 0;
-
+    var best = days.reduce(function (a, b) { return (perDay[b] > (perDay[a] || 0)) ? b : a; }, days[0]);
+    var goals = Object.values(allDays).map(StellarReports.counts).filter(function (count) { return count.required; });
     document.getElementById('strip').innerHTML = [
       cell('Total completed', done.length.toLocaleString()),
       cell('Active days', days.length.toLocaleString()),
-      cell('Avg per day', avg.toFixed(1)),
+      cell('Avg per active day', (days.length ? done.length / days.length : 0).toFixed(1)),
       cell('Best day', best ? perDay[best] + ' tasks' : '—', best || ''),
-      cell('Overall rate',
-           fmtPct(done.length, past.length),
-           past.length.toLocaleString() + ' scheduled'),
+      cell('Required completion', fmtPct(required.filter(function (r) { return r.is_completed; }).length, required.length), required.length + ' resolved required tasks'),
+      cell('Daily goals met', goals.length ? goals.filter(function (count) { return count.complete; }).length + '/' + goals.length : '—'),
     ].join('');
   }
+
   function cell(lbl, v, sub) {
     return '<div class="cell"><span class="lbl">' + esc(lbl) + '</span>' +
       '<span class="v mono">' + esc(v) + '</span>' +
@@ -300,10 +307,13 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     var stats = TITLES.map(function (t) {
       var past = byTitle[t].filter(function (r) { return r.day <= TODAY; });
       var done = past.filter(function (r) { return r.is_completed; }).length;
-      return { title: t, n: past.length, done: done,
-               pct: past.length ? done / past.length * 100 : 0 };
+      var optional = optionalTask(past);
+      var resolved = past.filter(function (r) { return StellarReports.state(r) !== 'unreported'; }).length;
+      return { title: t, n: past.length, done: done, optional: optional,
+        label: optional ? frequencyLabel(past) : fmtPct(done, resolved),
+        pct: optional ? Math.min(100, (StellarReports.frequency(past) || 0) / 7 * 100) : resolved ? done / resolved * 100 : 0 };
     }).filter(function (s) { return s.n >= min; })
-      .sort(function (a, b) { return a.pct - b.pct; });   /* worst first */
+      .sort(function (a, b) { return Number(a.optional) - Number(b.optional) || a.pct - b.pct; });
 
     document.getElementById('rank').innerHTML = stats.length
       ? stats.map(function (s) {
@@ -311,8 +321,8 @@ button:focus-visible, select:focus-visible, input:focus-visible {
             '<div class="name"><button type="button" data-t="' + esc(s.title) + '">' +
               esc(s.title) + '</button></div>' +
             '<div class="track"><div class="fill" style="width:' + s.pct.toFixed(1) +
-              '%;background:' + pctColour(s.pct) + '"></div></div>' +
-            '<div class="num">' + fmtPct(s.done, s.n) + '  ' + s.done + '/' + s.n + '</div>' +
+              '%;background:' + (s.optional ? 'var(--ink-muted)' : pctColour(s.pct)) + '"></div></div>' +
+            '<div class="num">' + s.label + (s.optional ? ' · frequency' : ' · ' + s.done + ' done') + '</div>' +
           '</div>';
         }).join('')
       : '<div class="empty">No tasks meet that threshold. Lower the slider.</div>';
@@ -333,23 +343,21 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     past.sort(function (a, b) { return a.day < b.day ? -1 : 1; });
 
     var flags = past.map(function (r) { return !!r.is_completed; });
-    var done = flags.filter(Boolean).length;
-    var pct = flags.length ? done / flags.length * 100 : 0;
-    var st = streaks(flags);
-
+    if (past.length && past.at(-1).day === TODAY && StellarReports.state(past.at(-1)) === 'unreported') flags.pop();
+    var done = past.filter(function (r) { return r.is_completed; }).length;
+    var incomplete = past.filter(function (r) { return StellarReports.state(r) === 'incomplete'; }).length;
+    var unreported = past.length - done - incomplete;
+    var optional = optionalTask(past), resolved = done + incomplete;
+    var pct = resolved ? done / resolved * 100 : 0, st = streaks(flags);
     var el = document.getElementById('pct');
-    el.textContent = fmtPct(done, flags.length);
-    el.style.color = pctColour(pct);
-    document.getElementById('meta').innerHTML =
-      esc(t) + ' — <b>' + done.toLocaleString() + '</b> of <b>' +
-      flags.length.toLocaleString() + '</b> scheduled days completed';
-
+    document.getElementById('detail-card').classList.toggle('frequency-metric', optional);
+    el.textContent = optional ? frequencyLabel(past) : fmtPct(done, resolved);
+    el.style.color = optional ? 'var(--ink)' : pctColour(pct);
+    document.getElementById('meta').innerHTML = esc(t) + ' — <b>' + done.toLocaleString() + '</b> completions across <b>' + past.length.toLocaleString() + '</b> scheduled days' + (optional ? ' · Frequency' : ' · Completion rate');
     document.getElementById('tstrip').innerHTML = [
-      cell('Scheduled', flags.length.toLocaleString()),
-      cell('Completed', done.toLocaleString()),
-      cell('Missed', (flags.length - done).toLocaleString()),
-      cell('Longest streak', st[0] + ' days'),
-      cell('Current streak', st[1] + ' days'),
+      cell('Scheduled', past.length.toLocaleString()), cell('Done', done.toLocaleString()),
+      cell('Incomplete', incomplete.toLocaleString()), cell('Unreported', unreported.toLocaleString()),
+      cell('Longest streak', st[0] + ' days'), cell('Current streak', st[1] + ' days'),
     ].join('');
 
     heatmap(all);
@@ -452,17 +460,16 @@ button:focus-visible, select:focus-visible, input:focus-visible {
           continue;
         }
         var r = byDay[key];
-        var skipped = r && !r.is_completed && r.optional;
-        var cls = !r ? '' : (key > TODAY ? 'future' : (r.is_completed ? 'done' : (skipped ? 'skip' : 'miss')));
-        var label = r
-          ? key + (key > TODAY ? ' — upcoming' : (r.is_completed ? ' — completed'
-                                                  : (skipped ? ' — skipped (optional)' : ' — missed')))
-          : key + ' — not scheduled';
+        var outcome = r ? StellarReports.state(r) : '';
+        var cls = !r ? '' : key > TODAY ? 'future' : outcome;
+        var label = key + ' — ' + (!r ? 'not scheduled' : key > TODAY ? 'upcoming' : StellarReports.labels[outcome] + (r.optional ? ' (optional)' : ''));
         out.push('<i class="d ' + cls + '" style="' + pos + '" title="' + esc(label) + '"></i>');
       }
     }
     host.innerHTML = out.join('');
   }
+
+  window.addEventListener('stellar:report-clock', function () { TODAY = StellarReports.today(); if (ROWS.length) { summary(); ranking(); detail(); } });
 
   document.getElementById('years').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-year]');
@@ -507,10 +514,8 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
       var future = ROWS.filter(function (r) { return r.day > TODAY; }).length;
       document.getElementById('note').innerHTML =
-        '<b>Read-only.</b> ' + ROWS.length.toLocaleString() +
-        ' Daily records from <span class="mono">task_history</span>. ' +
-        future.toLocaleString() + ' fall after today and are excluded from every ' +
-        'rate and streak above — a day that has not happened cannot be a miss.';
+        '<b>Read-only.</b> ' + ROWS.length.toLocaleString() + ' scheduled records. ' +
+        future.toLocaleString() + ' fall after today and are excluded. Optional tasks show frequency. Unreported outcomes are counted separately.';
 
       summary();
       ranking();

@@ -26,6 +26,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
@@ -316,7 +317,7 @@ def _cached(key: str, build, ttl: float = CACHE_TTL):
 # Exactly what the pages consume. Whitelisted rather than passed through, so a
 # new database column cannot silently start shipping to the browser.
 HISTORY_COLS = (
-    "id", "day", "list_title", "title", "is_completed", "completed_at",
+    "id", "day", "list_title", "title", "status", "is_completed", "completed_at",
     "notes", "weight_lbs", "weight_source", "takeout_weight",
 )
 
@@ -635,7 +636,7 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     range_assets = ""
     if template == "today.html" and boot.get("view") in {"3days", "week", "custom"}:
         range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=3">'
-                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=2">')
+                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=3">')
     html = html.replace("__RANGE_ASSETS__", range_assets)
     # A page whose data is already in the markup has nothing to wait for, and
     # gating it would be strictly worse than not: the gate lifts on the first
@@ -667,7 +668,12 @@ def _render(template: str, boot: dict, active: str = "") -> str:
 @app.get("/api/task_history")
 def api_task_history() -> list[dict]:
     """The reconciled record. Returned whole -- the client does not page this."""
-    return _task_history()
+    rows = _task_history()
+    definitions = _definitions()
+    by_day: dict[str, list[dict]] = {}
+    for row in rows:
+        by_day.setdefault(row["day"], []).append(row)
+    return [row for day, records in by_day.items() for row in _annotate(records, definitions, day)]
 
 
 def _task_projection(columns: str, *, title: str | None = None) -> list[dict]:
@@ -715,14 +721,15 @@ def api_wake() -> list[dict]:
 def api_consistency() -> list[dict]:
     """The fields used by consistency analysis, without notes or metrics.
 
-    `optional` comes from the task's current definition: an unticked optional
-    task is not a miss.
+    Optional and deadline rules use the definition in force on each day.
+    Missing optional outcomes remain unreported; required outcomes default to
+    incomplete after the deadline unless explicitly cleared.
     """
     defs = _definitions()
     hidden = _binned_titles(defs)
     live = [d for d in defs if _live(d)]
     by_title = _versions_by_title(live)
-    rows = _task_projection("day,list_title,title,is_completed")
+    rows = _task_projection("day,list_title,title,is_completed,status")
     # Days are no longer filled in by viewing them, so a day never opened has no
     # rows. Its scheduled tasks are still owed: add them, from the first day a
     # definition starts through today, wherever a row is missing.
@@ -738,12 +745,15 @@ def api_consistency() -> list[dict]:
                 rows.append({"day": day, "list_title": v["list_title"],
                              "title": v["title"], "is_completed": False})
     out = []
+    tz = _app_tz()
     for r in rows:
         if r["title"] in hidden:
             continue
         versions = by_title.get(r["title"])
         day = str(r["day"])[:10]
-        out.append({**r, "optional": bool(versions and _version_on(versions, day).get("optional"))})
+        definition = _version_on(versions, day) if versions else {}
+        annotated = _annotated_record(r, definition, day, tz)
+        out.append({**r, "optional": annotated["optional"], "report_due_at": annotated["report_due_at"], "report_state": annotated["report_state"]})
     return out
 
 
@@ -1094,23 +1104,27 @@ def _optional_ranges(versions: list[dict]) -> list[list[str | None]]:
     return out
 
 
-def _annotate(rows: list[dict], defs: list[dict], day: str) -> list[dict]:
-    """Copy each row with the optional flag and deadline of the version in force that day.
+def _annotated_record(row: dict, definition: dict, day: str, tz) -> dict:
+    optional = bool(definition.get("optional"))
+    deadline = definition.get("deadline_minutes")
+    due = _deadline_at(day, deadline if deadline is not None else 1440, tz)
+    if row.get("is_completed"):
+        state = "done"
+    elif row.get("status") in {"incomplete", "unreported"}:
+        state = row["status"]
+    elif not optional and due and datetime.now(timezone.utc) >= datetime.fromisoformat(due):
+        state = "incomplete"
+    else:
+        state = "unreported"
+    return {**row, "optional": optional, "deadline_at": _deadline_at(day, deadline, tz),
+            "report_due_at": due, "report_state": state}
 
-    Copies: the non-fresh path hands in rows from the shared history cache.
-    """
+
+def _annotate(rows: list[dict], defs: list[dict], day: str) -> list[dict]:
     by_title = _versions_by_title(defs)
     tz = _app_tz()
-    out = []
-    for r in rows:
-        versions = by_title.get(r["title"])
-        d = _version_on(versions, day) if versions else {}
-        out.append({
-            **r,
-            "optional": bool(d.get("optional")),
-            "deadline_at": _deadline_at(day, d.get("deadline_minutes"), tz),
-        })
-    return out
+    return [_annotated_record(row, _version_on(by_title[row["title"]], day)
+                             if row["title"] in by_title else {}, day, tz) for row in rows]
 
 
 def _scheduled(day: str, rows: list[dict], live: list[dict]) -> list[dict]:
@@ -1128,7 +1142,7 @@ def _scheduled(day: str, rows: list[dict], live: list[dict]) -> list[dict]:
             continue
         seen.add(key)
         out.append({"id": None, "virtual": True, "day": day, "list_title": d["list_title"],
-                    "title": d["title"], "is_completed": False, "completed_at": None,
+                    "title": d["title"], "status": "needsAction", "is_completed": False, "completed_at": None,
                     "notes": None, "weight_lbs": None, "weight_source": None,
                     "takeout_weight": None})
     return out
@@ -1276,6 +1290,29 @@ def api_check(day: str, title: str, done: bool) -> dict:
     }).eq("id", row["id"]).execute()
     _cache_apply(res.data or [])
     return res.data[0] if res.data else row
+
+
+class TaskReport(BaseModel):
+    title: str
+    state: Literal["done", "incomplete", "unreported"]
+
+
+@app.post("/api/day/{day}/report")
+def api_report(day: str, body: TaskReport) -> dict:
+    _check_writable(day)
+    _check_not_future(day)
+    if not body.title.strip() or len(body.title) > 200:
+        raise HTTPException(400, "title must contain between 1 and 200 characters")
+    row = _materialize(day, body.title)
+    result = _sb().table("task_history").update({
+        "is_completed": body.state == "done",
+        "status": {"done": "completed", "incomplete": "incomplete", "unreported": "unreported"}[body.state],
+        "completed_at": (row.get("completed_at") if row.get("is_completed") else datetime.now(timezone.utc).isoformat()) if body.state == "done" else None,
+    }).eq("id", row["id"]).execute().data or []
+    if not result:
+        raise HTTPException(404, "task record could not be updated")
+    _cache_apply(result)
+    return _annotate(result, _definitions(), day)[0]
 
 
 class TaskOrderBody(BaseModel):
@@ -1961,7 +1998,7 @@ def page_metrics(tab_frame: bool = False) -> str:
 def api_metrics() -> dict:
     from hashlib import sha256
 
-    rows = _task_projection("day,list_title,title,is_completed,weight_lbs,notes")
+    rows = _task_projection("day,list_title,title,is_completed,status,weight_lbs,notes")
     today = _today()
     rows = [r for r in rows if r.get("list_title") == "Daily" and str(r.get("day", ""))[:10] <= today]
     defs = _definitions()
@@ -1994,7 +2031,7 @@ def api_metrics() -> dict:
             modules.append(module)
             seen.add(module["id"])
     modules[1:] = sorted(modules[1:], key=lambda m: ({"weight": 0, "wake": 1, "task": 2}[m["kind"]], m["label"].casefold()))
-    revision = sha256(json.dumps({"records": rows, "definitions": defs}, sort_keys=True, default=str).encode()).hexdigest()
+    revision = sha256(json.dumps({"today": today, "records": rows, "definitions": defs}, sort_keys=True, default=str).encode()).hexdigest()
     return {"modules": modules, "revision": revision}
 
 

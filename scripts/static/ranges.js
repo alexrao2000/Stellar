@@ -19,14 +19,16 @@
     const dialog = document.createElement('dialog'); dialog.className = 'range-editor';
     const title = document.createElement('h2'); title.textContent = shortTitle(row, ctx); title.id = 'range-editor-title';
     const date = document.createElement('p'); date.textContent = ctx.label(row.day, { weekday: 'long', month: 'short', day: 'numeric' });
-    const editor = ctx.field(row, false, () => { button.textContent = valueFor(row, ctx); button.setAttribute('aria-label', button.dataset.label + ', ' + valueFor(row, ctx)); button.title = button.getAttribute('aria-label'); changed(); });
+    const editor = ctx.field(row, false, () => { button.textContent = valueFor(row, ctx); button.setAttribute('aria-label', button.dataset.label + ', ' + valueFor(row, ctx)); button.title = button.getAttribute('aria-label'); if (statusButton) statusButton.textContent = 'Status: ' + StellarReports.labels[StellarReports.state(row)]; changed(); });
+    const statusButton = editor.querySelector('.report-measure-status');
+    if (statusButton) { statusButton.className = 'report-field-status'; statusButton.setAttribute('aria-label', 'Set ' + title.textContent + ' status'); statusButton.textContent = 'Status: ' + StellarReports.labels[StellarReports.state(row)]; }
     const input = editor.querySelector('input');
     input.setAttribute('aria-label', title.textContent + ', ' + date.textContent);
     const originalValue = input.value;
     const done = document.createElement('button'); done.type = 'button'; done.className = 'range-editor-done'; done.textContent = 'Done';
     done.addEventListener('click', () => { input.blur(); dialog.close(); });
     dialog.setAttribute('aria-labelledby', title.id);
-    dialog.append(title, date, editor, done); document.body.append(dialog);
+    dialog.append(title, date, editor); if (statusButton) dialog.append(statusButton); dialog.append(done); document.body.append(dialog);
     dialog.addEventListener('cancel', event => { event.preventDefault(); input.value = originalValue; dialog.close(); });
     dialog.addEventListener('keydown', event => {
       event.stopPropagation();
@@ -46,9 +48,10 @@
     const overview = document.createElement('div'); overview.className = 'range-overview';
     const count = document.createElement('span'); count.className = 'range-total';
     const percent = document.createElement('span'); percent.className = 'range-percent';
+    const breakdown = document.createElement('p'); breakdown.className = 'range-breakdown'; breakdown.hidden = true;
     const progress = document.createElement('div'); progress.className = 'range-progress'; progress.setAttribute('aria-hidden', 'true');
     const bar = document.createElement('span'); progress.append(bar);
-    overview.append(count, percent, progress); board.append(overview);
+    overview.append(count, percent, progress, breakdown); board.append(overview);
     const doneFor = day => ctx.rows(day).filter(row => row.is_completed).length;
     const dateLabel = day => ctx.label(day, { weekday: 'long', month: 'short', day: 'numeric' });
     const dateButton = day => {
@@ -61,16 +64,16 @@
       return button;
     };
     const changed = () => {
-      let done = 0, total = 0;
-      for (const day of days) if (day <= ctx.today) { done += doneFor(day); total += ctx.owed(ctx.rows(day)); }
-      count.replaceChildren(); const strong = document.createElement('strong'); strong.textContent = done + ' / ' + total;
+      const counts = StellarReports.counts(days.filter(day => day <= ctx.today).flatMap(day => ctx.rows(day)));
+      count.replaceChildren(); const strong = document.createElement('strong'); strong.textContent = StellarReports.fraction(counts);
       count.append(strong, ' completed');
-      const value = total ? Math.round(100 * done / total) : 0;
-      percent.textContent = value + '%'; bar.style.width = value + '%';
+      percent.textContent = counts.percent === null ? '—' : Math.round(counts.percent) + '%';
+      bar.style.width = (counts.percent || 0) + '%';
+      breakdown.hidden = !counts.bonus; breakdown.textContent = StellarReports.description(counts);
       board.querySelectorAll('.range-date').forEach(button => {
         const day = button.dataset.day, total = ctx.owed(ctx.rows(day));
-        button.querySelector('.range-count').textContent = day > ctx.today ? '·' : doneFor(day) + '/' + total;
-        button.setAttribute('aria-label', (phone.matches ? 'Show ' : 'Open ') + dateLabel(day) + (day > ctx.today ? ', upcoming' : ', ' + doneFor(day) + ' of ' + total + ' completed'));
+        button.querySelector('.range-count').textContent = day > ctx.today ? '·' : StellarReports.fraction(StellarReports.counts(ctx.rows(day)));
+        button.setAttribute('aria-label', (phone.matches ? 'Show ' : 'Open ') + dateLabel(day) + (day > ctx.today ? ', upcoming' : ', ' + StellarReports.description(StellarReports.counts(ctx.rows(day)))));
       });
     };
     if (phone.matches) {
