@@ -11,7 +11,8 @@ check-in touches. Nothing here writes to Google.
 Only foreground requests gate the first paint. Embedded metric charts report
 readiness to their parent instead of waiting behind a second loading screen.
 Pool sends its shell first and reads records in the browser so its sky never
-waits for the database.
+waits for the database. Pool refreshes bypass worker caches so a saved position
+cannot be replaced by another worker's older copy.
 
 Run:  make dev        (or: uvicorn src.server:app --reload --port 8000)
 """
@@ -2030,7 +2031,7 @@ def _pool_all() -> dict:
     return _cached("pool", _pool_fetch, ttl=POOL_CACHE_TTL)
 
 
-def _pool_state(include_resolved: bool = False) -> dict:
+def _pool_state(include_resolved: bool = False, fresh: bool = False) -> dict:
     """The stars and the edges between them.
 
     Resolved ones are left out by default -- a resolved star leaves the sky, and
@@ -2038,7 +2039,7 @@ def _pool_state(include_resolved: bool = False) -> dict:
     row and their resolved_at, so `show resolved` can bring them back as embers
     and nothing is ever lost.
     """
-    full = _pool_all()
+    full = _pool_fetch() if fresh else _pool_all()
     tasks = full["tasks"] if include_resolved else [
         t for t in full["tasks"] if not t.get("resolved_at")]
     present = {r["id"] for r in tasks}
@@ -2048,9 +2049,10 @@ def _pool_state(include_resolved: bool = False) -> dict:
 
 
 @app.get("/api/pool")
-def api_pool(resolved: bool = False) -> dict:
+def api_pool(response: Response, resolved: bool = False) -> dict:
+    response.headers["Cache-Control"] = "no-store"
     try:
-        return _pool_state(include_resolved=resolved)
+        return _pool_state(include_resolved=resolved, fresh=True)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -2112,10 +2114,10 @@ def api_pool_move(task_id: int, x: float, y: float) -> dict:
     updated = (
         _sb().table("pool_tasks")
         .update({"x": cx, "y": cy})
-        .eq("id", task_id).is_("resolved_at", "null").execute().data or []
+        .eq("id", task_id).execute().data or []
     )
     if not updated:
-        raise HTTPException(404, f"no open pool task {task_id}")
+        raise HTTPException(404, f"no pool task {task_id}")
     def _patch(s):
         for t in s["tasks"]:
             if t["id"] == task_id:
