@@ -11,6 +11,14 @@ async function check(engine) {
   const browser = await ({ chromium, webkit }[engine]).launch(options);
   try {
     const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 900 } });
+    await context.addInitScript(() => {
+      const OriginalDate = Date, offset = OriginalDate.parse('2026-11-04T20:00:00Z') - OriginalDate.now();
+      window.Date = class extends OriginalDate {
+        constructor(...args) { super(...(args.length ? args : [OriginalDate.now() + offset])); }
+        static now() { return OriginalDate.now() + offset; }
+      };
+    });
+    let poolReads = 0;
     const days = new Map(), writes = [], errors = [];
     const rows = day => {
       if (!days.has(day)) days.set(day, names.filter((title, i) => !(i === 15 && day < '2026-11-03') && !(i === 17 && day > '2026-11-02')).map((title, i) => ({ id: day + ':' + i, day, list_title: 'Daily', title, is_completed: i % 4 === 2 && day <= '2026-11-04', completed_at: null, weight_lbs: title === names[0] ? 150.4 : null, notes: title === names[1] ? 'Wake-up Time: 7:30 am' : '', optional: i % 5 === 4, deadline_at: day + 'T06:30:00Z' })));
@@ -40,7 +48,7 @@ async function check(engine) {
         }
         data = { days: result, today: '2026-11-04', floor: '2026-08-01' };
       } else if (url.pathname.startsWith('/api/day/')) data = rows(url.pathname.split('/')[3]);
-      else if (url.pathname === '/api/pool') data = { tasks: [{ id: '1', title: 'Demo star', x: .6, y: .4, status: 'open' }], edges: [] };
+      else if (url.pathname === '/api/pool') { poolReads++; data = { tasks: [{ id: '1', title: 'Demo star', x: .6, y: .4, status: 'open' }], edges: [] }; }
       await route.fulfill({ contentType: 'application/json', headers: { 'X-Day-Complete': '1' }, body: JSON.stringify(data) });
     });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
@@ -49,6 +57,12 @@ async function check(engine) {
     await page.locator('#tasks .task').first().waitFor();
     await page.waitForFunction(() => !document.documentElement.classList.contains('app-booting'));
     assert.equal(assets.length, 0, 'Day does not frontload the other range renderer');
+    const toggleTop = (await page.locator('.sidebar-collapse').boundingBox()).y;
+    const linkTop = (await page.getByRole('link', { name: 'Space', exact: true }).boundingBox()).y;
+    await page.getByRole('button', { name: 'Collapse sidebar' }).click(); await page.waitForTimeout(400);
+    assert.equal((await page.locator('.sidebar-collapse').boundingBox()).y, toggleTop);
+    assert.equal((await page.getByRole('link', { name: 'Space', exact: true }).boundingBox()).y, linkTop);
+    await page.getByRole('button', { name: 'Expand sidebar' }).click(); await page.waitForTimeout(400);
     const originalHeight = (await page.locator('.dated-tasks').boundingBox()).height;
     const pool = page.frames().find(frame => frame.url().includes('/pool?embedded=true'));
     await pool.locator('#sky[data-loading=false]').waitFor();
@@ -75,7 +89,17 @@ async function check(engine) {
         assert.equal(await page.locator(`.range-table tbody td:nth-child(${index}) button:not(:disabled)`).count(), 0);
       }
     }
+    await page.locator('[data-view=day]').click(); await page.waitForTimeout(450);
+    const startWidth = (await page.locator('.dated-tasks').boundingBox()).width, beforeAnimationReads = poolReads;
     await page.locator('[data-view=week]').click();
+    const widths = await page.locator('.dated-tasks').evaluate(async panel => {
+      const values = [];
+      for (let i = 0; i < 25; i++) { await new Promise(requestAnimationFrame); values.push(panel.getBoundingClientRect().width); }
+      return values;
+    });
+    const endWidth = widths.at(-1);
+    assert(widths.some(width => width > Math.min(startWidth, endWidth) + 1 && width < Math.max(startWidth, endWidth) - 1), 'Range widths interpolate');
+    assert(poolReads - beforeAnimationReads <= 1, 'Animation does not repeatedly refresh Pool records');
     await page.locator('.range-table').waitFor();
     const run = page.getByRole('button', { name: 'Run, Nov 4, not completed', exact: true });
     await run.click();
@@ -128,6 +152,15 @@ async function check(engine) {
     assert.equal(await page.locator('.dated-tasks').boundingBox().then(box => box.height), originalHeight);
     await page.locator('[data-view=month]').click(); await page.locator('#board > .month').waitFor();
     assert.equal(await page.locator('.dated-tasks').boundingBox().then(box => box.height), originalHeight);
+    for (const day of ['2027-02-15', '2026-11-15', '2026-12-15']) {
+      await page.goto(base + '/?view=month&day=' + day); await page.locator('#board > .month').waitFor();
+      const gap = await page.evaluate(() => document.getElementById('board').getBoundingClientRect().bottom - document.querySelector('.month').getBoundingClientRect().bottom);
+      assert(gap < 5, 'Months with four, five, or six weeks fill the available panel');
+    }
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.locator('[data-view=day]').click(); await page.waitForTimeout(30);
+    assert.equal(await page.locator('.dated-tasks').evaluate(panel => panel.getAnimations().filter(animation => animation.playState === 'running').length), 0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto(base + '/?view=week&day=2026-07-15'); await page.locator('.range-table').waitFor();
     assert.equal(await page.locator('.range-table tbody button:not(:disabled)').count(), 0, 'Dates before the write floor remain locked');
     for (const colorScheme of ['dark', 'light']) {

@@ -1,7 +1,7 @@
 /* Tasks float within the Pool canvas while its editable stars retain clear
    space beside the panel. Pool stays mounted across range changes so edits
    survive. Range comparisons keep a compact width beside the stars.
-   Compact screens keep the individual views. */
+   Width changes animate from the current size; Pool controls follow the panel. */
 (() => {
   const toggle = document.getElementById('pool-toggle');
   if (!toggle) return;
@@ -12,6 +12,8 @@
   const dayList = host.querySelector('#day-card');
   const fallback = document.getElementById('pool-fallback');
   const desktop = matchMedia('(min-width: 1100px)');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let widthAnimation = null, initialized = false;
   let enabled = true;
   try { enabled = localStorage.getItem('stellar:show-pool') !== 'false'; } catch {}
   let open = false;
@@ -26,6 +28,9 @@
       inset }, location.origin);
   };
   const layout = () => {
+    const previousWidth = tasks.getBoundingClientRect().width;
+    const wasOpen = open;
+    widthAnimation?.cancel(); widthAnimation = null;
     const view = document.body.dataset.range || 'day';
     const columns = Math.max(1, Number(document.body.dataset.columns) || 1);
     const minimum = view === 'month' || columns > 3 ? 560 : 380;
@@ -56,8 +61,20 @@
     }
     pane.hidden = !open;
     if (open && !frame.hasAttribute('src')) frame.src = '/pool?embedded=true';
+    const targetWidth = tasks.getBoundingClientRect().width;
+    if (initialized && wasOpen && open && !reducedMotion.matches && window.stellarPageActive() && Math.abs(targetWidth - previousWidth) > 1) {
+      const animation = tasks.animate([{ width: previousWidth + 'px' }, { width: targetWidth + 'px' }],
+        { duration: 320, easing: 'cubic-bezier(.22, 1, .36, 1)' });
+      widthAnimation = animation;
+      animation.onfinish = () => { if (widthAnimation === animation) { widthAnimation = null; notify(); } };
+    }
+    initialized = true;
     notify();
   };
+  new ResizeObserver(notify).observe(tasks);
+  reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) { widthAnimation?.cancel(); widthAnimation = null; notify(); }
+  });
   toggle.addEventListener('click', () => {
     enabled = !enabled;
     try { localStorage.setItem('stellar:show-pool', String(enabled)); } catch {}

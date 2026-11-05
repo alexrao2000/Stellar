@@ -350,13 +350,14 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     window.addEventListener('message', function (event) {
       if (event.origin !== location.origin || event.source !== parent ||
           !event.data || event.data.type !== 'stellar:pool-visibility') return;
+      var wasVisible = embeddedVisible;
       embeddedVisible = event.data.visible === true;
       if (!embeddedVisible) finishDrag(false);
       var inset = Math.max(0, Math.min(Number(event.data.inset) || 0, innerWidth - 300));
       document.body.dataset.workspaceOverlay = String(inset > 0);
       sky.style.setProperty('--workspace-inset', inset + 'px');
       syncMotion();
-      if (embeddedVisible) { scheduleResize(); pollPool(); }
+      if (embeddedVisible) { scheduleResize(); if (!wasVisible) pollPool(); }
     });
   }
   document.querySelectorAll('[data-pool-view]').forEach(function (b) {

@@ -1459,6 +1459,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         var trailing = document.createElement('div'); trailing.className = 'col blank';
         trailing.setAttribute('aria-hidden', 'true'); grid.appendChild(trailing);
       }
+      grid.style.setProperty('--month-weeks', (grid.children.length - 7) / 7);
     }
     board.appendChild(grid);
   }
