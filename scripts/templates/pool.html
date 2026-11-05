@@ -321,6 +321,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   var BOOT = JSON.parse(document.getElementById('bootstrap').textContent);
   var TASKS = BOOT.tasks || [];
   var EDGES = BOOT.edges || [];
+  var requestedStar = new URLSearchParams(location.search).get('star');
 
   var sky = document.getElementById('sky');
   var mapField = document.getElementById('pool-map');
@@ -371,10 +372,12 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function post(url, method) {
+  function post(url, method, body) {
     poolRevision++;
     writesInFlight++;
-    return fetch(url, { method: method || 'POST' }).then(function (res) {
+    var options = { method: method || 'POST' };
+    if (body !== undefined) { options.headers = { 'Content-Type': 'application/json' }; options.body = JSON.stringify(body); }
+    return fetch(url, options).then(function (res) {
       if (res.ok) return res.json();
       return res.json().catch(function () { return {}; }).then(function (j) {
         throw new Error(j.detail || ('HTTP ' + res.status));
@@ -509,7 +512,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
         row.x = Number(row.x); row.y = Number(row.y);
         TASKS = TASKS.filter(function (x) { return x !== p; });
         TASKS.push(row);
-        note(row.title + ' added');
+        note(row.title + ' added · reminder in 24 hours');
         paint();
       })
       .catch(function (err) {
@@ -895,6 +898,18 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       '<textarea id="pnotes" aria-label="Task description" placeholder="what this actually involves">' +
         esc(t.notes || '') + '</textarea>';
 
+    if (!done) {
+      var reminderLabel = t.reminder_sent_at ? 'Reminder sent ' + new Date(t.reminder_sent_at).toLocaleString() :
+        t.remind_at ? 'Reminder: ' + new Date(t.remind_at).toLocaleString() : 'No reminder set';
+      html += '<section class="reminder" aria-label="Star reminder"><form id="pool-reminder-form">' +
+        '<label for="pool-reminder-time">Remind me</label><input id="pool-reminder-time" type="datetime-local" required>' +
+        '<div class="reminder-actions"><button type="submit">Save time</button>' +
+        '<button type="button" id="pool-reminder-tomorrow">In 24 hours</button>' +
+        '<button type="button" id="pool-reminder-clear">Clear</button></div></form>' +
+        '<p id="pool-reminder-status" role="status">' + esc(reminderLabel) + '</p>' +
+        '<div data-notification-controls></div></section>';
+    }
+
     if (waits.length) {
       html += '<div class="waits"><h4>waits on</h4>' + waits.map(function (w) {
         return '<div><span>' + esc(w.title) + '</span>' +
@@ -932,6 +947,37 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (top < 12) top = 12;
     panelEl.style.left = left + 'px';
     panelEl.style.top = top + 'px';
+
+    var reminderForm = document.getElementById('pool-reminder-form');
+    if (reminderForm) {
+      var reminderInput = document.getElementById('pool-reminder-time');
+      if (t.remind_at) {
+        var localTime = new Date(t.remind_at);
+        reminderInput.value = new Date(localTime.getTime() - localTime.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      }
+      var reminderStatus = document.getElementById('pool-reminder-status');
+      function saveReminder(at) {
+        var buttons = reminderForm.querySelectorAll('button');
+        buttons.forEach(function (button) { button.disabled = true; });
+        return post('/api/pool/task/' + t.id + '/reminder', 'POST', { at: at }).then(function (row) {
+          t.remind_at = row.remind_at; t.reminder_sent_at = row.reminder_sent_at; t.reminder_version = row.reminder_version;
+          if (PANEL_ID === t.id) openPanel(t);
+          note(at ? 'Reminder saved' : 'Reminder cleared');
+        }).catch(function (err) {
+          reminderStatus.textContent = err.message;
+          buttons.forEach(function (button) { button.disabled = false; });
+        });
+      }
+      reminderForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var date = new Date(reminderInput.value);
+        if (isNaN(date.getTime()) || date.getTime() <= Date.now()) { reminderStatus.textContent = 'Choose a future reminder time.'; return; }
+        saveReminder(date.toISOString());
+      });
+      document.getElementById('pool-reminder-tomorrow').addEventListener('click', function () { saveReminder(new Date(Date.now() + 86400000).toISOString()); });
+      document.getElementById('pool-reminder-clear').addEventListener('click', function () { saveReminder(null); });
+      if (window.StellarNotifications) window.StellarNotifications.mount(panelEl.querySelector('[data-notification-controls]'));
+    }
 
     var linkPicker = document.getElementById('pool-link-picker');
     if (linkPicker) {
@@ -1052,6 +1098,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     post('/api/pool/task/' + t.id + '/resolve?done=' + done)
       .then(function (row) {
         t.resolved_at = row.resolved_at;
+        t.remind_at = row.remind_at; t.reminder_sent_at = row.reminder_sent_at;
         note(done
           ? (waits.length
               ? t.title + ' resolved, ahead of ' + waits.length + ' it was waiting on'
@@ -1083,7 +1130,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
         row.x = Number(row.x); row.y = Number(row.y);
         TASKS.push(row);
         self.value = '';
-        note(title + ' added');
+        note(title + ' added · reminder in 24 hours');
         paint();
       })
       .catch(function (err) { note(err.message, true); })
@@ -1148,6 +1195,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       poolLoaded = true; sky.dataset.loading = 'false'; poolLoading.hidden = true;
       if (poolSnapshot(tasks, edges) === poolSnapshot(TASKS, EDGES)) return;
       var selected = PANEL_ID;
+      if (requestedStar) {
+        selected = requestedStar;
+        requestedStar = null;
+        if (tasks.some(function (task) { return String(task.id) === selected && !isOpen(task); })) SHOW_RESOLVED = true;
+      }
       TASKS = tasks;
       EDGES = edges;
       paint();
@@ -1198,6 +1250,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
   new ResizeObserver(scheduleResize).observe(document.querySelector('.pool-toolbar'));
   new ResizeObserver(scheduleResize).observe(mapField);
+  new ResizeObserver(function () {
+    if (!panelEl.classList.contains('open')) return;
+    var box = panelEl.getBoundingClientRect(), bounds = sky.getBoundingClientRect();
+    if (box.bottom > bounds.bottom - 12) panelEl.style.top = Math.max(12, panelEl.offsetTop - (box.bottom - bounds.bottom + 12)) + 'px';
+  }).observe(panelEl);
   window.addEventListener('resize', scheduleResize);
   resize();
   if (BOOT.embedded && parent !== window) parent.postMessage({ type: 'stellar:pool-background-ready' }, location.origin);

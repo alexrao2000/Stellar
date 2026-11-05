@@ -1,0 +1,12 @@
+/* Reminder controls inherit the Pool palette and fit compact task details. */
+#panel .reminder { margin: 14px 0; border-top: 1px solid var(--line); padding-top: 12px; font: 12px/1.5 system-ui,sans-serif; }
+#panel .reminder label { display: block; margin-bottom: 6px; font-weight: 600; color: var(--star); }
+#panel .reminder input { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: #10111e; color: #eee; font: inherit; color-scheme: dark; }
+#panel .reminder-actions, #panel .notification-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#panel .reminder button { flex: 1 1 auto; min-height: 40px; padding: 7px 10px; border: 1px solid var(--line);
+  border-radius: 8px; background: #10111e; color: #eee; font: inherit; cursor: pointer; }
+#panel .reminder button:disabled { opacity: .5; cursor: default; }
+#panel .reminder p { margin: 8px 0 0; color: var(--ink-sky); overflow-wrap: anywhere; }
+#panel .reminder button:focus-visible, #panel .reminder input:focus-visible { outline: 2px solid #b6b0db; outline-offset: 2px; }
+@media(pointer:coarse) { #panel .reminder button { min-height: 44px; } #panel .reminder input { font-size: 16px; } }

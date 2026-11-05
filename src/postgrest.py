@@ -24,6 +24,7 @@ is not worth re-implementing.
 from __future__ import annotations
 
 import httpx
+import re
 
 # Kept for the lifetime of the process. On Vercel that means a warm instance
 # reuses the TLS session across requests instead of re-handshaking per query.
@@ -194,6 +195,19 @@ class Client:
 
     def table(self, name: str) -> _Query:
         return _Query(self._url, self._key, name)
+
+    def rpc(self, name: str, params: dict) -> Result:
+        if not re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+            raise ValueError("invalid database function name")
+        try:
+            response = _http().request("POST", f"{self._url.rstrip('/')}/rest/v1/rpc/{name}",
+                headers={"apikey": self._key, "Authorization": f"Bearer {self._key}"}, json=params)
+        except httpx.HTTPError as exc:
+            raise PostgrestError(f"RPC {name} transport failure") from exc
+        if response.status_code >= 400:
+            raise PostgrestError(f"RPC {name} -> {response.status_code}")
+        data = response.json() if response.content else []
+        return Result(data if isinstance(data, list) else [data] if data is not None else [])
 
 
 def create_client(url: str, key: str) -> Client:
