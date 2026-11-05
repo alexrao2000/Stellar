@@ -29,13 +29,12 @@ html body .range-scroll { overflow: auto; min-width: 0; min-height: 0; max-heigh
 .range-date.is-future { opacity: .55; }
 html body .range-table .mini.range-check { position: relative; display: flex; justify-content: center; align-items: center; width: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: 0; background: transparent; color: var(--ink); }
 html body .range-check :is(.t,.tag) { display: none; }
-html body .range-check .mbox { display: grid; place-items: center; width: 19px; height: 19px; margin: 0; border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent); border-radius: 6px; background: transparent; color: var(--ink-muted); }
+html body .range-check .mbox { display: grid; place-items: center; width: 19px; height: 19px; margin: 0; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--surface); }
 html body .range-check.optional .mbox { border-style: dashed; }
-html body .range-check.done .mbox { background: var(--ink); border-color: var(--ink); }
-html body .range-check .mbox svg { display: block; width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
-html body .range-check.done .mbox svg { fill: var(--surface); stroke: var(--surface); stroke-width: .5; }
-html body .range-check:not(:disabled):hover .mbox, html body .range-check:focus-visible .mbox { border-color: var(--ink); color: var(--ink); }
-html body .range-check:not(.done):not(:disabled):hover .mbox svg { fill: color-mix(in srgb, var(--ink) 12%, transparent); }
+html body .range-check.done .mbox { background: transparent; border-color: color-mix(in srgb, var(--ink) 35%, transparent); color: var(--ink-muted); }
+html body .range-check .mbox svg { display: block; width: 13px; height: 13px; fill: currentColor; stroke: currentColor; stroke-width: .5; stroke-linejoin: round; }
+html body .range-check.done .mbox svg { fill: none; stroke-width: 1.5; }
+html body .range-check:not(:disabled):hover .mbox, html body .range-check:focus-visible .mbox { border-color: var(--ink); }
 html body .range-check:has(.tag.missed):not(.done)::after { content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--bad); right: calc(50% - 14px); top: 10px; }
 html body .range-check:disabled, .range-value:disabled { opacity: .35; }
 .range-value { min-width: 0; width: 100%; min-height: 44px; padding: 5px 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: 11px ui-monospace, monospace; cursor: pointer; }
