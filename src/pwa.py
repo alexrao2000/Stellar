@@ -14,6 +14,7 @@ ASSETS = Path(__file__).resolve().parent.parent / "scripts" / "static"
 ASSET_TYPES = {
     "app.css": "text/css",
     "stellar.css": "text/css",
+    "space-theme.css": "text/css",
     "workspace.css": "text/css",
     "workspace.js": "text/javascript",
     "navigation.js": "text/javascript",
@@ -56,8 +57,9 @@ HEAD = """<meta charset="utf-8">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=6">
 <link rel="stylesheet" href="/app-assets/navigation.css?v=6">
+<link rel="stylesheet" href="/app-assets/space-theme.css?v=1">
 <script src="/app-assets/workspace.js?v=7" defer></script>
-<script src="/app-assets/app.js?v=8" defer></script>"""
+<script src="/app-assets/app.js?v=9" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'
 INSTALL_DIALOG = """<dialog id="install-dialog" class="install-ui" aria-labelledby="install-title">

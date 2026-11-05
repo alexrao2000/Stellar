@@ -618,7 +618,9 @@ def swagger_docs() -> HTMLResponse:
     if "<body>" not in page:  # pragma: no cover - guards a FastAPI upgrade
         log.warning("swagger html shape changed; serving /docs without the nav")
         return HTMLResponse(page)
-    return HTMLResponse(document(page, _nav("/docs") + _BOOT_GATE_JS, _NAV_CSS))
+    backdrop = '<div class="space-backdrop" aria-hidden="true"></div>'
+    return HTMLResponse(document(page, _nav("/docs") + _BOOT_GATE_JS + backdrop, _NAV_CSS).replace(
+        "<body>", '<body data-page="docs" data-space-theme="true">', 1))
 
 
 def _render(template: str, boot: dict, active: str = "") -> str:
@@ -639,11 +641,17 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.
     embedded = bool(boot.get("embedded"))
+    themed = not embedded and template not in {"today.html", "pool.html"}
+    backdrop = '<div class="space-backdrop" aria-hidden="true"></div>' if themed else ""
     reminder_assets = ('<link rel="stylesheet" href="/app-assets/notifications.css?v=1">'
                        '<script src="/app-assets/notifications.js?v=1" defer></script>') if template == "pool.html" else ""
-    return document(html, ("" if embedded else _nav(active)) + gate, _NAV_CSS + reminder_assets).replace(
-        "<body>", '<body data-page="' + (active.strip("/") or "today") +
-        ('" data-embedded="true">' if embedded else '">'), 1
+    attributes = 'data-page="' + (active.strip("/") or "today") + '"'
+    if embedded:
+        attributes += ' data-embedded="true"'
+    if themed:
+        attributes += ' data-space-theme="true"'
+    return document(html, ("" if embedded else _nav(active)) + gate + backdrop, _NAV_CSS + reminder_assets).replace(
+        "<body>", "<body " + attributes + ">", 1
     )
 
 
