@@ -7,7 +7,9 @@
    Dragging only moves stars; prerequisites are chosen explicitly in task
    details. Redraws wait for a held star. Position writes run in order for each
    star, and local positions survive refreshes until the database confirms them.
-   Failed saves stay visible and retry on the next refresh. */
+   Failed saves stay visible and retry on the next refresh. Drops use the release
+   coordinates even if move events were skipped; browser interruptions keep the
+   last dragged position. Escape explicitly restores the starting position. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -348,7 +350,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       if (event.origin !== location.origin || event.source !== parent ||
           !event.data || event.data.type !== 'stellar:pool-visibility') return;
       embeddedVisible = event.data.visible === true;
-      if (!embeddedVisible) cancelDrag();
+      if (!embeddedVisible) finishDrag(false);
       var inset = Math.max(0, Math.min(Number(event.data.inset) || 0, innerWidth - 300));
       document.body.dataset.workspaceOverlay = String(inset > 0);
       sky.style.setProperty('--workspace-inset', inset + 'px');
@@ -734,47 +736,54 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 
   sky.addEventListener('pointerdown', function (e) {
     if (e.button !== 0 || e.isPrimary === false) return;
+    if (drag) return;
     var el = e.target.closest ? e.target.closest('.star') : null;
     if (!el || el.classList.contains('ghost')) return;
     var t = byId[el.dataset.id];
     if (!t) return;
-    cancelDrag();
     poolRevision++;
+    var r = mapField.getBoundingClientRect(), point = screenPoint(t);
     el.setPointerCapture(e.pointerId);
     el.classList.add('held');
     drag = { el: el, t: t, id: e.pointerId, moved: false,
-             ox: e.clientX, oy: e.clientY, sx: t.x, sy: t.y };
+             ox: e.clientX, oy: e.clientY, sx: t.x, sy: t.y,
+             grabX: e.clientX - r.left - point.x, grabY: e.clientY - r.top - point.y };
     el.addEventListener('lostpointercapture', function (event) {
-      if (drag && drag.el === el && drag.id === event.pointerId) cancelDrag();
+      if (drag && drag.el === el && drag.id === event.pointerId) finishDrag(false);
     }, { once: true });
     e.preventDefault();
   });
 
-  sky.addEventListener('pointermove', function (e) {
+  function moveDrag(e) {
     if (!drag || e.pointerId !== drag.id) return;
     var dx = e.clientX - drag.ox, dy = e.clientY - drag.oy;
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;   // a click, not a drag
     drag.moved = true;
 
     var r = mapField.getBoundingClientRect();
-    drag.t.x = Math.min(Math.max((e.clientX - r.left) / W, 0.02), 0.98);
-    drag.t.y = Math.min(Math.max((e.clientY - r.top) / H, 0.02), 0.98);
+    drag.t.x = Math.min(Math.max((e.clientX - r.left - drag.grabX) / W, 0.02), 0.98);
+    drag.t.y = Math.min(Math.max((e.clientY - r.top - drag.grabY) / H, 0.02), 0.98);
     var point = screenPoint(drag.t);
     drag.el.style.left = point.x + 'px';
     drag.el.style.top = point.y + 'px';
     fitLabel(drag.el);
     drawLines();
-  });
+  }
+  document.addEventListener('pointermove', moveDrag, true);
 
   function endDrag(e) {
     if (!drag || e.pointerId !== drag.id) return;
-    if (e.type === 'pointercancel' || !drag.el.isConnected) { cancelDrag(); return; }
+    if (e.type === 'pointerup') moveDrag(e);
+    finishDrag(e.type === 'pointerup');
+  }
+  function finishDrag(openDetails) {
+    if (!drag) return;
     var d = drag; drag = null;
     d.el.classList.remove('held');
     if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
 
     if (paintPending) paint();
-    if (!d.moved) { openPanel(d.t); return; }        // a click opens it
+    if (!d.moved) { if (openDetails) openPanel(d.t); return; }
     var position = positions[d.t.id] || { saving: false };
     position.x = Number(d.t.x.toFixed(4)); position.y = Number(d.t.y.toFixed(4));
     position.confirmed = false;
@@ -800,8 +809,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
   document.addEventListener('pointerup', endDrag, true);
   document.addEventListener('pointercancel', endDrag, true);
-  window.addEventListener('blur', cancelDrag);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) cancelDrag(); });
+  window.addEventListener('blur', function () { finishDrag(false); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) finishDrag(false); });
+  sky.addEventListener('dragstart', function (e) {
+    if (e.target.closest && e.target.closest('.star')) e.preventDefault();
+  });
 
   veil.addEventListener('pointerdown', function (e) {
     if (e.target === veil) closeVeil();          // backdrop only
