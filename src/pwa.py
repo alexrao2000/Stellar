@@ -50,12 +50,12 @@ HEAD = """<meta charset="utf-8">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
 <script src="/app-assets/navigation.js?v=2"></script>
-<link rel="stylesheet" href="/app-assets/app.css?v=5">
+<link rel="stylesheet" href="/app-assets/app.css?v=6">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
-<link rel="stylesheet" href="/app-assets/workspace.css?v=4">
-<link rel="stylesheet" href="/app-assets/navigation.css?v=5">
-<script src="/app-assets/workspace.js?v=5" defer></script>
-<script src="/app-assets/app.js?v=7" defer></script>"""
+<link rel="stylesheet" href="/app-assets/workspace.css?v=5">
+<link rel="stylesheet" href="/app-assets/navigation.css?v=6">
+<script src="/app-assets/workspace.js?v=6" defer></script>
+<script src="/app-assets/app.js?v=8" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'
 INSTALL_DIALOG = """<dialog id="install-dialog" class="install-ui" aria-labelledby="install-title">
@@ -95,7 +95,7 @@ def manifest() -> JSONResponse:
             for size in (192, 512)
         ],
         "shortcuts": [
-            {"name": "Daily check-in", "url": "/"},
+            {"name": "Space", "url": "/"},
             {"name": "Weight", "url": "/metrics?tab=weight"},
             {"name": "Wake time", "url": "/metrics?tab=wake"},
         ],

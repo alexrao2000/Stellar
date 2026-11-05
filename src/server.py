@@ -10,6 +10,8 @@ check-in touches. Nothing here writes to Google.
 
 Only foreground requests gate the first paint. Embedded metric charts report
 readiness to their parent instead of waiting behind a second loading screen.
+Pool sends its shell first and reads records in the browser so its sky never
+waits for the database.
 
 Run:  make dev        (or: uvicorn src.server:app --reload --port 8000)
 """
@@ -374,7 +376,7 @@ def favicon() -> Response:
 # The one definition of the nav. It used to be copied into all five templates,
 # which is how /docs ended up linked from the check-in page and nowhere else.
 NAV_ITEMS = (
-    ("/", "Tasks"),
+    ("/", "Space"),
     ("/metrics", "Metrics"),
     ("/data", "Activity"),
     ("/pool", "Pool"),
@@ -451,48 +453,12 @@ html body { padding-left: var(--nav-w); }
 }
 @media print { .sidenav { display: none; } html body { padding-left: 0; } }
 
-/* Hold the real content back until its data is in and stand a skeleton in its
-   place, so nothing is ever on screen showing an empty count or a blank stat.
-   The sidebar is exempt -- it needs no data, so the frame is up immediately.
-
-   `visibility`, not `display`. The weight chart measures its container and
-   draws nothing at zero size, which is exactly what `display: none` would
-   hand it -- hidden layout is still laid out. */
-html.app-booting body > *:not(.sidenav):not(.app-skeleton):not(.install-ui) { visibility: hidden; }
+html.app-booting body > *:not(.sidenav):not(.app-skeleton):not(.space-backdrop):not(.stellar-transition-loader):not(.install-ui) { visibility: hidden; }
 html:not(.app-booting) .app-skeleton { display: none; }
-
-/* Pinned to the content area rather than placed in the flow. Hidden content is
-   still laid out, so a skeleton appended after it starts one full page-height
-   down -- off screen on any page with a long table. Its inner box copies the
-   page's own .wrap at runtime, so it lands where the real content will rather
-   than approximating it. */
-.app-skeleton {
-  position: fixed; top: 0; left: var(--nav-w); right: 0; bottom: 0;
-  overflow: hidden; box-sizing: border-box; z-index: 10;
-}
-.app-skeleton .sk-inner { margin: 0 auto; box-sizing: border-box; }
+.app-skeleton { position: fixed; inset: 0 0 0 var(--nav-w); z-index: 10; }
+.app-skeleton .stellar-loading { height: 100%; }
+body[data-page=today] .app-skeleton { color: #c4c0d6; }
 @media (max-width: 760px) { .app-skeleton { left: 0; } }
-/* Mixed from --ink rather than set to --surface-2: that variable is only a
-   shade off --bg in the light theme, and the bars all but vanished. */
-.app-skeleton .sk {
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 8px; position: relative; overflow: hidden;
-}
-/* --surface sits above --bg in both themes, so the sweep lightens either way. */
-.app-skeleton .sk::after {
-  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent,
-    color-mix(in srgb, var(--surface) 70%, transparent), transparent);
-  animation: sk-shimmer 1.25s ease-in-out infinite;
-}
-@keyframes sk-shimmer { to { transform: translateX(100%); } }
-.app-skeleton .sk-eyebrow { height: 9px;  width: 92px;  margin-bottom: 12px; }
-.app-skeleton .sk-title   { height: 27px; width: 210px; margin-bottom: 11px; }
-.app-skeleton .sk-sub     { height: 12px; width: 320px; max-width: 80%; margin-bottom: 24px; }
-.app-skeleton .sk-card    { height: 116px; margin-bottom: 14px; }
-.app-skeleton .sk-card-tall { height: 300px; }
-/* A shimmer that cannot be turned off is worse than none. */
-@media (prefers-reduced-motion: reduce) { .app-skeleton .sk::after { animation: none; } }
 </style>"""
 
 
@@ -521,36 +487,17 @@ _BOOT_GATE_JS = """<script>
     if (sk) sk.parentNode.removeChild(sk);
   }
 
-  /* Built here rather than shipped in the markup because it copies its box
-     from the page's own .wrap -- same max-width, same padding, same centring
-     -- so it occupies exactly the space the real content is about to. */
   function skeleton() {
     if (done || document.querySelector('.app-skeleton')) return;
-    var host = document.querySelector('.wrap');
-    var cs = host ? getComputedStyle(host) : null;
-    var inner = document.createElement('div');
-    inner.className = 'sk-inner';
-    inner.style.maxWidth = cs && cs.maxWidth !== 'none' ? cs.maxWidth : '1100px';
-    inner.style.paddingTop = cs ? cs.paddingTop : '28px';
-    inner.style.paddingLeft = cs ? cs.paddingLeft : '18px';
-    inner.style.paddingRight = cs ? cs.paddingRight : '18px';
-    inner.innerHTML =
-      '<div class="sk sk-eyebrow"></div>' +
-      '<div class="sk sk-title"></div>' +
-      '<div class="sk sk-sub"></div>' +
-      '<div class="sk sk-card"></div>' +
-      '<div class="sk sk-card sk-card-tall"></div>';
-
+    var page = document.body.dataset.page;
+    var label = { today: 'Space', data: 'Activity', tasks: 'Settings', docs: 'API' }[page] || 'Stellar';
     var el = document.createElement('div');
     el.className = 'app-skeleton';
-    el.setAttribute('aria-hidden', 'true');
-    /* Below 760px the nav is a strip across the top rather than a column, so
-       start beneath it instead of underneath it. Measured, not guessed. */
+    el.setAttribute('role', 'status');
+    el.innerHTML = '<div class="stellar-loading"><span class="stellar-spinner" aria-hidden="true"></span>' +
+      '<span>Loading ' + label + '…</span></div>';
     var nav = document.querySelector('.sidenav');
-    if (nav && getComputedStyle(nav).position !== 'fixed') {
-      el.style.top = Math.round(nav.getBoundingClientRect().height) + 'px';
-    }
-    el.appendChild(inner);
+    if (nav && getComputedStyle(nav).position !== 'fixed') el.style.top = nav.offsetHeight + 'px';
     document.body.appendChild(el);
   }
 
@@ -597,7 +544,7 @@ _BOOT_GATE_JS = """<script>
 
 def _nav_icon(name: str) -> str:
     shapes = {
-        "/": '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m6 10 2 2 3-4M14 9h4M14 15h4M6 16h4"/>',
+        "/": '<path d="M11 3c1.2 5 2.5 6.3 7.5 7.5-5 1.2-6.3 2.5-7.5 7.5-1.2-5-2.5-6.3-7.5-7.5C8.5 9.3 9.8 8 11 3Z"/><path d="M20 4v4m-2-2h4M19 18v3m-1.5-1.5h3"/>',
         "/metrics": '<path d="M4 4v16h16M9 15v-4M14 15V6M19 15V9"/>',
         "/data": '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
         "/pool": '<path d="M12 3c1.5 6 3 7.5 9 9-6 1.5-7.5 3-9 9-1.5-6-3-7.5-9-9 6-1.5 7.5-3 9-9Z"/>',
@@ -619,8 +566,7 @@ def _nav(active: str) -> str:
     links = "".join(
         '<a href="{}" title="{}" aria-label="{}"{}>{}<span class="nav-label">{}</span></a>'.format(
             href, label, label, ' class="here" aria-current="page"' if href == active else "", _nav_icon(href),
-            ('<span class="nav-task-label">Tasks</span><span class="nav-workspace-label">Tasks + Pool</span>'
-             if href == "/" else label)
+            label
         )
         for href, label in NAV_ITEMS
     )
@@ -1839,7 +1785,7 @@ VIEWS = ("day", "3days", "week", "month", "custom")
 @app.get("/today", response_class=HTMLResponse)
 def page_today(day: str | None = None, view: str = "day",
                start: str | None = None, end: str | None = None) -> str:
-    """The Tasks tab, and the app's front door.
+    """Space, and the app's front door.
 
     Served at both / and /today. One day by default -- recording the day is the
     thing done every day -- or a range of days (3 days, a week, a month, custom)
@@ -2283,13 +2229,9 @@ def api_pool_unlink(before_id: int, after_id: int) -> dict:
 
 @app.get("/pool", response_class=HTMLResponse)
 def page_pool(embedded: bool = False) -> str:
-    try:
-        state = _pool_state(include_resolved=True)
-    except Exception as exc:  # noqa: BLE001
-        if not _pool_missing(exc):
-            raise
-        state = {"tasks": [], "edges": [], "schema_missing": True}
-    return _render("pool.html", {"mode": "inline", **state, "embedded": embedded}, active="/pool")
+    return _render("pool.html", {
+        "mode": "inline", "tasks": [], "edges": [], "loading": True, "embedded": embedded,
+    }, active="/pool")
 
 
 @app.get("/health")

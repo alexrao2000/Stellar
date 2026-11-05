@@ -1,5 +1,7 @@
 /* Installation stays optional. Browsers without an install prompt receive
-   platform instructions, and installed windows hide the install controls. */
+   platform instructions, and installed windows hide the install controls.
+   Navigation paints a star loader before leaving the current document, so
+   slow HTML responses keep useful feedback. Entering Space paints its sky. */
 (() => {
   const syncTheme = () => {
     const color = getComputedStyle(document.body).getPropertyValue('--surface').trim();
@@ -75,6 +77,38 @@
   }
   const nav = document.querySelector('.sidenav');
   if (nav) {
+    let navigationVersion = 0;
+    const clearTransition = () => {
+      navigationVersion++;
+      document.querySelector('.stellar-transition-loader')?.remove();
+    };
+    nav.addEventListener('click', event => {
+      const link = event.target.closest('a[href]');
+      if (!link || event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey ||
+          link.target || link.hasAttribute('download')) return;
+      const url = new URL(link.href, location.origin);
+      if (url.origin !== location.origin) return;
+      event.preventDefault();
+      clearTransition();
+      const version = navigationVersion;
+      const overlay = document.createElement('div');
+      overlay.className = 'stellar-transition-loader'; overlay.setAttribute('role', 'status');
+      overlay.dataset.space = String(['/', '/today'].includes(url.pathname));
+      const loading = document.createElement('div'); loading.className = 'stellar-loading';
+      const spinner = document.createElement('span'); spinner.className = 'stellar-spinner'; spinner.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span'); label.textContent = 'Loading ' + (link.getAttribute('aria-label') || 'Stellar') + '…';
+      loading.append(spinner, label); overlay.append(loading);
+      document.body.append(overlay);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (version === navigationVersion) {
+          window.dispatchEvent(new Event('stellar:navigate'));
+          location.assign(url.href);
+        }
+      }));
+    });
+    window.addEventListener('pagehide', clearTransition);
+    window.addEventListener('pageshow', clearTransition);
+    window.addEventListener('keydown', event => { if (event.key === 'Escape') clearTransition(); });
     const toggle = nav.querySelector('.nav-toggle');
     const setMenu = open => {
       nav.classList.toggle('menu-open', open);

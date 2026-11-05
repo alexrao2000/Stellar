@@ -25,6 +25,8 @@
   let catalogReady = false, catalogError = false, activeReady = false, activeFailed = false, generation = 0, epoch = 0, warmQueued = false;
   const cache = new Map(), warmed = new Set();
   const views = new Map();
+  const requests = new Set();
+  let leaving = false;
   let selected = new URLSearchParams(location.search).get('tab');
   try { selected ||= localStorage.getItem('stellar:metric-tab'); } catch {}
   selected ||= 'overview';
@@ -32,19 +34,22 @@
   const dataFor = (endpoint, background = false) => {
     if (!['/api/weights', '/api/wake', '/api/consistency'].includes(endpoint)) return Promise.reject(Error('Unknown metric'));
     if (cache.has(endpoint)) return cache.get(endpoint);
-    const promise = fetch(endpoint, { cache: 'no-store', priority: background ? 'low' : 'high' }).then(response => {
+    const controller = new AbortController();
+    requests.add(controller);
+    const promise = fetch(endpoint, { cache: 'no-store', priority: background ? 'low' : 'high', signal: controller.signal }).then(response => {
       if (!response.ok) throw Error('Could not load metric');
       return response.json();
     }).catch(error => {
       if (cache.get(endpoint) === promise) cache.delete(endpoint);
       throw error;
-    });
+    }).finally(() => requests.delete(controller));
+    promise.catch(() => {});
     cache.set(endpoint, promise);
     return promise;
   };
   window.stellarMetricData = dataFor;
   const scheduleWarm = () => {
-    if (warmQueued || !activeReady || !catalogReady || document.hidden) return;
+    if (leaving || warmQueued || !activeReady || !catalogReady || document.hidden) return;
     const module = modules.find(module => module.kind !== 'task' && module.id !== selected &&
       !views.has(urlFor(module)) && !warmed.has(urlFor(module)));
     if (!module) return;
@@ -52,7 +57,7 @@
     const version = epoch;
     const run = async () => {
       if (version !== epoch) { warmQueued = false; scheduleWarm(); return; }
-      if (!activeReady || document.hidden) { warmQueued = false; return; }
+      if (leaving || !activeReady || document.hidden) { warmQueued = false; return; }
       warmed.add(urlFor(module));
       try {
         await dataFor(endpointFor(module), true);
@@ -80,7 +85,7 @@
   };
   const finishView = (view, failed) => {
     view.ready = true; view.failed = failed; clearTimeout(view.timer); view.resolve();
-    if (view !== activeView) return;
+    if (view !== activeView || leaving) return;
     showActiveState();
     if (!catalogReady && !busy && !catalogError) load(true);
     scheduleWarm();
@@ -165,7 +170,7 @@
     initialized = true;
     syncSelection();
     const url = urlFor(module);
-    if (refresh) discardView(url);
+    if (refresh || views.get(url)?.failed && (userAction || views.get(url) !== activeView)) discardView(url);
     const view = buildView(module);
     if (frame !== view.frame) { frame.hidden = true; frame.removeAttribute('id'); }
     frame = view.frame; activeView = view;
@@ -262,6 +267,15 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (catalogReady) load(); scheduleWarm(); } });
   window.addEventListener('stellar:records-changed', () => load(true));
   window.addEventListener('storage', event => { if (event.key === 'stellar:records-changed') load(true); });
+  const cancelRequests = () => { leaving = true; epoch++; requests.forEach(controller => controller.abort()); };
+  window.addEventListener('stellar:navigate', cancelRequests);
+  window.addEventListener('pagehide', cancelRequests);
+  window.addEventListener('pageshow', () => {
+    leaving = false;
+    if (activeView?.failed) select(selected, true, false);
+    else if (activeView) showActiveState();
+    scheduleWarm();
+  });
   setInterval(() => { if (!document.hidden && catalogReady) load(); }, 60000);
   renderNavigation();
   if (modules.some(module => module.id === selected)) select(selected, false, false);

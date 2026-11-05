@@ -31,6 +31,11 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 @media (max-width: 760px) { .sky { inset: 0; } }
 .sky canvas, .sky svg { position: absolute; inset: 0; }
 .sky #dust { width: 100%; height: 100%; pointer-events: none; }
+.pool-loading { position: absolute; inset: 0; z-index: 5; color: #c4c0d6; pointer-events: none; }
+.pool-loading button { pointer-events: auto; min-height: 44px; padding: 8px 18px; border: 1px solid var(--line);
+  border-radius: 8px; background: #10111e; color: #eee; font: inherit; cursor: pointer; }
+.sky[data-loading=true] :is(.pool-toolbar,.pool-map,.pool-list,.key) { visibility: hidden; pointer-events: none; }
+body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-inset); }
 .sky svg { pointer-events: none; }
 
 .star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
@@ -273,8 +278,12 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 }
 </style>
 
-<div class="sky" id="sky" data-view="list">
+<div class="sky" id="sky" data-view="list" data-loading="true">
   <canvas id="dust"></canvas>
+  <div id="pool-loading" class="pool-loading stellar-loading" role="status">
+    <span class="stellar-spinner" aria-hidden="true"></span><span id="pool-load-status">Loading Pool…</span>
+    <button type="button" id="pool-retry" hidden>Retry</button>
+  </div>
   <div class="pool-map" id="pool-map">
   <svg id="lines"></svg>
   </div>
@@ -319,6 +328,10 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   var W = 0, H = 0;
   var writesInFlight = 0;
   var embeddedVisible = true;
+  var poolLoaded = !BOOT.loading;
+  var poolLoading = document.getElementById('pool-loading');
+  var poolRetry = document.getElementById('pool-retry');
+  sky.dataset.loading = String(!poolLoaded); poolLoading.hidden = poolLoaded;
   var viewKey = 'stellar:pool-view:' + (BOOT.embedded ? 'workspace' : 'standalone');
   try {
     var rememberedView = localStorage.getItem(viewKey);
@@ -365,10 +378,6 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       writesInFlight--;
       throw err;
     });
-  }
-
-  if (BOOT.schema_missing) {
-    note('pool tables not created yet — apply sql/schema.sql in Supabase', true);
   }
 
   /* ---- the field ------------------------------------------------------- */
@@ -1074,11 +1083,17 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     if (document.hidden || !embeddedVisible || pollBusy || writesInFlight || drag || PENDING ||
         panelEl.contains(document.activeElement)) return;
     pollBusy = true;
+    if (!poolLoaded) {
+      document.getElementById('pool-load-status').textContent = 'Loading Pool…';
+      poolLoading.querySelector('.stellar-spinner').hidden = false; poolRetry.hidden = true;
+    }
     fetch('/api/pool?resolved=true').then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     }).then(function (state) {
+      if (state.schema_missing) throw new Error('Pool is unavailable');
       var tasks = state.tasks || [], edges = state.edges || [];
+      poolLoaded = true; sky.dataset.loading = 'false'; poolLoading.hidden = true;
       if (poolSnapshot(tasks, edges) === poolSnapshot(TASKS, EDGES)) return;
       var selected = PANEL_ID;
       TASKS = tasks;
@@ -1091,9 +1106,14 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       }
     }).catch(function () {
       /* Background refresh failure should not disturb a usable cached page. */
+      if (!poolLoaded) {
+        document.getElementById('pool-load-status').textContent = 'Could not load Pool. Check your connection and retry.';
+        poolLoading.querySelector('.stellar-spinner').hidden = true; poolRetry.hidden = false;
+      }
     }).then(function () { pollBusy = false; });
   }
   window.setInterval(pollPool, 15000);
+  poolRetry.addEventListener('click', pollPool);
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) pollPool();
   });
@@ -1128,5 +1148,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   new ResizeObserver(scheduleResize).observe(mapField);
   window.addEventListener('resize', scheduleResize);
   resize();
+  if (BOOT.embedded && parent !== window) parent.postMessage({ type: 'stellar:pool-background-ready' }, location.origin);
+  if (!poolLoaded) requestAnimationFrame(function () { requestAnimationFrame(pollPool); });
 })();
 </script>

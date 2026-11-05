@@ -36,6 +36,7 @@
     toggle.setAttribute('aria-pressed', String(open));
     toggle.textContent = open ? 'Hide Pool' : 'Show Pool';
     host.classList.toggle('workspace-open', open);
+    document.body.classList.toggle('space-open', open);
     host.dataset.taskColumns = '1';
     const maximum = available - 420 - 24;
     let width = view === 'day' ? Math.min(maximum, 460) : minimum;
@@ -66,6 +67,11 @@
     layout();
   });
   frame.addEventListener('load', () => { notified = ''; notify(); });
+  window.addEventListener('message', event => {
+    if (event.origin === location.origin && event.source === frame.contentWindow && event.data?.type === 'stellar:pool-background-ready') {
+      frame.dataset.ready = 'true';
+    }
+  });
   let queued = false;
   const schedule = () => {
     if (queued) return;

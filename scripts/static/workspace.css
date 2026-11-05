@@ -1,8 +1,25 @@
 /* Tasks float inside a full Pool canvas; its controls and stars reserve clear
    space around the panel. Range days wrap to fit the task panel. Compact views
-   wrap labels and native controls. */
+   wrap labels and native controls. Space paints a CSS starfield before its
+   live canvas and records arrive. */
 .dated-tasks { min-width: 0; }
-.nav-workspace-label { display: none; }
+.space-backdrop { display: block; position: fixed; inset: 0 0 0 var(--nav-w); pointer-events: none; z-index: 0; }
+html body[data-page=today] { background: #04050a; }
+body[data-page=today] > .wrap { position: relative; z-index: 1; }
+body[data-page=today] > .wrap:not(.workspace-open) {
+  width: calc(100% - 32px); margin: 24px auto; border: 1px solid var(--rule); border-radius: 20px;
+  background: color-mix(in srgb, var(--surface) 97%, transparent); box-shadow: 0 12px 48px #0003;
+}
+.space-backdrop, .stellar-transition-loader[data-space=true] {
+  background:
+    radial-gradient(1px 1px at 23px 41px, #d4dcff80 80%, transparent) 0 0 / 181px 223px,
+    radial-gradient(1px 1px at 101px 127px, #d4dcff60 80%, transparent) 0 0 / 317px 269px,
+    radial-gradient(1.5px 1.5px at 213px 83px, #eef0ff90 80%, transparent) 0 0 / 503px 383px,
+    radial-gradient(1px 1px at 51px 79px, #acb6e650 80%, transparent) 0 0 / 137px 191px,
+    radial-gradient(1400px 900px at 78% 8%, #46549629, transparent 62%),
+    radial-gradient(1100px 800px at 12% 92%, #7850be1a, transparent 62%), #04050a;
+}
+.stellar-transition-loader[data-space=true] { color: #c4c0d6; animation: none; }
 .task-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pool-toggle { margin: 0; padding: 6px 10px; border: 1px solid var(--rule);
   border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit;
@@ -74,12 +91,12 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
 .sky #panel .waits button { flex: 0 0 32px; }
 .sky .star .name { max-width: min(220px, 40vw); white-space: normal; overflow-wrap: anywhere; }
 @media (min-width: 1100px) {
-  .sidenav .nav-task-label, html body .sidenav a[href="/pool"] { display: none; }
-  .sidenav .nav-workspace-label { display: inline; }
+  html body .sidenav a[href="/pool"] { display: none; }
   html body .wrap.workspace-open { position: fixed; inset: 0 0 0 var(--nav-w); display: block;
-    max-width: none; width: auto; margin: 0; padding: 0; overflow: hidden; background: #04050a; }
+    max-width: none; width: auto; margin: 0; padding: 0; overflow: hidden; background: transparent; z-index: 1; }
   .workspace-open .pool-pane { position: absolute; inset: 0; height: 100%; min-height: 0;
-    border: 0; border-radius: 0; }
+    border: 0; border-radius: 0; background: transparent; }
+  .workspace-open #pool-frame:not([data-ready=true]) { visibility: hidden; }
   .workspace-open .pool-pane-head { display: none; }
   .workspace-open .dated-tasks { position: absolute; z-index: 2; top: 24px; left: 24px;
     width: var(--workspace-task-width); max-height: calc(100% - 48px); padding: 16px;
@@ -186,6 +203,8 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
   .field .due { margin-left: 32px; }
 }
 @media (max-width: 760px) {
+  .space-backdrop { inset: var(--mobile-nav-height) 0 0; }
+  html body[data-page=today] > .wrap { width: calc(100% - 16px); margin: 16px auto; }
   html body .views { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
   html body .views button { white-space: normal; overflow-wrap: anywhere; }
   html body .date { min-width: 0; white-space: normal; line-height: 1.5; }
