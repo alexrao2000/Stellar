@@ -172,7 +172,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
   }
   function size() { return Number(document.getElementById('size').value); }
 
-  function applyFilters() {
+  function applyFilters(keepPage) {
     var q = document.getElementById('q').value.trim().toLowerCase();
     var st = document.getElementById('status').value;
     var showFuture = document.getElementById('future').checked;
@@ -184,7 +184,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
       return (r.day + ' ' + r.title + ' ' + (r.list_title || '') + ' ' +
               (r.notes || '')).toLowerCase().indexOf(q) !== -1;
     });
-    page = 0;
+    if (!keepPage) page = 0;
     render();
   }
 
@@ -223,7 +223,7 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
   }
 
   ['q', 'status', 'size', 'future'].forEach(function (id) {
-    document.getElementById(id).addEventListener('input', applyFilters);
+    document.getElementById(id).addEventListener('input', function () { applyFilters(); });
   });
   document.getElementById('rows').addEventListener('click', function (e) {
     var button = e.target.closest('.record-toggle');
@@ -242,26 +242,34 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
     if (matchMedia('(max-width: 760px)').matches) document.querySelector('.tablewrap').scrollIntoView({ block: 'start' });
   });
 
-  /* Inline: the server already had the rows and embedded them, so there is no
-     second round trip and nothing to show a loading state for. Live: fetch.
-     Both paths reach the same handler. */
-  (BOOT.mode === 'live'
-    ? fetch(BOOT.endpoint, { headers: BOOT.headers || {} })
-        .then(function (r) {
+  var loaded = false, loading = false, dirty = false, checked = 0;
+  function load() {
+    if (!window.stellarPageActive() || loading || loaded && !dirty && Date.now() - checked < 60000) return;
+    loading = true; dirty = false;
+    (BOOT.mode === 'live'
+      ? fetch(BOOT.endpoint, { headers: BOOT.headers || {}, cache: 'no-store' }).then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
         })
-    : Promise.resolve(BOOT.data))
-    .then(function (data) {
-      /* Newest first: the rows you just recorded are the ones you want to see. */
-      ALL = data.slice().sort(function (a, b) {
-        return a.day < b.day ? 1 : a.day > b.day ? -1 : a.title.localeCompare(b.title);
-      });
-      applyFilters();
-    })
-    .catch(function (e) {
-      document.getElementById('rows').innerHTML =
-        '<tr><td colspan="8" class="empty">Could not load: ' + esc(e.message) + '</td></tr>';
-    });
+      : Promise.resolve(BOOT.data))
+      .then(function (data) {
+        ALL = data.slice().sort(function (a, b) {
+          return a.day < b.day ? 1 : a.day > b.day ? -1 : a.title.localeCompare(b.title);
+        });
+        applyFilters(loaded); loaded = true; checked = Date.now();
+      }).catch(function (e) {
+        dirty = true;
+        if (!loaded) document.getElementById('rows').innerHTML =
+          '<tr><td colspan="8" class="empty">Could not load: ' + esc(e.message) + '</td></tr>';
+      }).finally(function () { loading = false; });
+  }
+  function changed() { dirty = true; load(); }
+  window.addEventListener('stellar:records-changed', changed);
+  window.addEventListener('storage', function (event) { if (event.key === 'stellar:records-changed') changed(); });
+  window.addEventListener('stellar:visibility', load);
+  document.addEventListener('visibilitychange', load);
+  window.addEventListener('focus', load);
+  setInterval(load, 60000);
+  load();
 })();
 </script>

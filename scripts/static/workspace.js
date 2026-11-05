@@ -18,6 +18,7 @@
   let open = false;
   let notified = '';
   const notify = () => {
+    frame.contentWindow?.stellarSetActive?.(open && window.stellarPageActive());
     const inset = open ? tasks.offsetWidth + 48 : 0;
     const state = open + ':' + inset;
     if (state === notified) return;

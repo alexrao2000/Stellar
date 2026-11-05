@@ -585,6 +585,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
      asked for; a day already shown has had its own live read. */
   var PREFETCH = 3, prefetching = null;
   function prefetchAdjacent(day) {
+    if (!window.stellarPageActive()) return;
     var want = [];
     for (var i = -PREFETCH; i <= PREFETCH; i++) {
       var d = shiftDay(day, i);
@@ -650,6 +651,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     if (b) go(b.dataset.view, DAY);
   });
   document.addEventListener('keydown', function (e) {
+    if (!window.stellarPageActive()) return;
     if (e.target.tagName === 'INPUT') return;
     if (e.key === 'ArrowLeft') step(-1);
     if (e.key === 'ArrowRight') step(1);
@@ -997,6 +999,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 
   /* A deadline can pass while the page sits open; re-check once a minute. */
   setInterval(function () {
+    if (!window.stellarPageActive()) return;
     Array.prototype.forEach.call(document.querySelectorAll('#tasks > .item'), function (n) {
       if (n._row) decorate(n);
     });
@@ -1190,10 +1193,11 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
      paint, and blinking it every minute would be noise. A change that does
      land is announced, because content rearranging itself in silence is the
      thing that felt broken. */
-  var POLL_MS = 60000;
+  var POLL_MS = 60000, lastChecked = Date.now(), recordsDirty = false;
 
   function revalidate() {
-    if (document.hidden || writesInFlight) return;
+    if (!window.stellarPageActive() || writesInFlight || !recordsDirty && Date.now() - lastChecked < 15000) return;
+    lastChecked = Date.now(); recordsDirty = false;
     if (VIEW !== 'day') {
       var r = rangeOf(VIEW, DAY);
       loadRange(r[0], r[1], true);
@@ -1211,9 +1215,10 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) revalidate();
+    if (window.stellarPageActive()) revalidate();
   });
   window.addEventListener('focus', revalidate);
+  window.addEventListener('storage', function (e) { if (e.key === 'stellar:records-changed') { recordsDirty = true; revalidate(); } });
   setInterval(revalidate, POLL_MS);
 
   /* showDay handles read-only, materialising and the window; the first call
@@ -1351,7 +1356,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var sequence = rangeSeq;
     [-1, 1].reduce(function (previous, dir) {
       return previous.then(function () {
-        if (sequence !== rangeSeq || VIEW === 'day' || document.hidden) return;
+        if (sequence !== rangeSeq || VIEW === 'day' || !window.stellarPageActive()) return;
         var r;
         if (VIEW === 'month') r = rangeOf('month', addMonths(DAY, dir));
         else if (VIEW === 'custom') {
@@ -1528,6 +1533,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 
   var shownToday = todayNow();
   function rollover() {
+    if (!window.stellarPageActive()) return;
     var t = todayNow();
     if (t === shownToday) return;
     var was = shownToday;
@@ -1536,8 +1542,9 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var wasOnToday = VIEW === 'day' ? DAY === was : rangeOf(VIEW, DAY)[0] <= was && was <= rangeOf(VIEW, DAY)[1];
     go(VIEW, wasOnToday ? t : DAY, { replace: true });
   }
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) rollover(); });
+  document.addEventListener('visibilitychange', function () { if (window.stellarPageActive()) rollover(); });
   window.addEventListener('focus', rollover);
+  window.addEventListener('stellar:visibility', function () { if (window.stellarPageActive()) { rollover(); revalidate(); } });
   setInterval(rollover, 60000);
 
   go(VIEW, DAY, { replace: true });

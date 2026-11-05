@@ -21,6 +21,7 @@
     { id: 'weight', label: 'Weight', kind: 'weight' },
     { id: 'wake', label: 'Wake', kind: 'wake' },
   ];
+  let dirty = false;
   let revision = null, busy = false, checked = 0, queued = false, initialized = false;
   let catalogReady = false, catalogError = false, activeReady = false, activeFailed = false, generation = 0, epoch = 0, warmQueued = false;
   const cache = new Map(), warmed = new Set();
@@ -49,7 +50,7 @@
   };
   window.stellarMetricData = dataFor;
   const scheduleWarm = () => {
-    if (leaving || warmQueued || !activeReady || !catalogReady || document.hidden) return;
+    if (leaving || warmQueued || !activeReady || !catalogReady || !window.stellarPageActive()) return;
     const module = modules.find(module => module.kind !== 'task' && module.id !== selected &&
       !views.has(urlFor(module)) && !warmed.has(urlFor(module)));
     if (!module) return;
@@ -57,12 +58,12 @@
     const version = epoch;
     const run = async () => {
       if (version !== epoch) { warmQueued = false; scheduleWarm(); return; }
-      if (leaving || !activeReady || document.hidden) { warmQueued = false; return; }
+      if (leaving || !activeReady || !window.stellarPageActive()) { warmQueued = false; return; }
       warmed.add(urlFor(module));
       try {
         await dataFor(endpointFor(module), true);
         if (version === epoch) {
-          if (activeReady && !document.hidden) await buildView(module).promise;
+          if (activeReady && window.stellarPageActive()) await buildView(module).promise;
           else warmed.delete(urlFor(module));
         }
       } catch {}
@@ -183,6 +184,8 @@
     frame.title = module.label + ' metrics';
   };
   const load = async (force = false) => {
+    if (!window.stellarPageActive()) { dirty ||= force; return; }
+    force ||= dirty; dirty = false;
     if (busy) { queued ||= force; return; }
     if (!force && Date.now() - checked < 15000) return;
     busy = true;
@@ -263,8 +266,16 @@
       cache.delete(endpointFor(module)); select(selected, true);
     }
   });
+  window.addEventListener('popstate', () => select(new URLSearchParams(location.search).get('tab') || 'overview', false, false));
+  const resume = () => {
+    if (!window.stellarPageActive()) return;
+    if (!initialized && modules.some(module => module.id === selected)) select(selected, false, false);
+    else if (catalogReady || !initialized) load(!initialized);
+    scheduleWarm();
+  };
+  window.addEventListener('stellar:visibility', resume);
   window.addEventListener('focus', () => { if (catalogReady) load(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (catalogReady) load(); scheduleWarm(); } });
+  document.addEventListener('visibilitychange', resume);
   window.addEventListener('stellar:records-changed', () => load(true));
   window.addEventListener('storage', event => { if (event.key === 'stellar:records-changed') load(true); });
   const cancelRequests = () => { leaving = true; epoch++; requests.forEach(controller => controller.abort()); };
@@ -276,8 +287,7 @@
     else if (activeView) showActiveState();
     scheduleWarm();
   });
-  setInterval(() => { if (!document.hidden && catalogReady) load(); }, 60000);
+  setInterval(() => { if (window.stellarPageActive() && catalogReady) load(); }, 60000);
   renderNavigation();
-  if (modules.some(module => module.id === selected)) select(selected, false, false);
-  else load(true);
+  resume();
 })();

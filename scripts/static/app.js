@@ -70,7 +70,7 @@
   standalone.addEventListener('change', sync);
   sync();
 
-  if (navigator.serviceWorker && window.isSecureContext) {
+  if (window === window.top && navigator.serviceWorker && window.isSecureContext) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
     });
@@ -90,6 +90,7 @@
       if (url.origin !== location.origin) return;
       event.preventDefault();
       clearTransition();
+      if (window.stellarNavigate?.(url)) return;
       const version = navigationVersion;
       const overlay = document.createElement('div');
       overlay.className = 'stellar-transition-loader'; overlay.setAttribute('role', 'status');
