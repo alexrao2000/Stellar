@@ -23,3 +23,26 @@ self.addEventListener('fetch', event => {
     event.respondWith(caches.match(request).then(hit => hit || fetch(request)));
   }
 });
+
+self.addEventListener('push', event => {
+  let payload = {};
+  try { const data = event.data ? event.data.json() : {}; if (data && typeof data === 'object') payload = data; } catch {}
+  event.waitUntil(self.registration.showNotification(payload.title || 'Stellar', {
+    body: payload.body || 'You have a star reminder.',
+    icon: '/app-assets/stellar-192.png', badge: '/app-assets/stellar-192.png',
+    tag: payload.tag || 'stellar-reminder', data: { url: payload.url || '/pool' },
+  }));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  let target = new URL('/pool', self.location.origin);
+  try {
+    const requested = new URL(event.notification.data?.url || '/pool', self.location.origin);
+    if (requested.origin === self.location.origin && requested.pathname === '/pool') target = requested;
+  } catch {}
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clients => {
+    const client = clients.find(client => client.frameType === 'top-level' && client.url.startsWith(self.location.origin + '/'));
+    if (client) { await client.navigate(target.href); return client.focus(); }
+    return self.clients.openWindow(target.href);
+  }));
+});

@@ -39,6 +39,7 @@ from .pwa import ASSETS, INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, docum
 from .postgrest import PostgrestError
 from .read import read_rows
 from .web_auth import AuthError, AuthSession, web_auth
+from . import reminders
 
 log = logging.getLogger("cal-task-sync")
 
@@ -71,6 +72,7 @@ _refresh_failed: dict[str, float] = {}
 # the app, which made the nav's last link a one-way door.
 app = FastAPI(title="Stellar", docs_url=None)
 app.include_router(pwa_router)
+app.include_router(reminders.router)
 
 
 @app.exception_handler(PostgrestError)
@@ -153,6 +155,8 @@ def _auth_failure(request: Request, detail: str = "Sign in required", status: in
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        if request.url.path == reminders.DISPATCH_PATH:
+            return await call_next(request)
         config = load_config()
         if not config.auth_enabled or request.url.path in PUBLIC_PATHS:
             return await call_next(request)
@@ -635,7 +639,9 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.
     embedded = bool(boot.get("embedded"))
-    return document(html, ("" if embedded else _nav(active)) + gate, _NAV_CSS).replace(
+    reminder_assets = ('<link rel="stylesheet" href="/app-assets/notifications.css?v=1">'
+                       '<script src="/app-assets/notifications.js?v=1" defer></script>') if template == "pool.html" else ""
+    return document(html, ("" if embedded else _nav(active)) + gate, _NAV_CSS + reminder_assets).replace(
         "<body>", '<body data-page="' + (active.strip("/") or "today") +
         ('" data-embedded="true">' if embedded else '">'), 1
     )
@@ -1990,7 +1996,7 @@ def page_data() -> str:
 # task_history, and there is no WRITE_FLOOR because there are no dates to be
 # before: a pool task has no day, which is the whole reason it exists.
 # --------------------------------------------------------------------------- #
-POOL_COLS = ("id", "title", "notes", "x", "y", "created_at", "resolved_at")
+POOL_COLS = ("id", "title", "notes", "x", "y", "created_at", "resolved_at", "remind_at", "reminder_sent_at", "reminder_version")
 
 
 def _pool_patch(fn) -> None:
@@ -2096,6 +2102,7 @@ def api_pool_add(title: str, x: float = 0.5, y: float = 0.5, notes: str | None =
     created = _sb().table("pool_tasks").insert({
         "title": title, "notes": notes,
         "x": _clamp01(x), "y": _clamp01(y),
+        "remind_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
     }).execute().data or []
     if not created:
         raise HTTPException(500, "insert returned nothing")
@@ -2137,7 +2144,7 @@ def api_pool_resolve(task_id: int, done: bool = True) -> dict:
     """
     stamp = datetime.now(timezone.utc).isoformat() if done else None
     updated = (
-        _sb().table("pool_tasks").update({"resolved_at": stamp})
+        _sb().table("pool_tasks").update({"resolved_at": stamp, "remind_at": None, "reminder_sent_at": None})
         .eq("id", task_id).execute().data or []
     )
     if not updated:
@@ -2147,6 +2154,8 @@ def api_pool_resolve(task_id: int, done: bool = True) -> dict:
         for t in s["tasks"]:
             if t["id"] == task_id:
                 t["resolved_at"] = row.get("resolved_at")
+                t["remind_at"] = None
+                t["reminder_sent_at"] = None
                 break
     _pool_patch(_patch)
     return row

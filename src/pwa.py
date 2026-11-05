@@ -20,6 +20,8 @@ ASSET_TYPES = {
     "navigation.css": "text/css",
     "metrics.js": "text/javascript",
     "app.js": "text/javascript",
+    "notifications.js": "text/javascript",
+    "notifications.css": "text/css",
     "icon-192.png": "image/png",
     "icon-512.png": "image/png",
     "apple-touch-icon.png": "image/png",

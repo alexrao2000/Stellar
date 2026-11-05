@@ -269,6 +269,15 @@ Check-ins need an internet connection. If the app is opened offline, it shows
 a reconnect screen. The service worker caches only public artwork and that
 screen; it does not cache authenticated pages or API responses, or queue writes.
 
+## Star reminders
+
+New Pool stars get a reminder after 24 hours. Open a star to change or clear its
+reminder, then choose **Enable notifications** on each device. **Send test**
+checks delivery. Resolving or deleting a star cancels pending reminders.
+
+On iPhone or iPad, enable notifications from the installed Home Screen app.
+See [reminder setup and delivery details](docs/notifications.md).
+
 ## Notes / customization
 
 - The metric tasks are matched by title via `WAKE_UP_TASK_TITLE` and `WEIGHT_TASK_TITLE` in `.env`.
