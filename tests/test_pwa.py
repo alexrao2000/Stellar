@@ -45,7 +45,8 @@ def test_public_assets_do_not_open_the_auth_boundary(client):
     for path in ("/sw.js", "/offline", "/app-assets/app.css", "/app-assets/stellar.css", "/app-assets/app.js",
                  "/app-assets/workspace.css", "/app-assets/workspace.js", "/app-assets/navigation.js",
                  "/app-assets/navigation.css", "/app-assets/metrics.js",
-                 "/app-assets/sections.js", "/app-assets/sections.css"):
+                 "/app-assets/sections.js", "/app-assets/sections.css",
+                 "/app-assets/ranges.js", "/app-assets/ranges.css"):
         assert client.get(path).status_code == 200
     for path in ("/", "/tasks", "/weight", "/pool", "/pool?embedded=true", "/metrics?tab_frame=true", "/data?tab_frame=true", "/tasks?tab_frame=true"):
         assert client.get(path).status_code == 303
@@ -150,3 +151,13 @@ def test_cached_sections_share_only_the_outer_sidebar(client, monkeypatch):
         assert '/app-assets/sections.js?v=1' in page.text
         assert 'data-embedded="true"' not in page.text
         assert '<nav class="sidenav"' in client.get(path).text
+
+
+def test_range_assets_load_only_for_the_selected_layout(client, monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    for view in ("day", "month", "3days", "week", "custom"):
+        html = client.get("/?view=" + view).text
+        selected = view in {"3days", "week", "custom"}
+        assert ('<link rel="preload" as="script" href="/app-assets/ranges.js?v=1">' in html) == selected
+        assert ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=1">' in html) == selected
+        assert "__RANGE_ASSETS__" not in html

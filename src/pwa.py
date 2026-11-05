@@ -20,6 +20,8 @@ ASSET_TYPES = {
     "navigation.js": "text/javascript",
     "sections.js": "text/javascript",
     "sections.css": "text/css",
+    "ranges.js": "text/javascript",
+    "ranges.css": "text/css",
     "navigation.css": "text/css",
     "metrics.js": "text/javascript",
     "app.js": "text/javascript",
@@ -62,7 +64,7 @@ HEAD = """<meta charset="utf-8">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=6">
 <link rel="stylesheet" href="/app-assets/navigation.css?v=7">
 <link rel="stylesheet" href="/app-assets/space-theme.css?v=1">
-<script src="/app-assets/workspace.js?v=8" defer></script>
+<script src="/app-assets/workspace.js?v=9" defer></script>
 <script src="/app-assets/app.js?v=10" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'

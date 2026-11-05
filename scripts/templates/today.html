@@ -1,4 +1,5 @@
 <title>Space · Stellar</title>
+__RANGE_ASSETS__
 <style>
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
@@ -337,9 +338,8 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     </div>
     </div>
     <div class="custom">
-      <input type="date" id="range-start" aria-label="First day">
-      <span>to</span>
-      <input type="date" id="range-end" aria-label="Last day">
+      <label>From<input type="date" id="range-start" aria-label="First day"></label>
+      <label>To<input type="date" id="range-end" aria-label="Last day"></label>
     </div>
   </header>
 
@@ -1343,8 +1343,8 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       .then(function () {
         if (seq !== rangeSeq) return;              // a newer range was asked for
         var board = document.getElementById('board');
-        if (background && board.contains(document.activeElement) &&
-            document.activeElement.tagName === 'INPUT') return;
+        if (background && (document.querySelector('.range-editor[open]') ||
+            board.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) return;
         if (painted !== snapshot(days)) renderBoard(days);
       })
       .catch(function (e) { if (seq === rangeSeq) say('Could not load: ' + e.message, true); });
@@ -1373,6 +1373,28 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     return rows.filter(function (r) { return r.is_completed || !r.optional; }).length;
   }
 
+  var rangeAssetsReady = null, rangeRenderVersion = 0;
+  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=1"]');
+  var rangeStylesReady = !!(rangeStyle && rangeStyle.sheet);
+  function loadRangeAssets() {
+    if (window.stellarRenderRange && rangeStylesReady) return Promise.resolve();
+    if (rangeAssetsReady) return rangeAssetsReady;
+    rangeAssetsReady = Promise.all([
+      ['link', 'href', '/app-assets/ranges.css?v=1'],
+      ['script', 'src', '/app-assets/ranges.js?v=1']
+    ].map(function (asset) {
+      return new Promise(function (resolve, reject) {
+        var node = document.createElement(asset[0]);
+        if (asset[0] === 'link') node.rel = 'stylesheet';
+        node[asset[1]] = asset[2];
+        node.onload = resolve;
+        node.onerror = function () { node.remove(); reject(new Error('Could not load range')); };
+        document.head.appendChild(node);
+      });
+    })).then(function () { rangeStylesReady = true; }).catch(function (error) { rangeAssetsReady = null; throw error; });
+    return rangeAssetsReady;
+  }
+
   function renderBoard(days) {
     SHOWN = days;
     var board = document.getElementById('board');
@@ -1385,6 +1407,27 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       total += owed(rows);
     });
     board.innerHTML = '';
+    board.classList.remove('range-board');
+    if (VIEW !== 'month') {
+      if (!window.stellarRenderRange || !rangeStylesReady) {
+        var version = ++rangeRenderVersion;
+        board.innerHTML = '<div class="stellar-loading" role="status"><span class="stellar-spinner" aria-hidden="true"></span><span>Loading range…</span></div>';
+        loadRangeAssets().then(function () {
+          if (version === rangeRenderVersion && SHOWN === days && ['3days', 'week', 'custom'].includes(VIEW)) renderBoard(days);
+        }).catch(function () {
+          if (version !== rangeRenderVersion || SHOWN !== days) return;
+          board.textContent = 'Could not load this range. ';
+          var retry = document.createElement('button'); retry.type = 'button'; retry.className = 'step wide'; retry.textContent = 'Retry';
+          retry.addEventListener('click', function () { renderBoard(days); }); board.appendChild(retry);
+        });
+        return;
+      }
+      window.stellarRenderRange({ board: board, days: days, day: DAY, today: today, view: VIEW,
+        rows: function (day) { return CACHE[day] || []; }, weight: WEIGH, wake: WAKE,
+        wakeValue: wakeFromNotes, owed: owed, writable: writable, go: go, label: label,
+        column: column, tile: tile, field: field });
+      return;
+    }
     var sum = document.createElement('p');
     sum.className = 'summary';
     sum.textContent = total ? done + ' of ' + total + ' done so far in view' : 'Nothing due yet in view';
@@ -1420,7 +1463,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     board.appendChild(grid);
   }
 
-  function column(day) {
+  function column(day, onUpdate) {
     var rows = CACHE[day] || [];
     var today = todayNow(), future = day > today, locked = future || !writable(day);
     var col = document.createElement('div');
@@ -1440,7 +1483,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var body = document.createElement('div');
     body.className = 'col-body';
     if (!rows.length) body.innerHTML = '<div class="empty-day">Nothing scheduled</div>';
-    rows.forEach(function (r) { body.appendChild(r.title === WEIGH || r.title === WAKE ? field(r, locked) : tile(r, locked)); });
+    rows.forEach(function (r) { body.appendChild(r.title === WEIGH || r.title === WAKE ? field(r, locked, onUpdate) : tile(r, locked, onUpdate)); });
     col.appendChild(body);
     return col;
   }
@@ -1452,15 +1495,27 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     return '<span class="tag' + (st.missed ? ' missed' : '') + '">' + (st.missed ? 'missed ' : '') + when + '</span>';
   }
 
+  function storeMini(r) {
+    var rows = CACHE[r.day] || [];
+    var cached = rows.find(function (row) { return row.title === r.title; });
+    if (cached && cached !== r) Object.assign(cached, r);
+    storeWrite(r.day, rows);
+  }
+
   function paintMini(el, r) {
     el.classList.toggle('done', !!r.is_completed);
     el.classList.toggle('optional', !!r.optional && !r.is_completed);
+    if (el.tagName === 'BUTTON') {
+      el.setAttribute('aria-pressed', String(!!r.is_completed));
+      el.setAttribute('aria-label', r.title + ', ' + label(r.day, { month: 'short', day: 'numeric' }) + ', ' + (r.is_completed ? 'completed' : 'not completed'));
+    }
     el.title = r.is_completed && r.completed_at
       ? 'Completed ' + new Date(r.completed_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })
       : '';
+    if (el.classList.contains('range-check')) el.title = el.getAttribute('aria-label') + (el.querySelector('.tag') ? ', ' + el.querySelector('.tag').textContent : '');
   }
 
-  function tile(r, locked) {
+  function tile(r, locked, onUpdate) {
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'mini';
@@ -1471,19 +1526,19 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       var next = !r.is_completed;
       r.is_completed = next;
       r.completed_at = next ? new Date().toISOString() : null;
-      paintMini(b, r);
+      paintMini(b, r); if (onUpdate) onUpdate();
       post(r.id ? '/api/task/' + r.id + '/toggle?done=' + next
                 : '/api/day/' + r.day + '/check?title=' + encodeURIComponent(r.title) + '&done=' + next)
         .then(function (u) {
           if (u && u.id) { r.id = u.id; delete r.virtual; }
           if (u && 'completed_at' in u) r.completed_at = u.completed_at;
-          paintMini(b, r);
-          storeWrite(r.day, CACHE[r.day] || []);
+          paintMini(b, r); if (onUpdate) onUpdate();
+          storeMini(r);
           say(r.title + (next ? ' done' : ' un-done') + ' · ' + label(r.day, { month: 'short', day: 'numeric' }));
         })
         .catch(function (e) {
           r.is_completed = !next;
-          paintMini(b, r);
+          paintMini(b, r); if (onUpdate) onUpdate();
           say(e.message, true);
         });
     });
@@ -1492,7 +1547,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 
   /* Weight and wake-up, editable in place. Saved on change -- blur or Enter --
      like the day view, never while typing. */
-  function field(r, locked) {
+  function field(r, locked, onUpdate) {
     var isW = r.title === WEIGH;
     var el = document.createElement('div');
     el.className = 'mini field';
@@ -1514,18 +1569,19 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       var url = isW ? '/api/day/' + r.day + '/weight?lbs=' + encodeURIComponent(v)
                     : '/api/day/' + r.day + '/wake?time=' + encodeURIComponent(v);
       var was = r.is_completed;
-      r.is_completed = true; paintMini(el, r);
+      r.is_completed = true; paintMini(el, r); if (onUpdate) onUpdate();
       post(url).then(function (u) {
         shown = v;
         if (u && u.id) { r.id = u.id; delete r.virtual; }
         if (u && 'completed_at' in u) r.completed_at = u.completed_at;
         if (isW && u && u.weight_lbs !== undefined) r.weight_lbs = u.weight_lbs;
-        paintMini(el, r);
-        storeWrite(r.day, CACHE[r.day] || []);
+        if (!isW && u && typeof u.notes === 'string') r.notes = u.notes;
+        paintMini(el, r); if (onUpdate) onUpdate();
+        storeMini(r);
         say((isW ? 'Weight ' + Number(v).toFixed(1) + ' lbs' : 'Wake-up ' + v) + ' saved · ' +
             label(r.day, { month: 'short', day: 'numeric' }) + (isW && u && u.warning ? ' — ' + u.warning : ''));
       }).catch(function (e) {
-        r.is_completed = was; paintMini(el, r); input.value = shown; say(e.message, true);
+        r.is_completed = was; paintMini(el, r); if (onUpdate) onUpdate(); input.value = shown; say(e.message, true);
       });
     });
     return el;

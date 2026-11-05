@@ -1,8 +1,7 @@
 /* Tasks float within the Pool canvas while its editable stars retain clear
    space beside the panel. Pool stays mounted across range changes so edits
-   survive. Range days wrap into rows instead of requiring every day to fit
-   across the screen. Week stays at two columns rather than growing with the
-   viewport. Compact screens keep the individual views. */
+   survive. Range comparisons keep a compact width beside the stars.
+   Compact screens keep the individual views. */
 (() => {
   const toggle = document.getElementById('pool-toggle');
   if (!toggle) return;
@@ -43,13 +42,8 @@
     host.dataset.taskColumns = '1';
     const maximum = available - 420 - 24;
     let width = view === 'day' ? Math.min(maximum, 460) : minimum;
-    if (view !== 'day' && view !== 'month') {
-      const dayWidth = 160, gap = 10, panelPadding = 34;
-      const capacity = Math.max(1, Math.floor((maximum - panelPadding + gap) / (dayWidth + gap)));
-      const across = view === 'week' ? 2 : capacity >= columns ? columns : Math.min(4, capacity);
-      host.style.setProperty('--workspace-range-columns', across);
-      width = view === 'week' ? minimum : Math.min(maximum, across * (across > 4 ? 168 : 200) + (across - 1) * gap + panelPadding);
-    }
+    if (view === '3days') width = Math.min(maximum, 480);
+    if (view === 'week' || view === 'custom') width = Math.min(maximum, 560);
     host.style.setProperty('--workspace-task-width', Math.max(minimum, width) + 'px');
     if (open && view === 'day' && dayList.scrollHeight > dayList.clientHeight + 1 && maximum >= 520) {
       width = Math.min(maximum, 680);
