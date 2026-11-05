@@ -93,7 +93,7 @@
       const version = navigationVersion;
       const overlay = document.createElement('div');
       overlay.className = 'stellar-transition-loader'; overlay.setAttribute('role', 'status');
-      overlay.dataset.space = String(['/', '/today'].includes(url.pathname));
+      overlay.dataset.space = 'true';
       const loading = document.createElement('div'); loading.className = 'stellar-loading';
       const spinner = document.createElement('span'); spinner.className = 'stellar-spinner'; spinner.setAttribute('aria-hidden', 'true');
       const label = document.createElement('span'); label.textContent = 'Loading ' + (link.getAttribute('aria-label') || 'Stellar') + '…';
