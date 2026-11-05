@@ -1,7 +1,9 @@
 <title>Pool · Stellar</title>
 <style>
-/* Pool colours deliberately live on .sky, not :root: the fixed sidebar is
-   shared app furniture and should retain its own theme. */
+/* Pool colours live on .sky so the shared sidebar retains its theme. Star
+   artwork pulses independently while labels, hit targets and links stay put.
+   The far sky is cached; only nearby specks redraw, at a limited frame rate.
+   Motion pauses offscreen and respects the system's reduced-motion setting. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -32,6 +34,23 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 .star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
 .star:focus-visible .hit { outline: 2px solid var(--line-live); outline-offset: 2px; }
 .star.held { cursor: grabbing; }
+.star:not(.ghost,.ember) .star-glow {
+  transform-box: fill-box; transform-origin: center;
+  animation: star-bloom var(--glow-period) ease-in-out var(--glow-phase) infinite;
+}
+.star:not(.ghost,.ember) .star-core {
+  animation: star-shimmer var(--core-period) ease-in-out var(--core-phase) infinite;
+}
+.star:is(:hover,:focus-visible,.held) :is(.star-glow,.star-core),
+.sky[data-motion-paused=true] :is(.star-glow,.star-core) { animation-play-state: paused; }
+@keyframes star-bloom {
+  0%, 100% { opacity: var(--star-low); transform: scale(.96); }
+  50% { opacity: 1; transform: scale(var(--star-bloom)); }
+}
+@keyframes star-shimmer {
+  0%, 100% { opacity: .76; }
+  50% { opacity: 1; }
+}
 /* Generous, and deliberately so. Empty sky now creates a star, which only
    works if hitting a star is easy -- the two changes hold each other up. */
 .star .hit {
@@ -232,7 +251,10 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 }
 .star.ghost.flip input { left: auto; right: 15px; text-align: right; }
 .star.ghost input::placeholder { color: rgba(150,146,185,.4); letter-spacing: .14em; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+  .star-glow, .star-core { animation: none !important; }
+}
 </style>
 
 <div class="sky" id="sky" data-view="list">
@@ -294,6 +316,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       var inset = Math.max(0, Math.min(Number(event.data.inset) || 0, innerWidth - 300));
       document.body.dataset.workspaceOverlay = String(inset > 0);
       sky.style.setProperty('--workspace-inset', inset + 'px');
+      syncMotion();
       if (embeddedVisible) { scheduleResize(); pollPool(); }
     });
   }
@@ -332,6 +355,43 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 
   /* ---- the field ------------------------------------------------------- */
   var dust = document.getElementById('dust'), g = dust.getContext('2d');
+  var dustBase = document.createElement('canvas'), dustContext = dustBase.getContext('2d');
+  var dustStars = [], dustWidth = 0, dustHeight = 0, dustFrame = 0, dustLast = 0;
+  var reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+  function motionActive() { return !document.hidden && embeddedVisible && !reducedMotion.matches; }
+  function renderDust(time) {
+    if (!dustWidth || !dustHeight) return;
+    g.clearRect(0, 0, dustWidth, dustHeight);
+    g.drawImage(dustBase, 0, 0, dustWidth, dustHeight);
+    dustStars.forEach(function (s) {
+      var alpha = s.alpha * (reducedMotion.matches ? 1 : .78 + .22 * Math.sin(time * s.speed + s.phase));
+      g.beginPath();
+      g.arc(s.x * dustWidth, s.y * dustHeight, s.radius, 0, 6.283);
+      g.fillStyle = 'rgba(232,236,255,' + alpha.toFixed(3) + ')';
+      g.fill();
+    });
+  }
+  function tickDust(time) {
+    dustFrame = 0;
+    if (!motionActive()) return;
+    if (time - dustLast >= 80) { renderDust(time); dustLast = time; }
+    dustFrame = requestAnimationFrame(tickDust);
+  }
+  function syncMotion() {
+    if (dustFrame) cancelAnimationFrame(dustFrame);
+    dustFrame = 0;
+    sky.dataset.motionPaused = String(!motionActive());
+    if (motionActive()) dustFrame = requestAnimationFrame(tickDust);
+    else if (dustWidth && reducedMotion.matches) renderDust(0);
+  }
+  reducedMotion.addEventListener('change', syncMotion);
+  document.addEventListener('visibilitychange', syncMotion);
+  window.addEventListener('pagehide', function () {
+    if (dustFrame) cancelAnimationFrame(dustFrame);
+    dustFrame = 0;
+  });
+  window.addEventListener('pageshow', syncMotion);
 
   /* Three layers rather than one field of identical specks: the far layer
      dense and nearly invisible, the near layer sparse and brighter. That
@@ -340,20 +400,30 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   function drawDust() {
     var dpr = window.devicePixelRatio || 1;
     var width = sky.clientWidth, height = sky.clientHeight;
+    dustWidth = width; dustHeight = height; dustStars = [];
     dust.width = width * dpr; dust.height = height * dpr;
+    dustBase.width = dust.width; dustBase.height = dust.height;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, width, height);
+    dustContext.setTransform(dpr, 0, 0, dpr, 0, 0);
     var seed = 21;
     function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
     [[900, .34, .45], [320, .55, .8], [90, .8, 1.35]].forEach(function (L) {
       for (var i = 0; i < L[0]; i++) {
         var a = rnd() * L[1] + .04, r = rnd() * L[2] + .16;
-        g.beginPath();
-        g.arc(rnd() * width, rnd() * height, r, 0, 6.283);
-        g.fillStyle = 'rgba(232,236,255,' + a.toFixed(3) + ')';
-        g.fill();
+        var x = rnd(), y = rnd();
+        if (L[0] === 90) {
+          dustStars.push({ x: x, y: y, radius: r, alpha: a,
+            speed: 6.283 / (3500 + rnd() * 7000), phase: rnd() * 6.283 });
+        } else {
+          dustContext.beginPath();
+          dustContext.arc(x * width, y * height, r, 0, 6.283);
+          dustContext.fillStyle = 'rgba(232,236,255,' + a.toFixed(3) + ')';
+          dustContext.fill();
+        }
       }
     });
+    renderDust(performance.now());
+    syncMotion();
   }
 
   /* ---- model ----------------------------------------------------------- */
@@ -441,20 +511,20 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
          '<stop offset="38%" stop-color="rgba(206,214,255,.20)"/>' +
          '<stop offset="100%" stop-color="rgba(150,170,255,0)"/>' +
          '</radialGradient></defs>';
-    s += '<circle cx="0" cy="0" r="' + bloom + '" fill="url(#bl' + id + ')"/>';
+    s += '<g class="star-glow"><circle cx="0" cy="0" r="' + bloom + '" fill="url(#bl' + id + ')"/>';
     if (m > 1.4) {
       s += '<path d="M' + -spike + ' 0 H' + spike + ' M0 ' + -spike + ' V' + spike +
            '" stroke="rgba(255,250,240,' + (0.10 + m * 0.055).toFixed(2) +
            ')" stroke-width="0.8" stroke-linecap="round"/>';
     }
-    s += '<circle cx="0" cy="0" r="' + core.toFixed(2) + '" fill="var(--star)"/></svg>';
+    s += '</g><circle class="star-core" cx="0" cy="0" r="' + core.toFixed(2) + '" fill="var(--star)"/></svg>';
     return s;
   }
 
   function unlitSVG() {
     return '<svg width="26" height="26" viewBox="0 0 26 26" ' +
       'style="display:block;transform:translate(-13px,-13px);pointer-events:none">' +
-      '<circle cx="13" cy="13" r="4.2" fill="none" ' +
+      '<circle class="star-core" cx="13" cy="13" r="4.2" fill="none" ' +
       'stroke="rgba(196,200,235,.42)" stroke-width="0.9"/></svg>';
   }
 
@@ -464,6 +534,19 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     return '<svg width="26" height="26" viewBox="0 0 26 26" ' +
       'style="display:block;transform:translate(-13px,-13px);pointer-events:none">' +
       '<circle cx="13" cy="13" r="2.6" fill="rgba(176,166,214,.30)"/></svg>';
+  }
+
+  function setStarMotion(el, id) {
+    var seed = 2166136261;
+    String(id).split('').forEach(function (c) { seed = Math.imul(seed ^ c.charCodeAt(0), 16777619) >>> 0; });
+    function rnd() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }
+    var glow = 4 + rnd() * 5, core = 3 + rnd() * 4, now = performance.now() / 1000;
+    el.style.setProperty('--glow-period', glow.toFixed(3) + 's');
+    el.style.setProperty('--core-period', core.toFixed(3) + 's');
+    el.style.setProperty('--glow-phase', -((now + rnd() * glow) % glow).toFixed(3) + 's');
+    el.style.setProperty('--core-phase', -((now + rnd() * core) % core).toFixed(3) + 's');
+    el.style.setProperty('--star-low', (.58 + rnd() * .2).toFixed(3));
+    el.style.setProperty('--star-bloom', (1.04 + rnd() * .1).toFixed(3));
   }
 
   function paint() {
@@ -498,6 +581,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       el.className = 'star' + (done ? ' ember' : (waits.length ? ' dim' : '')) +
         (t.x > .74 ? ' flip' : '');
       el.dataset.id = t.id;
+      setStarMotion(el, t.id);
       var point = screenPoint(t);
       el.style.left = point.x + 'px';
       el.style.top = point.y + 'px';
