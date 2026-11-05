@@ -1,0 +1,90 @@
+/* Compact date comparisons share the existing panel height. Sticky task names
+   keep long custom ranges readable, while phones use a full-width day list.
+   These selectors apply only to 3 Days, Week, and Custom. */
+html body .range-board { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+html body .range-overview { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; flex: 0 0 auto; }
+.range-total { font-size: 12px; color: var(--ink-muted); }
+.range-total strong { font-size: 16px; font-weight: 600; letter-spacing: -.03em; color: var(--ink); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.range-percent { font: 11px ui-monospace, monospace; color: var(--ink-muted); }
+.range-progress { grid-column: 1 / -1; height: 3px; background: var(--rule); border-radius: 4px; overflow: hidden; }
+.range-progress span { display: block; height: 100%; background: var(--ink); border-radius: inherit; }
+html body .range-scroll { overflow: auto; min-width: 0; min-height: 0; max-height: 65dvh; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--rule); border-radius: 13px; background: var(--surface); }
+.range-table { width: 100%; min-width: calc(164px + var(--range-days) * 46px); table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.range-table col:first-child { width: 164px; }
+.range-table th, .range-table td { padding: 0; border: 0; border-bottom: 1px solid var(--rule); text-align: center; }
+.range-table thead th { position: sticky; top: 0; z-index: 3; padding: 4px 2px; background: var(--surface); }
+.range-table .range-task-heading, .range-table .range-task-name { position: sticky; left: 0; background: var(--surface); text-align: left; padding: 10px 12px; border-right: 1px solid var(--rule); }
+.range-table .range-task-heading { z-index: 4; font-size: 10px; font-weight: 500; color: var(--ink-muted); letter-spacing: .1em; text-transform: uppercase; }
+.range-table .range-task-name { z-index: 2; font-size: 12px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.range-task-name span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.range-table tbody tr:last-child > * { border-bottom: 0; }
+.range-table tbody tr:hover :is(td,.range-task-name) { background: var(--surface-2); }
+.range-table .range-today { background: color-mix(in srgb, var(--ink) 3%, var(--surface)); }
+.range-date { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; width: 100%; min-height: 75px; padding: 7px 2px; border: 0; border-radius: 9px; color: var(--ink); background: transparent; cursor: pointer; font: inherit; }
+.range-weekday { font-size: 9px; letter-spacing: .05em; color: var(--ink-muted); text-transform: uppercase; }
+.range-number { font-size: 18px; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.range-count { font: 9px ui-monospace, monospace; color: var(--ink-muted); }
+.range-date.is-today { background: var(--ink); color: var(--surface); }
+.range-date.is-today :is(.range-weekday,.range-count) { color: inherit; opacity: .7; }
+.range-date.is-future { opacity: .55; }
+html body .range-table .mini.range-check { position: relative; display: flex; justify-content: center; align-items: center; width: 100%; min-height: 44px; padding: 8px; border: 0; border-radius: 0; background: transparent; color: var(--ink); }
+html body .range-check :is(.t,.tag) { display: none; }
+html body .range-check .mbox { display: grid; place-items: center; width: 17px; height: 17px; margin: 0; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 5px; background: transparent; }
+html body .range-check.optional .mbox { border-style: dashed; }
+html body .range-check.done .mbox { background: var(--ink); border-color: var(--ink); }
+html body .range-check.done .mbox::after { content: '✦'; color: var(--surface); font-size: 12px; font-weight: 400; }
+html body .range-check:has(.tag.missed):not(.done)::after { content: ''; position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--bad); right: calc(50% - 14px); top: 10px; }
+html body .range-check:disabled, .range-value:disabled { opacity: .35; }
+.range-value { min-width: 0; width: 100%; min-height: 44px; padding: 5px 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: 11px ui-monospace, monospace; cursor: pointer; }
+.range-value:not(:disabled):hover { text-decoration: underline; text-underline-offset: 4px; }
+.range-absent { color: var(--ink-muted); opacity: .5; }
+.range-empty { padding: 28px !important; color: var(--ink-muted); }
+.range-hint { margin: 0; color: var(--ink-muted); font-size: 11px; line-height: 1.5; }
+.range-sr { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.range-date:focus-visible, .range-check:focus-visible, .range-value:focus-visible, .range-scroll:focus-visible { outline: 2px solid var(--ink); outline-offset: -3px; }
+html body .range-editor { width: min(340px, calc(100vw - 32px)); margin: auto; padding: 24px; border: 1px solid var(--rule); border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: 0 20px 80px #0004; }
+.range-editor::backdrop { background: #04050a66; backdrop-filter: blur(4px); }
+.range-editor h2 { margin: 0; font-size: 20px; letter-spacing: -.03em; }
+.range-editor p { margin: 6px 0 20px; color: var(--ink-muted); font-size: 13px; }
+html body .range-editor .mini.field { display: block; background: transparent; padding: 0; }
+html body .range-editor .mini.field :is(.mbox,.lbl,.tag) { display: none; }
+html body .range-editor .mini.field input { width: 100%; min-height: 48px; margin: 0; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface-2); color: var(--ink); font: 18px ui-monospace, monospace; }
+.range-editor-done { width: 100%; min-height: 44px; margin-top: 16px; border: 0; border-radius: 10px; background: var(--ink); color: var(--surface); font: 500 14px system-ui, sans-serif; cursor: pointer; }
+html body.view-custom .day-controls { display: grid; grid-template-columns: 32px minmax(0, 1fr) 32px; gap: 8px; align-items: center; margin-top: 8px; }
+html body.view-custom .daynav { display: contents; }
+html body.view-custom .daynav2 { display: none; }
+html body.view-custom .date { grid-column: 2; grid-row: 1; }
+html body.view-custom #prev-day { grid-column: 1; grid-row: 1; }
+html body.view-custom #next-day { grid-column: 3; grid-row: 1; }
+html body.view-custom .custom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+html body.view-custom .custom label { display: grid; gap: 5px; min-width: 0; color: var(--ink-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+html body.view-custom .custom input { width: 100%; padding: 8px; font-size: 12px; }
+@media (min-width: 761px) {
+  html body:is(.view-3days,.view-week,.view-custom) > .wrap:not(.workspace-open) { max-width: 1040px; }
+  html body .workspace-open #board.range-board { overflow: hidden; padding: 0; margin: 0; }
+  html body .workspace-open .range-scroll { flex: 0 1 auto; max-height: none; }
+}
+@media (max-width: 760px) {
+  html body.view-custom .day-controls { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  html body #board.range-board { margin-top: 4px; gap: 16px; }
+  .range-dates { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: 0 -2px; scroll-snap-type: x proximity; }
+  .range-dates::-webkit-scrollbar { display: none; }
+  .range-dates .range-date { flex: 1 0 44px; max-width: 104px; min-height: 78px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); scroll-snap-align: center; }
+  .range-dates .range-date[aria-pressed=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); opacity: 1; }
+  .range-dates .range-date[aria-pressed=true] :is(.range-weekday,.range-count) { color: inherit; opacity: .7; }
+  .range-dates .range-date.is-today:not([aria-pressed=true]) { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .range-dates .range-date.is-today:not([aria-pressed=true]) :is(.range-weekday,.range-count) { color: var(--ink-muted); }
+  html body .range-focus .col { border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
+  html body .range-focus .col .col-head { padding: 0 0 12px; margin-bottom: 2px; border: 0; background: transparent; color: var(--ink); }
+  .range-focus-label { font-size: 13px; font-weight: 600; letter-spacing: -.01em; }
+  html body .range-focus .col-body { padding: 0; gap: 7px; }
+  html body .range-focus .mini { padding: 12px; min-height: 48px; border-radius: 12px; font-size: 14px; font-weight: 500; line-height: 1.5; }
+  html body .range-focus .mini:not(.field) { grid-template-columns: 18px minmax(0, 1fr); column-gap: 10px; }
+  html body .range-focus .mini .mbox { width: 17px; height: 17px; border-radius: 5px; }
+  html body .range-focus .mini .tag { font-size: 10px; line-height: 1.4; }
+  html body .range-focus .mini.field { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(100px, 130px); gap: 6px 10px; align-items: center; }
+  html body .range-focus .mini.field .mbox { grid-column: 1; }
+  html body .range-focus .mini.field .lbl { grid-column: 2; font-size: 13px; text-transform: none; letter-spacing: 0; }
+  html body .range-focus .mini.field input { grid-column: 3; width: 100%; min-height: 44px; margin: 0; padding: 8px; font-size: 16px; }
+  html body .range-focus .mini.field .tag { grid-column: 2 / -1; justify-self: start; }
+}
