@@ -5,8 +5,9 @@
    The far sky is cached; only nearby specks redraw, at a limited frame rate.
    Motion pauses offscreen and respects the system's reduced-motion setting.
    Dragging only moves stars; prerequisites are chosen explicitly in task
-   details. Interrupted gestures cancel any unfinished drag; background reads
-   started before a local gesture or write cannot overwrite its result. */
+   details. Redraws wait for a held star. Position writes run in order for each
+   star, and local positions survive refreshes until the database confirms them.
+   Failed saves stay visible and retry on the next refresh. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -329,6 +330,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   var W = 0, H = 0;
   var writesInFlight = 0;
   var poolRevision = 0;
+  var positions = Object.create(null);
+  var paintPending = false;
   var embeddedVisible = true;
   var poolLoaded = !BOOT.loading;
   var poolLoading = document.getElementById('pool-loading');
@@ -580,7 +583,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
 
   function paint() {
-    cancelDrag();
+    if (drag) { paintPending = true; return; }
+    paintPending = false;
     reindex();
     Array.prototype.forEach.call(sky.querySelectorAll('.star'), function (n) { n.remove(); });
 
@@ -724,6 +728,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       fitLabel(d.el);
     }
     drawLines();
+    if (paintPending) paint();
     return true;
   }
 
@@ -768,20 +773,33 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     d.el.classList.remove('held');
     if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
 
+    if (paintPending) paint();
     if (!d.moved) { openPanel(d.t); return; }        // a click opens it
-
-    /* Position is written on drop, not while dragging: one row, one write. */
-    post('/api/pool/task/' + d.t.id + '/move?x=' + d.t.x.toFixed(4) +
-         '&y=' + d.t.y.toFixed(4))
-      .catch(function (err) {
-        d.t.x = d.sx; d.t.y = d.sy;                  // put it back
-        note(err.message, true);
-        paint();
-      });
+    var position = positions[d.t.id] || { saving: false };
+    position.x = Number(d.t.x.toFixed(4)); position.y = Number(d.t.y.toFixed(4));
+    position.confirmed = false;
+    positions[d.t.id] = position;
+    savePosition(d.t.id);
     drawLines();
   }
-  document.addEventListener('pointerup', endDrag);
-  document.addEventListener('pointercancel', endDrag);
+  function savePosition(id) {
+    var position = positions[id];
+    if (!position || position.saving || position.confirmed) return;
+    position.saving = true;
+    var x = position.x, y = position.y;
+    post('/api/pool/task/' + id + '/move?x=' + x + '&y=' + y).then(function () {
+      position.saving = false;
+      if (position.x !== x || position.y !== y) { savePosition(id); return; }
+      position.confirmed = true;
+      if (noteEl.textContent === 'Position not saved. Retrying…') note('');
+    }, function () {
+      position.saving = false;
+      if (position.x !== x || position.y !== y) { savePosition(id); return; }
+      note('Position not saved. Retrying…', true);
+    });
+  }
+  document.addEventListener('pointerup', endDrag, true);
+  document.addEventListener('pointercancel', endDrag, true);
   window.addEventListener('blur', cancelDrag);
   document.addEventListener('visibilitychange', function () { if (document.hidden) cancelDrag(); });
 
@@ -1001,6 +1019,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     document.getElementById('vgo').addEventListener('click', function () {
       post('/api/pool/task/' + t.id, 'DELETE')
         .then(function () {
+          delete positions[t.id];
           TASKS = TASKS.filter(function (x) { return x.id !== t.id; });
           /* The cascade drops these server-side; mirror it here so the sky does
              not draw a line to a star that is gone. */
@@ -1089,6 +1108,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
   function pollPool() {
     if (document.hidden || !embeddedVisible || pollBusy || poolEditing()) return;
+    Object.keys(positions).forEach(savePosition);
+    if (writesInFlight) return;
     var revision = poolRevision;
     pollBusy = true;
     if (!poolLoaded) {
@@ -1102,6 +1123,16 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       if (revision !== poolRevision || poolEditing()) return;
       if (state.schema_missing) throw new Error('Pool is unavailable');
       var tasks = state.tasks || [], edges = state.edges || [];
+      tasks.forEach(function (task) {
+        var position = positions[task.id];
+        if (!position) return;
+        if (position.confirmed && Math.abs(Number(task.x) - position.x) < .00001 &&
+            Math.abs(Number(task.y) - position.y) < .00001) {
+          delete positions[task.id];
+        } else {
+          task.x = position.x; task.y = position.y;
+        }
+      });
       poolLoaded = true; sky.dataset.loading = 'false'; poolLoading.hidden = true;
       if (poolSnapshot(tasks, edges) === poolSnapshot(TASKS, EDGES)) return;
       var selected = PANEL_ID;
