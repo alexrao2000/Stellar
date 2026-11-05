@@ -61,10 +61,10 @@ HEAD = """<meta charset="utf-8">
 <link rel="stylesheet" href="/app-assets/sections.css?v=1">
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
-<link rel="stylesheet" href="/app-assets/workspace.css?v=6">
-<link rel="stylesheet" href="/app-assets/navigation.css?v=7">
+<link rel="stylesheet" href="/app-assets/workspace.css?v=7">
+<link rel="stylesheet" href="/app-assets/navigation.css?v=8">
 <link rel="stylesheet" href="/app-assets/space-theme.css?v=1">
-<script src="/app-assets/workspace.js?v=9" defer></script>
+<script src="/app-assets/workspace.js?v=10" defer></script>
 <script src="/app-assets/app.js?v=10" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'

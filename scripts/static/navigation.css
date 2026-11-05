@@ -1,6 +1,6 @@
 /* Sidebar widths are shared with the workspace. Explicit toggles animate the
    inherited width so pages, starfields and panels move together. Labels fade
-   before closing and return after opening; restored state paints immediately.
+   before closing and return after opening; the toggle keeps its vertical position.
    Metric modules resize to their content for one page scroll surface. */
 @property --nav-w { syntax: '<length>'; inherits: true; initial-value: 172px; }
 .sidenav .nav-icon { display: block; width: 20px; height: 20px; flex: 0 0 20px; }
@@ -16,11 +16,10 @@
 .sidebar-collapse:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .sidebar-collapsed .collapse-chevron { transform: rotate(180deg); transform-origin: 13.5px 12px; }
 @media (min-width: 761px) {
-  .sidenav { --sidebar-toggle-size: 28px; --sidebar-header-height: 48px;
-    --sidebar-collapsed-header-height: 80px; overflow-x: hidden; }
+  .sidenav { --sidebar-toggle-size: 28px; --sidebar-header-height: 48px; overflow-x: hidden; }
   .sidebar-header { position: relative; display: block; height: var(--sidebar-header-height);
     flex: 0 0 var(--sidebar-header-height); padding: 0; }
-  .sidenav .sidebar-header .brand { position: absolute; top: 0; left: 2px; gap: 8px; }
+  .sidenav .sidebar-header .brand { position: absolute; top: 0; left: 2px; gap: 8px; opacity: 1; visibility: visible; }
   .sidebar-collapse { position: absolute; top: 2px; right: 0;
     width: var(--sidebar-toggle-size); height: var(--sidebar-toggle-size); }
   .sidenav .nav-label, .sidenav .brand-name { display: inline-block; min-width: 0;
@@ -32,16 +31,13 @@
   :root.sidebar-collapsed { --nav-w: 64px; }
   .sidebar-collapsed .sidenav .nav-label, .sidebar-collapsed .sidenav .brand-name {
     max-width: 0; opacity: 0; transform: translateX(-6px); }
-  .sidebar-collapsed .sidebar-header { height: var(--sidebar-collapsed-header-height);
-    flex-basis: var(--sidebar-collapsed-header-height); }
-  .sidebar-collapsed .sidenav .sidebar-header .brand { left: 10px; }
-  .sidebar-collapsed .sidebar-collapse { top: 34px; right: calc((100% - var(--sidebar-toggle-size)) / 2); }
+  .sidebar-collapsed .sidenav .sidebar-header .brand { opacity: 0; visibility: hidden; pointer-events: none; }
+  .sidebar-collapsed .sidebar-collapse { right: calc((100% - var(--sidebar-toggle-size)) / 2); }
   .sidebar-collapsed .sidenav a, .sidebar-collapsed .sidenav .signout button,
   .sidebar-collapsed .sidenav .install-button, .sidebar-collapsed .sidenav .brand { gap: 0; }
   :root.sidebar-animating { transition: --nav-w 320ms cubic-bezier(.22, 1, .36, 1); }
-  .sidebar-animating .sidebar-header { transition: height 320ms cubic-bezier(.22, 1, .36, 1), flex-basis 320ms cubic-bezier(.22, 1, .36, 1); }
-  .sidebar-animating .sidebar-collapse { transition: top 320ms cubic-bezier(.22, 1, .36, 1), right 320ms cubic-bezier(.22, 1, .36, 1); }
-  .sidebar-animating .sidenav .brand { transition: left 320ms cubic-bezier(.22, 1, .36, 1), top 320ms cubic-bezier(.22, 1, .36, 1), gap 200ms ease; }
+  .sidebar-animating .sidebar-collapse { transition: right 320ms cubic-bezier(.22, 1, .36, 1); }
+  .sidebar-animating .sidenav .brand { transition: opacity 150ms ease, visibility 150ms ease, gap 200ms ease; }
   .sidebar-animating .sidenav :is(a,.signout button,.install-button) { transition: gap 200ms ease; }
   .sidebar-animating .collapse-chevron { transition: transform 280ms cubic-bezier(.22, 1, .36, 1); }
   .sidebar-animating .sidenav :is(.nav-label,.brand-name) {
@@ -49,9 +45,8 @@
   .sidebar-animating.sidebar-collapsed .sidenav :is(.nav-label,.brand-name) { transition-delay: 0ms; transition-duration: 90ms, 160ms, 220ms; }
 }
 @media (min-width: 761px) and (pointer: coarse) {
-  .sidenav { --sidebar-toggle-size: 44px; --sidebar-header-height: 60px; --sidebar-collapsed-header-height: 96px; }
+  .sidenav { --sidebar-toggle-size: 44px; --sidebar-header-height: 60px; }
   .sidenav .sidebar-header .brand { top: 8px; }
-  .sidebar-collapsed .sidenav .sidebar-header .brand { top: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root.sidebar-animating, .sidebar-animating .sidenav * { transition: none !important; }

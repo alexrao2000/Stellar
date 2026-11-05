@@ -2,7 +2,7 @@
    space around the panel. Range days wrap to fit the task panel. Compact views
    wrap labels and native controls. Space paints a CSS starfield before its
    live canvas and records arrive. Floating panels share a viewport-based height;
-   controls stay fixed while records scroll. Week uses two compact columns. */
+   controls stay fixed while records scroll. Month cells fill the available height. */
 .dated-tasks { min-width: 0; }
 .space-backdrop { display: block; position: fixed; inset: 0 0 0 var(--nav-w); pointer-events: none; z-index: 0; }
 html body[data-page=today] { background: #04050a; }
@@ -10,6 +10,7 @@ body[data-page=today] > .wrap { position: relative; z-index: 1; }
 body[data-page=today] > .wrap:not(.workspace-open) {
   width: calc(100% - 32px); margin: 24px auto; border: 1px solid var(--rule); border-radius: 20px;
   background: color-mix(in srgb, var(--surface) 97%, transparent); box-shadow: 0 12px 48px #0003;
+  transition: max-width 320ms cubic-bezier(.22, 1, .36, 1);
 }
 .space-backdrop, .stellar-transition-loader[data-space=true] {
   background:
@@ -179,7 +180,13 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
   body.view-week .workspace-open .cols .mini.field .tag { grid-column: 1 / -1; }
   .workspace-open .summary, .workspace-open .month-hint { font-size: 11px; margin: 0 0 8px; }
   .workspace-open .month-hint { display: block; }
-  .workspace-open .month { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  body.view-month .workspace-open #board { display: flex; flex-direction: column; overflow-x: hidden; }
+  .workspace-open .month { flex: 1 0 auto; min-height: 0;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: 16px repeat(var(--month-weeks, 5), minmax(48px, 1fr));
+    align-items: stretch; gap: 6px; }
+  .workspace-open .month .col { display: flex; flex-direction: column; }
+  .workspace-open .month .col-head { flex: 1; align-content: center; }
   .workspace-open .month .col-body, .workspace-open .month .col-head .dw { display: none; }
   .workspace-open .month .col-head { display: grid; justify-items: center; gap: 3px; min-height: 48px; padding: 6px 2px; border-bottom: 0; }
   .workspace-open .month .col-head .cnt { margin: 0; font-size: 10px; }
