@@ -60,3 +60,12 @@ def test_metrics_and_embedded_modules_require_authentication(monkeypatch):
     assert client.get("/api/metrics").status_code == 401
     for path in ("/metrics", "/weight?embedded=true", "/wake?embedded=true", "/consistency?embedded=true"):
         assert client.get(path).status_code == 303
+
+
+def test_report_changes_invalidate_metrics_even_when_completion_is_unchanged(monkeypatch):
+    rows = [{"day": "2026-11-04", "list_title": "Daily", "title": "Run", "is_completed": False, "status": "incomplete"}]
+    monkeypatch.setattr(server, "_definitions", lambda: [])
+    monkeypatch.setattr(server, "_task_projection", lambda columns: rows)
+    before = server.api_metrics()["revision"]
+    rows[0]["status"] = "unreported"
+    assert server.api_metrics()["revision"] != before

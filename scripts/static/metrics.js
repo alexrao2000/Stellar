@@ -176,6 +176,7 @@
     if (frame !== view.frame) { frame.hidden = true; frame.removeAttribute('id'); }
     frame = view.frame; activeView = view;
     frame.id = 'metric-frame'; frame.hidden = false;
+    try { frame.contentWindow.dispatchEvent(new Event('stellar:report-clock')); } catch {}
     views.delete(url); views.set(url, view);
     const taskViews = [...views.entries()].filter(([, item]) => item.kind === 'task');
     taskViews.slice(0, Math.max(0, taskViews.length - 2)).forEach(([key]) => discardView(key));

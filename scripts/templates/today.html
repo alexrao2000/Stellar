@@ -343,6 +343,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     </div>
   </header>
 
+  <div id="day-completion" class="daily-completion" aria-live="polite"></div>
   <div class="card" id="day-card">
     <h2>Tasks</h2>
     <div class="body" id="tasks">
@@ -715,7 +716,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         throw new Error(j.detail || ('HTTP ' + res.status));
       });
     }).then(
-      function (v) { settled(); if (window.stellarRecordsChanged) window.stellarRecordsChanged(); return v; },
+      function (v) { settled(); if (window.stellarRecordsChanged) window.stellarRecordsChanged(); if (VIEW === 'day' && CACHE[DAY]) requestAnimationFrame(function () { showDayCompletion(CACHE[DAY]); }); return v; },
       function (e) { settled(); throw e; }
     );
   }
@@ -738,11 +739,48 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   ['weight', 'wake'].forEach(function (id) {
     document.getElementById('field-' + id).addEventListener('click', function (e) {
       var input = document.getElementById(id);
-      if (e.target === input || input.disabled) return;
+      if (e.target === input || input.disabled || e.target.closest('button')) return;
       input.focus();
       if (id === 'wake' && input.showPicker) {
         try { input.showPicker(); } catch (err) { /* not a user gesture */ }
       }
+    });
+  });
+
+  function showDayCompletion(rows) {
+    var count = StellarReports.counts(rows);
+    var host = document.getElementById('day-completion');
+    host.replaceChildren();
+    var strong = document.createElement('strong'); strong.textContent = StellarReports.fraction(count);
+    var detail = document.createElement('span'); detail.textContent = count.required ? StellarReports.description(count) : 'No required tasks';
+    host.append(strong, detail);
+    var remaining = count.required - count.requiredDone;
+    host.title = count.complete ? 'All required tasks completed' : remaining + ' required task' + (remaining === 1 ? '' : 's') + ' remaining';
+  }
+
+  function saveReport(row, state) {
+    return post('/api/day/' + row.day + '/report', { title: row.title, state: state });
+  }
+
+  function bindFieldReport(button, getRow, refresh) {
+    StellarReports.bind(button, getRow, function (next) {
+      var row = getRow();
+      if (!row) return;
+      var previous = { is_completed: row.is_completed, status: row.status, completed_at: row.completed_at };
+      StellarReports.apply(row, next); refresh(); button.disabled = true;
+      saveReport(row, next).then(function (updated) { Object.assign(row, updated); storeMini(row); })
+        .catch(function (error) { Object.assign(row, previous); say(error.message, true); })
+        .finally(function () { button.disabled = !writable(row.day) || row.day > todayNow(); refresh(); if (CACHE[DAY]) showDayCompletion(CACHE[DAY]); });
+    });
+    button.addEventListener('click', function (event) { event.stopPropagation(); });
+  }
+  ['weight', 'wake'].forEach(function (id) {
+    var item = document.getElementById('item-' + id), old = item.querySelector('.box');
+    var button = document.createElement('button'); button.type = 'button'; button.className = 'box';
+    button.setAttribute('aria-label', 'Set ' + id + ' status'); old.replaceWith(button);
+    bindFieldReport(button, function () { return item._row; }, function () {
+      if (!item._row) return;
+      setTile(id, item._row.is_completed ? 'done' : 'todo'); decorate(item);
     });
   });
 
@@ -821,49 +859,55 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
          ~160ms and re-reading the day was another ~200ms, so waiting for both
          meant a third of a second of spinner on every tap. Rapid taps update
          the desired state immediately and are serialized below. */
+      var confirmedSnapshot = { is_completed: r.is_completed, status: r.status, completed_at: r.completed_at };
       function syncDesired() {
-        var sent = r.is_completed;
+        var sent = r._desiredReport;
+        var previous = r._confirmedReport, failed = false;
         b.dataset.syncing = '1';
         /* A scheduled task has no row, and so no id, until something is
            recorded: address it by day and title, and the server makes it. */
-        post(r.id ? '/api/task/' + r.id + '/toggle?done=' + sent
-                  : '/api/day/' + r.day + '/check?title=' + encodeURIComponent(r.title) + '&done=' + sent)
+        saveReport(r, sent)
           .then(function (updated) {
             if (updated && updated.weight_lbs !== undefined) r.weight_lbs = updated.weight_lbs;
             if (updated && 'completed_at' in updated) r.completed_at = updated.completed_at;
             if (updated && updated.id) { r.id = updated.id; delete r.virtual; }
-            decorate(item);
+            r._confirmedReport = sent;
+            confirmedSnapshot = { is_completed: updated.is_completed, status: updated.status, completed_at: updated.completed_at };
+            if (r._desiredReport === sent && updated && updated.status) r.status = updated.status;
+            decorate(item); showDayCompletion(rows);
           })
           .catch(function (e) {
             /* If the user clicked again, preserve that newer desired state and
                let the next request retry it. Only revert when this request
                still represents the visible state. */
-            if (r.is_completed === sent) {
-              r.is_completed = !sent;
-              setDone(b, !sent);
+            failed = true;
+            if (r._desiredReport === sent) {
+              Object.assign(r, confirmedSnapshot);
+              r._desiredReport = previous;
+              setDone(b, r.is_completed);
               decorate(item);
               say(e.message, true);
             }
           })
           .then(function () {
-            if (r.is_completed !== sent) {
+            if (r._desiredReport !== sent && (!failed || r._desiredReport !== previous)) {
               syncDesired();
               return;
             }
             delete b.dataset.syncing;
             storeWrite(DAY, rows);
-            say(r.title + (sent ? ' done' : ' un-done'));
+            showDayCompletion(rows);
+            if (!failed) say(r.title + ' · ' + StellarReports.labels[sent]);
           });
       }
 
-      b.addEventListener('click', function () {
-        if (b.disabled) return;
-        var next = !r.is_completed;
-        r.is_completed = next;
-        r.completed_at = next ? new Date().toISOString() : null;
-        setDone(b, next);
-        decorate(item);
-        if (!b.dataset.syncing) syncDesired();
+      r._confirmedReport = r.is_completed ? 'done' : r.status === 'incomplete' ? 'incomplete' : 'unreported';
+      r._desiredReport = r._confirmedReport;
+      StellarReports.bind(b, r, function (next) {
+          r._desiredReport = next;
+          StellarReports.apply(r, next);
+          setDone(b, r.is_completed); decorate(item); showDayCompletion(rows);
+          if (!b.dataset.syncing) syncDesired();
       });
       var item = document.createElement('div');
       item.className = 'item task-item';
@@ -888,6 +932,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     });
     arrange(host, entries.map(function (e) { return e.node; }));
     entries.forEach(function (e) { decorate(e.node); });
+    showDayCompletion(rows);
   }
 
   /* ---- optional, deadline, completion time ------------------------------ */
@@ -908,14 +953,18 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var due = new Date(r.deadline_at);
     var late = r.is_completed
       ? (r.completed_at && new Date(r.completed_at) > due)
-      : (!r.optional && Date.now() > due);
+      : (!r.optional && StellarReports.state(r) === 'incomplete' && Date.now() > due);
     return { due: due, missed: !!late };
   }
 
   function decorate(item) {
     var r = item._row;
+    var statusButton = item.querySelector('button.box');
+    if (statusButton) { statusButton.disabled = !r || !writable(r.day) || r.day > todayNow(); statusButton.setAttribute('aria-label', (r ? r.title + ', ' + StellarReports.labels[StellarReports.state(r)] : 'Status unavailable')); }
     var tile = item.querySelector('.task, .field');
     tile.classList.toggle('optional', !!(r && r.optional));
+    tile.classList.toggle('unreported', !!r && StellarReports.state(r) === 'unreported');
+    if (r && tile.tagName === 'BUTTON') { tile.setAttribute('aria-description', StellarReports.labels[StellarReports.state(r)] + '. Click to toggle; right-click for status.'); tile.title = StellarReports.labels[StellarReports.state(r)] + ' · Click to toggle; right-click for status'; }
 
     var tag = item.querySelector('.due');
     var st = deadlineState(r);
@@ -925,7 +974,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     } else {
       var when = hm(st.due) + (localDay(st.due) > r.day ? ' next day' : '');
       tag.className = 'due' + (st.missed ? ' missed' : '');
-      tag.textContent = st.missed ? 'missed ' + when : 'by ' + when;
+      tag.textContent = st.missed ? (r.is_completed ? 'late · ' : 'missed ') + when : 'by ' + when;
       tag.title = st.missed ? 'Deadline was ' + when : 'Deadline ' + when;
     }
 
@@ -1370,7 +1419,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   function owed(rows) {
-    return rows.filter(function (r) { return r.is_completed || !r.optional; }).length;
+    return rows.filter(function (r) { return !r.optional; }).length;
   }
 
   var rangeAssetsReady = null, rangeRenderVersion = 0;
@@ -1381,7 +1430,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     if (rangeAssetsReady) return rangeAssetsReady;
     rangeAssetsReady = Promise.all([
       ['link', 'href', '/app-assets/ranges.css?v=3'],
-      ['script', 'src', '/app-assets/ranges.js?v=2']
+      ['script', 'src', '/app-assets/ranges.js?v=3']
     ].map(function (asset) {
       return new Promise(function (resolve, reject) {
         var node = document.createElement(asset[0]);
@@ -1478,6 +1527,11 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     head.innerHTML = '<span class="dn">' + parts(day)[2] + '</span><span class="dw">' +
       esc(label(day, { weekday: 'short' })) + '</span>' +
       (rows.length && !future ? '<span class="cnt">' + nDone + '/' + owed(rows) + '</span>' : '');
+    var count = StellarReports.counts(rows);
+    if (head.querySelector('.cnt')) {
+      head.querySelector('.cnt').textContent = StellarReports.fraction(count); head.querySelector('.cnt').title = StellarReports.description(count);
+      if (count.bonus && !count.complete && count.required) { var detail = document.createElement('small'); detail.className = 'report-count-detail'; detail.textContent = count.requiredDone + ' required'; head.querySelector('.cnt').append(detail); }
+    }
     head.addEventListener('click', function () { go('day', day); });
     col.appendChild(head);
 
@@ -1493,7 +1547,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var st = deadlineState(r);
     if (!st) return '';
     var when = hm(st.due) + (localDay(st.due) > r.day ? '+1' : '');
-    return '<span class="tag' + (st.missed ? ' missed' : '') + '">' + (st.missed ? 'missed ' : '') + when + '</span>';
+    return '<span class="tag' + (st.missed ? ' missed' : '') + '">' + (st.missed ? (r.is_completed ? 'late ' : 'missed ') : '') + when + '</span>';
   }
 
   function storeMini(r) {
@@ -1501,20 +1555,22 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var cached = rows.find(function (row) { return row.title === r.title; });
     if (cached && cached !== r) Object.assign(cached, r);
     storeWrite(r.day, rows);
+    if (VIEW === 'day' && r.day === DAY) showDayCompletion(rows);
   }
 
   function paintMini(el, r) {
     el.classList.toggle('done', !!r.is_completed);
     el.classList.toggle('optional', !!r.optional && !r.is_completed);
+    el.classList.toggle('unreported', StellarReports.state(r) === 'unreported');
     if (el.tagName === 'BUTTON') {
       el.setAttribute('aria-pressed', String(!!r.is_completed));
-      el.setAttribute('aria-label', r.title + ', ' + label(r.day, { month: 'short', day: 'numeric' }) + ', ' + (r.is_completed ? 'completed' : 'not completed'));
+      el.setAttribute('aria-label', r.title + ', ' + label(r.day, { month: 'short', day: 'numeric' }) + ', ' + StellarReports.labels[StellarReports.state(r)]);
     }
     el.title = r.is_completed && r.completed_at
       ? 'Completed ' + new Date(r.completed_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })
       : '';
     if (el.classList.contains('range-check')) {
-      var action = el.disabled ? (r.day > todayNow() ? 'Upcoming task' : 'Read-only task') : (r.is_completed ? 'Mark incomplete' : 'Mark complete');
+      var action = el.disabled ? (r.day > todayNow() ? 'Upcoming task' : 'Read-only task') : StellarReports.labels[StellarReports.state(r)] + ' · Click to toggle; right-click for status';
       el.setAttribute('aria-description', action);
       el.title = action + ' · ' + r.title + ' · ' + label(r.day, { month: 'short', day: 'numeric' }) +
         (el.querySelector('.tag') ? ' · ' + el.querySelector('.tag').textContent : '');
@@ -1525,29 +1581,20 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'mini' + (compact ? ' range-check' : '');
+    b._row = r;
     b.disabled = locked;
     var star = compact ? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2C13.2 8.5 15.5 10.8 22 12C15.5 13.2 13.2 15.5 12 22C10.8 15.5 8.5 13.2 2 12C8.5 10.8 10.8 8.5 12 2Z"/></svg>' : '';
     b.innerHTML = '<span class="mbox">' + star + '</span><span class="t">' + esc(r.title) + '</span>' + tagFor(r);
     paintMini(b, r);
-    b.addEventListener('click', function () {
-      var next = !r.is_completed;
-      r.is_completed = next;
-      r.completed_at = next ? new Date().toISOString() : null;
-      paintMini(b, r); if (onUpdate) onUpdate();
-      post(r.id ? '/api/task/' + r.id + '/toggle?done=' + next
-                : '/api/day/' + r.day + '/check?title=' + encodeURIComponent(r.title) + '&done=' + next)
-        .then(function (u) {
-          if (u && u.id) { r.id = u.id; delete r.virtual; }
-          if (u && 'completed_at' in u) r.completed_at = u.completed_at;
-          paintMini(b, r); if (onUpdate) onUpdate();
-          storeMini(r);
-          say(r.title + (next ? ' done' : ' un-done') + ' · ' + label(r.day, { month: 'short', day: 'numeric' }));
-        })
-        .catch(function (e) {
-          r.is_completed = !next;
-          paintMini(b, r); if (onUpdate) onUpdate();
-          say(e.message, true);
-        });
+    StellarReports.bind(b, r, function (next) {
+        var previous = { is_completed: r.is_completed, status: r.status, completed_at: r.completed_at };
+        StellarReports.apply(r, next); paintMini(b, r); if (onUpdate) onUpdate();
+        b.disabled = true;
+        saveReport(r, next).then(function (updated) {
+          Object.assign(r, updated); storeMini(r);
+          say(r.title + ' · ' + StellarReports.labels[next]);
+        }).catch(function (error) { Object.assign(r, previous); say(error.message, true); })
+          .finally(function () { b.disabled = locked; paintMini(b, r); if (onUpdate) onUpdate(); });
     });
     return b;
   }
@@ -1558,18 +1605,21 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var isW = r.title === WEIGH;
     var el = document.createElement('div');
     el.className = 'mini field';
+    el._row = r;
     var input = document.createElement('input');
     if (isW) { input.type = 'number'; input.step = '0.1'; input.inputMode = 'decimal'; input.placeholder = 'lbs'; }
     else { input.type = 'time'; }
     input.disabled = locked;
     var shown = isW ? (r.weight_lbs != null ? Number(r.weight_lbs).toFixed(1) : '') : ((wakeFromNotes(r.notes) || {}).value || '');
     input.value = shown;
-    el.innerHTML = '<span class="mbox"></span><span class="lbl">' + (isW ? 'Weight' : 'Wake') + '</span>';
+    el.innerHTML = '<button type="button" class="mbox report-measure-status" aria-label="Set measurement status"></button><span class="lbl">' + (isW ? 'Weight' : 'Wake') + '</span>';
+    var statusButton = el.querySelector('.mbox'); statusButton.disabled = locked;
+    bindFieldReport(statusButton, function () { return r; }, function () { paintMini(el, r); if (onUpdate) onUpdate(); });
     el.appendChild(input);
     var tag = tagFor(r);
     if (tag) el.insertAdjacentHTML('beforeend', tag);
     paintMini(el, r);
-    el.addEventListener('click', function (e) { if (e.target !== input && !input.disabled) input.focus(); });
+    el.addEventListener('click', function (e) { if (e.target !== input && !e.target.closest('button') && !input.disabled) input.focus(); });
     input.addEventListener('change', function () {
       var v = input.value;
       if (!v || v === shown) return;
@@ -1593,6 +1643,11 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     });
     return el;
   }
+
+  window.addEventListener('stellar:report-clock', function () {
+    document.querySelectorAll('#tasks > .item').forEach(decorate);
+    document.querySelectorAll('#board .mini').forEach(function (node) { if (node._row) paintMini(node, node._row); });
+  });
 
   var shownToday = todayNow();
   function rollover() {

@@ -774,3 +774,44 @@ def test_range_views_paint_from_the_cache_and_prefetch_neighbours():
     assert "function prefetchRanges()" in html               # the ranges either side, ahead
     assert "if (painted !== snapshot(days)) renderBoard(days);" in html  # redraw only on a difference
     assert "body.ranged header { max-width: 560px; margin-left: auto; margin-right: auto; }" in html
+
+
+def test_report_outcomes_preserve_measurements_and_clear_explicitly(db):
+    fake = db([_task(1, "Run", optional=True)], [{"id": 3, "day": "2026-10-12", "title": "Run", "list_title": "Daily", "is_completed": False, "status": "needsAction", "notes": "A note to preserve", "weight_lbs": 150.4}])
+    for state, status in (("done", "completed"), ("incomplete", "incomplete"), ("unreported", "unreported")):
+        result = server.api_report("2026-10-12", server.TaskReport(title="Run", state=state))
+        assert result["report_state"] == state
+        assert result["status"] == status
+        assert result["is_completed"] is (state == "done")
+        assert bool(result["completed_at"]) is (state == "done")
+        assert result["notes"] == "A note to preserve"
+        assert result["weight_lbs"] == 150.4
+    assert len(fake.tables["task_history"]) == 1
+
+
+def test_report_materializes_only_the_selected_task_and_rejects_unwritable_days(db):
+    fake = db([_task(1, "Run", optional=True), _task(2, "Floss")])
+    row = server.api_report("2026-10-12", server.TaskReport(title="Run", state="incomplete"))
+    assert row["report_state"] == "incomplete" and row["optional"] is True
+    assert [r["title"] for r in fake.tables["task_history"]] == ["Run"]
+    for day in ("2026-07-31", "2026-10-14"):
+        with pytest.raises(HTTPException):
+            server.api_report(day, server.TaskReport(title="Floss", state="done"))
+    assert len(fake.tables["task_history"]) == 1
+
+
+def test_mandatory_deadlines_and_optional_defaults_are_separate():
+    from datetime import timezone
+    row = {"day": "2020-01-01", "title": "Run", "is_completed": False, "status": "needsAction"}
+    assert server._annotated_record(row, {}, row["day"], timezone.utc)["report_state"] == "incomplete"
+    assert server._annotated_record(row, {"optional": True}, row["day"], timezone.utc)["report_state"] == "unreported"
+    assert server._annotated_record(dict(row, status="incomplete"), {"optional": True}, row["day"], timezone.utc)["report_state"] == "incomplete"
+    assert server._annotated_record(dict(row, status="unreported"), {}, row["day"], timezone.utc)["report_state"] == "unreported"
+    assert server._annotated_record(dict(row, is_completed=True), {}, row["day"], timezone.utc)["report_state"] == "done"
+
+
+def test_reporting_done_again_keeps_the_original_completion_time(db):
+    when = "2026-10-12T18:30:00+00:00"
+    db([_task(1, "Run")], [{"id": 3, "day": "2026-10-12", "title": "Run", "list_title": "Daily", "is_completed": True, "status": "completed", "completed_at": when}])
+    result = server.api_report("2026-10-12", server.TaskReport(title="Run", state="done"))
+    assert result["completed_at"] == when

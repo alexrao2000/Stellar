@@ -29,7 +29,11 @@ async function check(engine) {
       let data = [];
       if (route.request().method() !== 'GET') {
         writes.push(url);
-        if (url.pathname.endsWith('/toggle')) {
+        if (url.pathname.endsWith('/report')) {
+          const body = route.request().postDataJSON();
+          const row = rows(url.pathname.split('/')[3]).find(row => row.title === body.title);
+          row.is_completed = body.state === 'done'; row.status = { done: 'completed', incomplete: 'incomplete', unreported: 'unreported' }[body.state]; data = row;
+        } else if (url.pathname.endsWith('/toggle')) {
           const id = decodeURIComponent(url.pathname.split('/')[3]);
           const row = [...days.values()].flat().find(row => String(row.id) === id);
           if (row) row.is_completed = url.searchParams.get('done') === 'true';
@@ -101,11 +105,11 @@ async function check(engine) {
     assert(widths.some(width => width > Math.min(startWidth, endWidth) + 1 && width < Math.max(startWidth, endWidth) - 1), 'Range widths interpolate');
     assert(poolReads - beforeAnimationReads <= 1, 'Animation does not repeatedly refresh Pool records');
     await page.locator('.range-table').waitFor();
-    const run = page.getByRole('button', { name: 'Run, Nov 4, not completed', exact: true });
+    const run = page.getByRole('button', { name: 'Run, Nov 4, Incomplete', exact: true });
     await run.click();
     await page.waitForTimeout(100);
-    assert.equal(await page.getByRole('button', { name: 'Run, Nov 4, completed', exact: true }).getAttribute('aria-pressed'), 'true');
-    assert(writes.some(url => url.pathname.endsWith('/toggle') && url.searchParams.get('done') === 'true'));
+    assert.equal(await page.getByRole('button', { name: 'Run, Nov 4, Done', exact: true }).getAttribute('aria-pressed'), 'true');
+    assert(writes.some(url => url.pathname.endsWith('/report')));
     const weight = page.getByRole('button', { name: /Weight, Wednesday, Nov 4, 150.4/ });
     await weight.click();
     const dialog = page.getByRole('dialog');
