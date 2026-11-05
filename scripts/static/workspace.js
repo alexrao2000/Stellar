@@ -1,7 +1,8 @@
 /* Tasks float within the Pool canvas while its editable stars retain clear
    space beside the panel. Pool stays mounted across range changes so edits
    survive. Range days wrap into rows instead of requiring every day to fit
-   across the screen. Compact screens keep the individual views. */
+   across the screen. Week stays at two columns rather than growing with the
+   viewport. Compact screens keep the individual views. */
 (() => {
   const toggle = document.getElementById('pool-toggle');
   if (!toggle) return;
@@ -9,6 +10,7 @@
   const pane = document.getElementById('pool-pane');
   const frame = document.getElementById('pool-frame');
   const tasks = host.querySelector('.dated-tasks');
+  const dayList = host.querySelector('#day-card');
   const fallback = document.getElementById('pool-fallback');
   const desktop = matchMedia('(min-width: 1100px)');
   let enabled = true;
@@ -43,16 +45,16 @@
     if (view !== 'day' && view !== 'month') {
       const dayWidth = 160, gap = 10, panelPadding = 34;
       const capacity = Math.max(1, Math.floor((maximum - panelPadding + gap) / (dayWidth + gap)));
-      const across = capacity >= columns ? columns : Math.min(4, capacity);
+      const across = view === 'week' ? 2 : capacity >= columns ? columns : Math.min(4, capacity);
       host.style.setProperty('--workspace-range-columns', across);
-      width = Math.min(maximum, across * (across > 4 ? 168 : 200) + (across - 1) * gap + panelPadding);
+      width = view === 'week' ? minimum : Math.min(maximum, across * (across > 4 ? 168 : 200) + (across - 1) * gap + panelPadding);
     }
     host.style.setProperty('--workspace-task-width', Math.max(minimum, width) + 'px');
-    if (open && view === 'day' && tasks.scrollHeight > tasks.clientHeight + 1 && maximum >= 520) {
+    if (open && view === 'day' && dayList.scrollHeight > dayList.clientHeight + 1 && maximum >= 520) {
       width = Math.min(maximum, 680);
       host.dataset.taskColumns = '2';
       host.style.setProperty('--workspace-task-width', width + 'px');
-      if (tasks.scrollHeight > tasks.clientHeight + 1 && maximum >= 740) {
+      if (dayList.scrollHeight > dayList.clientHeight + 1 && maximum >= 740) {
         host.dataset.taskColumns = '3';
         host.style.setProperty('--workspace-task-width', Math.min(maximum, 980) + 'px');
       }
