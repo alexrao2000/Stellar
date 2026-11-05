@@ -151,6 +151,23 @@ async function check(engine) {
       for (const input of await fields.all()) assert((await input.boundingBox()).height >= 44);
       await page.screenshot({ path: `/private/tmp/range-${view}-${engine}-mobile.png` });
     }
+    for (const width of [320, 360, 375, 390, 430]) {
+      await page.setViewportSize({ width, height: 844 });
+      for (const input of await page.locator('.range-focus .mini.field input').all()) {
+        const dimensions = await input.evaluate(input => {
+          const row = input.closest('.mini.field'), box = row.querySelector('.mbox');
+          const card = row.getBoundingClientRect(), field = input.getBoundingClientRect(), icon = box.getBoundingClientRect();
+          const hit = getComputedStyle(box, '::before');
+          return { left: field.left - card.left, right: card.right - field.right,
+            bottom: card.bottom - field.bottom, iconWidth: icon.width, iconHeight: icon.height,
+            hitWidth: parseFloat(hit.width), hitHeight: parseFloat(hit.height), height: field.height };
+        });
+        assert(dimensions.left >= 10 && dimensions.right >= 10 && dimensions.bottom >= 8, `${engine} ${width}: measurement stays inside its card`);
+        assert.equal(dimensions.iconHeight, dimensions.iconWidth, `${engine} ${width}: status icon stays square`);
+        assert(dimensions.hitWidth >= 44 && dimensions.hitHeight >= 44 && dimensions.height >= 44, 'Controls keep usable touch targets');
+      }
+      if (width === 320 || width === 390) await page.screenshot({ path: `/private/tmp/stellar-measurements-${engine}-${width}-after.png` });
+    }
     await page.setViewportSize({ width: 1440, height: 900 }); await page.locator('.range-table').waitFor();
     await page.locator('[data-view=day]').click(); await page.locator('#day-card').waitFor();
     assert.equal(await page.locator('.dated-tasks').boundingBox().then(box => box.height), originalHeight);

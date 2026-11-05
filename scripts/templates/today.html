@@ -1427,13 +1427,13 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   var rangeAssetsReady = null, rangeRenderVersion = 0;
-  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=4"]');
+  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=5"]');
   var rangeStylesReady = !!(rangeStyle && rangeStyle.sheet);
   function loadRangeAssets() {
     if (window.stellarRenderRange && rangeStylesReady) return Promise.resolve();
     if (rangeAssetsReady) return rangeAssetsReady;
     rangeAssetsReady = Promise.all([
-      ['link', 'href', '/app-assets/ranges.css?v=4'],
+      ['link', 'href', '/app-assets/ranges.css?v=5'],
       ['script', 'src', '/app-assets/ranges.js?v=4']
     ].map(function (asset) {
       return new Promise(function (resolve, reject) {

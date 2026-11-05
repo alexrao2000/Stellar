@@ -1,5 +1,6 @@
 /* Three report states share the same meaning across task lists and charts.
-   The picker provides explicit outcomes without inferring optional failures. */
+   The picker provides explicit outcomes without inferring optional failures.
+   Small status glyphs keep square dimensions and separate 44px tap targets. */
 .report-picker { position: fixed; inset: auto; margin: 0; z-index: 50; width: min(330px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 22px; border: 1px solid var(--rule); border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: 0 20px 80px #0005; }
 .report-picker::backdrop { background: transparent; }
 .report-picker h2 { margin: 0 30px 6px 0; font: 600 18px/1.4 system-ui, sans-serif; overflow-wrap: anywhere; }
@@ -34,10 +35,11 @@ html body .rank .num { white-space: normal; font-size: 11px; line-height: 1.5; }
 .heatgrid i.d.done { background: var(--done); }
 .pill.incomplete { background: var(--surface-2); color: var(--ink); }
 
-html body button.box, html body button.report-measure-status { padding: 0; color: inherit; cursor: pointer; }
+html body button.box, html body .mini button.report-measure-status { padding: 0; color: inherit; cursor: pointer; }
 html body button.box { position: relative; }
-html body button.box::before, html body button.report-measure-status::before { content: ''; position: absolute; inset: -12px; }
-html body button.report-measure-status { position: relative; background: transparent; min-height: 0; min-width: 0; line-height: 1; display: grid; place-items: center; }
+html body button.box::before, html body button.report-measure-status::before { content: ''; position: absolute; inset: auto; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+html body .mini button.report-measure-status { position: relative; background: transparent; min-height: 0; min-width: 0; line-height: 1; display: grid; place-items: center; }
+html body .field button.box { min-height: 0; min-width: 0; align-self: center; }
 .range-editor > .report-field-status { margin-top: 12px; width: 100%; }
 
 .report-picker:not([popover]) { inset: 0; margin: auto; }
