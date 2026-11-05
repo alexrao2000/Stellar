@@ -4,6 +4,34 @@ Pulls your daily **Google Tasks**, records every task's completion status, and p
 the special "Wake Up" and "Weigh yourself" notes into clean time-series so you can graph
 your **wake-up time** and **weight** over time. Runs on a schedule so the data stays fresh.
 
+## Screenshots
+
+The app screenshots use demo records.
+
+### Space
+
+Daily tasks sit inside the Pool, with undated work arranged as linked stars.
+
+![Space on desktop, showing daily tasks and the star-themed Pool](docs/screenshots/space-desktop.png)
+
+### Metrics
+
+Weight, wake-up times, and task history live together in Metrics.
+
+![Metrics showing a demo weight history and seven-day average](docs/screenshots/metrics-desktop.png)
+
+### On a phone
+
+<table>
+  <tr><th>Mobile Space</th><th>Home-screen icon preview</th></tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/space-mobile.png" alt="Space's mobile layout with daily tasks and measurement inputs" width="240"></td>
+    <td valign="top"><img src="docs/screenshots/phone-app-icon.png" alt="Illustrated phone home screen showing Stellar's black and white star icon" width="280"></td>
+  </tr>
+</table>
+
+The home-screen image is an illustration using Stellar's actual app icon.
+
 ## What it does
 
 - Reads all (or selected) Google Tasks lists via the Tasks API (read-only).
