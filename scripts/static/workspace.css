@@ -1,7 +1,8 @@
 /* Tasks float inside a full Pool canvas; its controls and stars reserve clear
    space around the panel. Range days wrap to fit the task panel. Compact views
    wrap labels and native controls. Space paints a CSS starfield before its
-   live canvas and records arrive. */
+   live canvas and records arrive. Floating panels share a viewport-based height;
+   controls stay fixed while records scroll. Week uses two compact columns. */
 .dated-tasks { min-width: 0; }
 .space-backdrop { display: block; position: fixed; inset: 0 0 0 var(--nav-w); pointer-events: none; z-index: 0; }
 html body[data-page=today] { background: #04050a; }
@@ -99,12 +100,17 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
   .workspace-open #pool-frame:not([data-ready=true]) { visibility: hidden; }
   .workspace-open .pool-pane-head { display: none; }
   .workspace-open .dated-tasks { position: absolute; z-index: 2; top: 24px; left: 24px;
-    width: var(--workspace-task-width); max-height: calc(100% - 48px); padding: 16px;
-    overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--rule); border-radius: 20px;
+    display: flex; flex-direction: column;
+    width: var(--workspace-task-width); height: calc(100% - 48px); padding: 16px;
+    overflow: hidden; border: 1px solid var(--rule); border-radius: 20px;
     background: color-mix(in srgb, var(--surface) 94%, transparent);
     backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
     box-shadow: 0 12px 48px #0005, 0 2px 8px #0003; }
-  .workspace-open .dated-tasks > header { max-width: none; margin-bottom: 12px; }
+  .workspace-open .dated-tasks > header { flex: 0 0 auto; width: 100%; max-width: none; margin: 0 0 12px; }
+  .workspace-open :is(#day-card,#board) { flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; }
+  .workspace-open #board { padding: 2px; margin: 0 -2px; }
+  .workspace-open #status { flex: 0 0 auto; }
   .workspace-open .dated-tasks > header > .eyebrow { display: none; }
   html body .workspace-open .dated-tasks h1 { font-size: 22px; }
   .workspace-open .views { display: flex; width: 100%; padding: 3px; margin-top: 10px; border-radius: 10px; }
@@ -117,7 +123,7 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
   .workspace-open #pick { grid-column: 2; grid-row: 2; padding: 5px 8px; width: 100%; min-height: 32px; font-size: 12px; }
   .workspace-open #go-today { grid-column: 3; grid-row: 2; font-size: 11px; padding: 0 8px; }
   .workspace-open .step { min-width: 32px; height: 32px; min-height: 32px; border-radius: 8px; font-size: 14px; }
-  .workspace-open #day-card { background: transparent; border: 0; box-shadow: none; margin: 0; overflow: visible; }
+  .workspace-open #day-card { background: transparent; border: 0; box-shadow: none; margin: 0; }
   .workspace-open #day-card > h2 { display: none; }
   .workspace-open #tasks { padding: 0; gap: 6px; }
   .workspace-open #tasks > .item { --tile-bg: var(--todo-bg); --tile-ink: var(--todo-ink);
@@ -163,6 +169,14 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
   .workspace-open .cols { grid-template-columns: repeat(var(--workspace-range-columns, 3), minmax(0, 1fr)); overflow-x: visible; }
   .workspace-open .cols .mini { padding: 6px 7px; border-radius: 8px; font-size: 12px; }
   .workspace-open .cols .col-body { gap: 4px; }
+  body.view-week .workspace-open .cols { gap: 8px; }
+  body.view-week .workspace-open .cols .col-head { padding: 6px 8px; }
+  body.view-week .workspace-open .cols .col-head .dn { font-size: 14px; }
+  body.view-week .workspace-open .cols .mini.field { display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(82px, 112px); align-items: center; }
+  body.view-week .workspace-open .cols .mini.field .mbox { display: none; }
+  body.view-week .workspace-open .cols .mini.field input { width: 100%; grid-column: 2; }
+  body.view-week .workspace-open .cols .mini.field .tag { grid-column: 1 / -1; }
   .workspace-open .summary, .workspace-open .month-hint { font-size: 11px; margin: 0 0 8px; }
   .workspace-open .month-hint { display: block; }
   .workspace-open .month { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
@@ -190,7 +204,7 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
   .workspace-open #tasks .when > button { min-height: 44px; }
 }
 @media (min-width: 1100px) and (max-height: 650px) and (pointer: fine) {
-  .workspace-open .dated-tasks { top: 16px; max-height: calc(100% - 32px); padding: 14px; }
+  .workspace-open .dated-tasks { top: 16px; height: calc(100% - 32px); padding: 14px; }
   body.view-day .workspace-open .date { display: none; }
   body.view-day .workspace-open :is(#prev-day,#next-day,#pick,#go-today) { grid-row: 1; }
 }
