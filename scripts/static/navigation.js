@@ -25,7 +25,7 @@
   const remember = () => {
     const url = safe(location.href);
     if (!url) return;
-    if (!document.hidden) write('stellar:last-location', url);
+    if (!document.hidden && window.stellarPageActive?.() !== false) write('stellar:last-location', url);
     const section = ['/', '/today'].includes(location.pathname) ? 'tasks' : location.pathname === '/metrics' ? 'metrics' : null;
     if (section) write('stellar:location:' + section, url === '/' ? '/?view=day' : url);
     document.querySelectorAll('.sidenav a[data-section]').forEach(a => {

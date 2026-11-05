@@ -44,9 +44,10 @@ def test_manifest_and_icons_are_available_before_sign_in(client):
 def test_public_assets_do_not_open_the_auth_boundary(client):
     for path in ("/sw.js", "/offline", "/app-assets/app.css", "/app-assets/stellar.css", "/app-assets/app.js",
                  "/app-assets/workspace.css", "/app-assets/workspace.js", "/app-assets/navigation.js",
-                 "/app-assets/navigation.css", "/app-assets/metrics.js"):
+                 "/app-assets/navigation.css", "/app-assets/metrics.js",
+                 "/app-assets/sections.js", "/app-assets/sections.css"):
         assert client.get(path).status_code == 200
-    for path in ("/", "/tasks", "/weight", "/pool", "/pool?embedded=true"):
+    for path in ("/", "/tasks", "/weight", "/pool", "/pool?embedded=true", "/metrics?tab_frame=true", "/data?tab_frame=true", "/tasks?tab_frame=true"):
         assert client.get(path).status_code == 303
     assert client.get("/api/task_history").status_code == 401
     assert client.post("/api/day/2026-11-04/weight?lbs=150",
@@ -137,3 +138,15 @@ def test_tasks_page_does_not_read_pool_until_the_browser_opens_it(client, monkey
     assert response.status_code == 200
     assert 'aria-controls="pool-pane"' in response.text
     assert '<iframe id="pool-frame" title="Undated task pool"></iframe>' in response.text
+
+
+def test_cached_sections_share_only_the_outer_sidebar(client, monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    monkeypatch.setattr(server, "_definitions", lambda **kwargs: [])
+    for path in ("/", "/metrics", "/data", "/tasks", "/pool", "/docs"):
+        page = client.get(path + "?tab_frame=true")
+        assert page.status_code == 200
+        assert '<nav class="sidenav"' not in page.text
+        assert '/app-assets/sections.js?v=1' in page.text
+        assert 'data-embedded="true"' not in page.text
+        assert '<nav class="sidenav"' in client.get(path).text

@@ -597,7 +597,7 @@ def _nav(active: str) -> str:
 
 
 @app.get("/docs", include_in_schema=False)
-def swagger_docs() -> HTMLResponse:
+def swagger_docs(tab_frame: bool = False) -> HTMLResponse:
     """FastAPI's API reference, with the app's sidebar on it.
 
     The stock page is a dead end: nothing on it links back, so the nav's last
@@ -619,7 +619,7 @@ def swagger_docs() -> HTMLResponse:
         log.warning("swagger html shape changed; serving /docs without the nav")
         return HTMLResponse(page)
     backdrop = '<div class="space-backdrop" aria-hidden="true"></div>'
-    return HTMLResponse(document(page, _nav("/docs") + _BOOT_GATE_JS + backdrop, _NAV_CSS).replace(
+    return HTMLResponse(document(page, ("" if tab_frame else _nav("/docs")) + _BOOT_GATE_JS + backdrop, _NAV_CSS).replace(
         "<body>", '<body data-page="docs" data-space-theme="true">', 1))
 
 
@@ -641,6 +641,7 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.
     embedded = bool(boot.get("embedded"))
+    tab_frame = bool(boot.get("tab_frame"))
     themed = not embedded and template not in {"today.html", "pool.html"}
     backdrop = '<div class="space-backdrop" aria-hidden="true"></div>' if themed else ""
     reminder_assets = ('<link rel="stylesheet" href="/app-assets/notifications.css?v=1">'
@@ -650,7 +651,7 @@ def _render(template: str, boot: dict, active: str = "") -> str:
         attributes += ' data-embedded="true"'
     if themed:
         attributes += ' data-space-theme="true"'
-    return document(html, ("" if embedded else _nav(active)) + gate + backdrop, _NAV_CSS + reminder_assets).replace(
+    return document(html, ("" if embedded or tab_frame else _nav(active)) + gate + backdrop, _NAV_CSS + reminder_assets).replace(
         "<body>", "<body " + attributes + ">", 1
     )
 
@@ -1799,7 +1800,7 @@ VIEWS = ("day", "3days", "week", "month", "custom")
 @app.get("/", response_class=HTMLResponse)
 @app.get("/today", response_class=HTMLResponse)
 def page_today(day: str | None = None, view: str = "day",
-               start: str | None = None, end: str | None = None) -> str:
+               start: str | None = None, end: str | None = None, tab_frame: bool = False) -> str:
     """Space, and the app's front door.
 
     Served at both / and /today. One day by default -- recording the day is the
@@ -1836,6 +1837,7 @@ def page_today(day: str | None = None, view: str = "day",
         "start": start,
         "end": end,
         "rangeMax": RANGE_MAX_DAYS,
+        "tab_frame": tab_frame,
     }, active="/")
 
 
@@ -1855,7 +1857,7 @@ def _calendar_versions() -> dict:
 
 
 @app.get("/tasks", response_class=HTMLResponse)
-def page_tasks() -> str:
+def page_tasks(tab_frame: bool = False) -> str:
     """Per-task settings: optional or required, and a deadline."""
     defs = _definitions(fresh=True)
     migrated = all("series_id" in d and "deleted_at" in d and "optional" in d for d in defs)
@@ -1877,6 +1879,7 @@ def page_tasks() -> str:
         "today": today,
         "floor": WRITE_FLOOR.isoformat(),
         "tasks": [s for _k, s in tasks],
+        "tab_frame": tab_frame,
     }, active="/tasks")
 
 
@@ -1945,8 +1948,8 @@ def page_consistency(embedded: bool = False, task: str | None = None, titles: st
 
 
 @app.get("/metrics", response_class=HTMLResponse)
-def page_metrics() -> str:
-    return _render("metrics.html", {"mode": "inline"}, active="/metrics")
+def page_metrics(tab_frame: bool = False) -> str:
+    return _render("metrics.html", {"mode": "inline", "tab_frame": tab_frame}, active="/metrics")
 
 
 @app.get("/api/metrics")
@@ -1991,9 +1994,9 @@ def api_metrics() -> dict:
 
 
 @app.get("/data", response_class=HTMLResponse)
-def page_data() -> str:
+def page_data(tab_frame: bool = False) -> str:
     return _render("data_table.html", {
-        "mode": "live", "endpoint": "/api/task_history",
+        "mode": "live", "endpoint": "/api/task_history", "tab_frame": tab_frame,
     }, active="/data")
 
 
@@ -2247,9 +2250,9 @@ def api_pool_unlink(before_id: int, after_id: int) -> dict:
 
 
 @app.get("/pool", response_class=HTMLResponse)
-def page_pool(embedded: bool = False) -> str:
+def page_pool(embedded: bool = False, tab_frame: bool = False) -> str:
     return _render("pool.html", {
-        "mode": "inline", "tasks": [], "edges": [], "loading": True, "embedded": embedded,
+        "mode": "inline", "tasks": [], "edges": [], "loading": True, "embedded": embedded, "tab_frame": tab_frame,
     }, active="/pool")
 
 
