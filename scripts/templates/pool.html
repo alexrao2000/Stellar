@@ -3,7 +3,9 @@
 /* Pool colours live on .sky so the shared sidebar retains its theme. Star
    artwork pulses independently while labels, hit targets and links stay put.
    The far sky is cached; only nearby specks redraw, at a limited frame rate.
-   Motion pauses offscreen and respects the system's reduced-motion setting. */
+   Motion pauses offscreen and respects the system's reduced-motion setting.
+   Dragging only moves stars; prerequisites are chosen explicitly in task
+   details. Redraws and interrupted gestures cancel any unfinished drag. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -77,7 +79,6 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 .star.dim .name { color: rgba(190,186,214,.34); }
 /* After .dim, so it wins on source order where the two would otherwise tie. */
 .star.flip .name, .star.flip .waiting { left: auto; right: 15px; text-align: right; }
-.star.linking .name { color: var(--line-live); }
 
 .hud {
   position: absolute; left: 26px; top: 20px; z-index: 3;
@@ -183,6 +184,21 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   color: rgba(150,146,185,.6); font-size: .9rem; line-height: 1; padding: 2px 4px;
 }
 #panel .waits button:hover { color: #E3806B; }
+#panel .link-picker { margin-top: 12px; font-size: 13px; }
+#panel .link-picker summary { min-height: 44px; display: flex; align-items: center;
+  cursor: pointer; color: var(--ink-sky); }
+#panel .link-picker summary::before { content: '+'; margin-right: 8px; }
+#panel .link-picker summary::-webkit-details-marker { display: none; }
+#panel .link-picker[open] summary::before { content: '−'; }
+#panel .link-picker label { display: block; color: var(--ink-sky); margin: 2px 0 8px; line-height: 1.5; }
+#panel .link-picker select { width: 100%; min-width: 0; min-height: 44px; padding: 8px;
+  border: 1px solid var(--line); border-radius: 7px; background: #10111e;
+  color: var(--ink-sky); font: 16px/1.5 system-ui, sans-serif; }
+#panel .link-actions { display: flex; gap: 8px; margin-top: 8px; }
+#panel .link-actions button { flex: 1; min-height: 44px; padding: 8px;
+  border: 1px solid var(--line); border-radius: 7px; background: #10111e;
+  color: var(--ink-sky); font: 13px/1.5 system-ui, sans-serif; cursor: pointer; }
+#panel .link-picker :is(summary,select,button):focus-visible { outline: 2px solid var(--line-live); outline-offset: 2px; }
 #panel .acts { display: flex; gap: 8px; margin-top: 12px; }
 #panel .acts button {
   flex: 1; font: inherit; font-size: .78rem; padding: 8px 10px; cursor: pointer;
@@ -280,8 +296,9 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   <div id="veil"><div class="box" role="alertdialog" aria-modal="true"
        aria-labelledby="veilh"></div></div>
   <details class="key"><summary>How to use the pool</summary>
-    <p>Select a star to edit it. Drag to move; drag onto another star to link them.
-    Select empty sky to add a task there. An unlit star is waiting on another task.</p>
+    <p>Select a star to edit it, or drag to move it. In task details, choose Add
+    prerequisite to make it wait on another task. Select empty sky to add a task
+    there. Press Escape to cancel a drag or close task details.</p>
   </details>
 </div>
 
@@ -313,6 +330,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       if (event.origin !== location.origin || event.source !== parent ||
           !event.data || event.data.type !== 'stellar:pool-visibility') return;
       embeddedVisible = event.data.visible === true;
+      if (!embeddedVisible) cancelDrag();
       var inset = Math.max(0, Math.min(Number(event.data.inset) || 0, innerWidth - 300));
       document.body.dataset.workspaceOverlay = String(inset > 0);
       sky.style.setProperty('--workspace-inset', inset + 'px');
@@ -550,6 +568,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   }
 
   function paint() {
+    cancelDrag();
     reindex();
     Array.prototype.forEach.call(sky.querySelectorAll('.star'), function (n) { n.remove(); });
 
@@ -633,7 +652,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   /* Thin, solid, stopping short of both stars. Dashes and mid-line arrowheads
      are graph-diagram furniture; a chart just joins the stars, and direction
      is carried by which end is lit. */
-  function drawLines(live) {
+  function drawLines() {
     if (!W || !H) { svg.innerHTML = ''; return; }
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     var out = '';
@@ -650,11 +669,6 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
              '" x2="' + (bx - dx * pad) + '" y2="' + (by - dy * pad) +
              '" stroke="var(--line)" stroke-width="0.7"/>';
     });
-    if (live) {
-      out += '<line x1="' + live.x1 + '" y1="' + live.y1 + '" x2="' + live.x2 +
-             '" y2="' + live.y2 + '" stroke="var(--line-live)" stroke-width="0.9" ' +
-             'stroke-dasharray="2 4"/>';
-    }
     svg.innerHTML = out;
   }
 
@@ -682,18 +696,38 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
              y: Math.max(my, Math.min(H - my, task.y * H)) };
   }
 
-  /* ---- dragging: move, or link ----------------------------------------- */
+  /* ---- dragging -------------------------------------------------------- */
   var drag = null;
 
+  function cancelDrag() {
+    if (!drag) return false;
+    var d = drag; drag = null; bgPress = null;
+    d.t.x = d.sx; d.t.y = d.sy;
+    d.el.classList.remove('held');
+    if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
+    if (d.el.isConnected) {
+      var point = screenPoint(d.t);
+      d.el.style.left = point.x + 'px'; d.el.style.top = point.y + 'px';
+      fitLabel(d.el);
+    }
+    drawLines();
+    return true;
+  }
+
   sky.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0 || e.isPrimary === false) return;
     var el = e.target.closest ? e.target.closest('.star') : null;
     if (!el || el.classList.contains('ghost')) return;
     var t = byId[el.dataset.id];
     if (!t) return;
+    cancelDrag();
     el.setPointerCapture(e.pointerId);
     el.classList.add('held');
     drag = { el: el, t: t, id: e.pointerId, moved: false,
              ox: e.clientX, oy: e.clientY, sx: t.x, sy: t.y };
+    el.addEventListener('lostpointercapture', function (event) {
+      if (drag && drag.el === el && drag.id === event.pointerId) cancelDrag();
+    }, { once: true });
     e.preventDefault();
   });
 
@@ -704,54 +738,23 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     drag.moved = true;
 
     var r = mapField.getBoundingClientRect();
-    var over = document.elementFromPoint(e.clientX, e.clientY);
-    var onto = over && over.closest ? over.closest('.star') : null;
-    if (onto === drag.el) onto = null;
-
-    if (onto) {
-      /* Held over another star: this is a link, not a move. Snap the ghost
-         line to the target and leave the dragged star where it was. */
-      drag.onto = byId[onto.dataset.id];
-      drag.el.classList.add('linking');
-      var origin = screenPoint({ x: drag.sx, y: drag.sy }), target = screenPoint(drag.onto);
-      drag.el.style.left = origin.x + 'px';
-      drag.el.style.top = origin.y + 'px';
-      fitLabel(drag.el);
-      drawLines({ x1: origin.x, y1: origin.y, x2: target.x, y2: target.y });
-      note('link: ' + drag.t.title + ' before ' + drag.onto.title);
-    } else {
-      drag.onto = null;
-      drag.el.classList.remove('linking');
-      drag.t.x = Math.min(Math.max((e.clientX - r.left) / W, 0.02), 0.98);
-      drag.t.y = Math.min(Math.max((e.clientY - r.top) / H, 0.02), 0.98);
-      var point = screenPoint(drag.t);
-      drag.el.style.left = point.x + 'px';
-      drag.el.style.top = point.y + 'px';
-      fitLabel(drag.el);
-      drawLines();
-      note('');
-    }
+    drag.t.x = Math.min(Math.max((e.clientX - r.left) / W, 0.02), 0.98);
+    drag.t.y = Math.min(Math.max((e.clientY - r.top) / H, 0.02), 0.98);
+    var point = screenPoint(drag.t);
+    drag.el.style.left = point.x + 'px';
+    drag.el.style.top = point.y + 'px';
+    fitLabel(drag.el);
+    drawLines();
   });
 
   function endDrag(e) {
     if (!drag || e.pointerId !== drag.id) return;
+    if (e.type === 'pointercancel' || !drag.el.isConnected) { cancelDrag(); return; }
     var d = drag; drag = null;
-    d.el.classList.remove('held', 'linking');
-    if (e.type === 'pointercancel') { d.t.x = d.sx; d.t.y = d.sy; paint(); return; }
+    d.el.classList.remove('held');
+    if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
 
     if (!d.moved) { openPanel(d.t); return; }        // a click opens it
-
-    if (d.onto) {
-      var before = d.t.id, after = d.onto.id;
-      post('/api/pool/link?before_id=' + before + '&after_id=' + after)
-        .then(function (r) {
-          if (!r.already) EDGES.push({ before_id: before, after_id: after });
-          note(r.already ? 'already linked' : d.t.title + ' now comes first');
-          paint();
-        })
-        .catch(function (err) { note(err.message, true); paint(); });
-      return;
-    }
 
     /* Position is written on drop, not while dragging: one row, one write. */
     post('/api/pool/task/' + d.t.id + '/move?x=' + d.t.x.toFixed(4) +
@@ -763,8 +766,10 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       });
     drawLines();
   }
-  sky.addEventListener('pointerup', endDrag);
-  sky.addEventListener('pointercancel', endDrag);
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+  window.addEventListener('blur', cancelDrag);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) cancelDrag(); });
 
   veil.addEventListener('pointerdown', function (e) {
     if (e.target === veil) closeVeil();          // backdrop only
@@ -807,7 +812,12 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
   });
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
+    if (cancelDrag()) { e.preventDefault(); return; }
     if (veil.classList.contains('open')) { closeVeil(); return; }
+    var linkPicker = document.getElementById('pool-link-picker');
+    if (linkPicker && linkPicker.open) {
+      linkPicker.open = false; linkPicker.querySelector('summary').focus(); return;
+    }
     if (PENDING) { dropNewStar(); return; }
     closePanel();
   });
@@ -849,6 +859,19 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
       }).join('') + '</div>';
     }
 
+    var linkable = TASKS.filter(function (other) {
+      return other.id !== t.id && isOpen(other) && !other.pending &&
+        !EDGES.some(function (edge) { return edge.before_id === other.id && edge.after_id === t.id; });
+    }).sort(function (a, b) { return a.title.localeCompare(b.title); });
+    if (!done && linkable.length) {
+      html += '<details class="link-picker" id="pool-link-picker"><summary>Add prerequisite</summary>' +
+        '<form id="pool-link-form"><label for="pool-prerequisite">Task that must finish first</label>' +
+        '<select id="pool-prerequisite" required><option value="">Choose a task…</option>' +
+        linkable.map(function (other) { return '<option value="' + esc(other.id) + '">' + esc(other.title) + '</option>'; }).join('') +
+        '</select><div class="link-actions"><button type="submit">Link task</button>' +
+        '<button type="button" id="pool-link-cancel">Cancel</button></div></form></details>';
+    }
+
     html += '<div class="acts">' +
       '<button class="primary" id="ptoggle">' + (done ? 'Restore' : 'Resolve') + '</button>' +
       '<button id="pclose">Close</button></div>' +
@@ -866,6 +889,34 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     panelEl.style.left = left + 'px';
     panelEl.style.top = top + 'px';
 
+    var linkPicker = document.getElementById('pool-link-picker');
+    if (linkPicker) {
+      linkPicker.addEventListener('toggle', function () {
+        var box = panelEl.getBoundingClientRect(), bounds = sky.getBoundingClientRect();
+        if (box.bottom > bounds.bottom - 12) panelEl.style.top = Math.max(12, panelEl.offsetTop - (box.bottom - bounds.bottom + 12)) + 'px';
+      });
+      document.getElementById('pool-link-cancel').addEventListener('click', function () {
+        linkPicker.open = false; linkPicker.querySelector('summary').focus();
+      });
+      document.getElementById('pool-link-form').addEventListener('submit', function (event) {
+        event.preventDefault();
+        var before = byId[document.getElementById('pool-prerequisite').value];
+        if (!before) return;
+        var controls = Array.prototype.slice.call(this.querySelectorAll('button,select'));
+        controls.forEach(function (control) { control.disabled = true; });
+        post('/api/pool/link?before_id=' + encodeURIComponent(before.id) + '&after_id=' + encodeURIComponent(t.id))
+          .then(function (result) {
+            if (!result.already) EDGES.push({ before_id: before.id, after_id: t.id });
+            note(t.title + ' now waits on ' + before.title);
+            paint(); openPanel(t);
+          })
+          .catch(function (err) {
+            note(err.message, true);
+            controls.forEach(function (control) { control.disabled = false; });
+          });
+      });
+    }
+
     document.getElementById('pclose').addEventListener('click', closePanel);
     document.getElementById('pdelete').addEventListener('click', function () {
       confirmDelete(t);
@@ -882,7 +933,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
     });
     Array.prototype.forEach.call(panelEl.querySelectorAll('[data-unlink]'), function (b) {
       b.addEventListener('click', function () {
-        var before = Number(b.dataset.unlink);
+        var before = byId[b.dataset.unlink] ? byId[b.dataset.unlink].id : b.dataset.unlink;
         post('/api/pool/unlink?before_id=' + before + '&after_id=' + t.id)
           .then(function () {
             EDGES = EDGES.filter(function (e) {
