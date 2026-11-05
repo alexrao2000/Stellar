@@ -478,10 +478,12 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   /* Inline: the server already had the rows and embedded them, so there is no
      second round trip and nothing to show a loading state for. Live: fetch.
      Both paths reach the same handler. */
-  (BOOT.mode === 'live'
+  var metricData;
+  try { if (BOOT.embedded && parent !== window && parent.stellarMetricData) metricData = parent.stellarMetricData(BOOT.endpoint); } catch (e) {}
+  (metricData || (BOOT.mode === 'live'
     ? fetch(BOOT.endpoint, { headers: BOOT.headers || {} })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    : Promise.resolve(BOOT.data))
+    : Promise.resolve(BOOT.data)))
     .then(function (data) {
       /* Daily only. One-off tasks from other lists have no meaningful rate. */
       ROWS = data.filter(function (r) {
@@ -513,10 +515,12 @@ button:focus-visible, select:focus-visible, input:focus-visible {
       summary();
       ranking();
       detail();
+      document.body.dataset.metricReady = 'true';
     })
     .catch(function (e) {
       document.getElementById('rank').innerHTML =
         '<div class="empty">Could not load: ' + esc(e.message) + '</div>';
+      document.body.dataset.metricReady = 'error';
     });
 })();
 </script>

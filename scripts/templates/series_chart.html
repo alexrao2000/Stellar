@@ -518,18 +518,22 @@ footer.foot b { color: var(--ink); font-weight: 600; }
   }
 
   if (BOOT.mode === 'live') {
-    fetch(BOOT.endpoint, { headers: BOOT.headers || {} })
+    var metricData;
+    try { if (BOOT.embedded && parent !== window && parent.stellarMetricData) metricData = parent.stellarMetricData(BOOT.endpoint); } catch (e) {}
+    (metricData || fetch(BOOT.endpoint, { headers: BOOT.headers || {} })
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
-      })
+      }))
       .then(function (data) {
-        if (!data.length) { unavailable('No readings yet. Record one in your daily check-in.', false); return; }
+        if (!data.length) { unavailable('No readings yet. Record one in your daily check-in.', false); document.body.dataset.metricReady = 'true'; return; }
         ALL = data;
         start();
+        document.body.dataset.metricReady = 'true';
       })
       .catch(function (err) {
         unavailable('Could not load your readings. Check your connection and retry.', true);
+        document.body.dataset.metricReady = 'error';
       });
   } else {
     ALL = BOOT.data;

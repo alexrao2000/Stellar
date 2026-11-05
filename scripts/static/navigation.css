@@ -31,14 +31,37 @@ html body[data-page=metrics] { margin: 0; background: var(--bg); color: var(--in
 body[data-page=metrics] * { box-sizing: border-box; }
 .metrics-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 20px 48px; }
 .metrics-wrap > .eyebrow { color: var(--ink-muted); font: 11px/1.5 ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; }
-.metrics-wrap > h1 { margin: 0 0 8px; }
-.metrics-wrap > .sub { color: var(--ink-muted); font-size: 14px; margin: 0 0 20px; }
-.metric-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0 12px; max-width: 100%; }
-.metric-tabs button { flex: 0 0 auto; max-width: 240px; min-height: 44px; padding: 10px 16px;
-  border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink-muted);
-  font: 550 14px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; cursor: pointer; }
-.metric-tabs button[aria-selected=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.metrics-wrap > h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 34px); line-height: 1.15; letter-spacing: -.04em; }
+.metrics-wrap > .sub { color: var(--ink-muted); font-size: 14px; line-height: 1.5; margin: 0 0 24px; }
+.metric-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  border-bottom: 1px solid var(--rule); margin-bottom: 20px; }
+.metric-tabs { display: flex; align-items: stretch; gap: 24px; min-width: 0; }
+.metric-tabs button { flex: 0 0 auto; min-height: 46px; padding: 10px 0; margin-bottom: -1px;
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted);
+  font: 500 14px/1.5 system-ui, sans-serif; cursor: pointer; }
+.metric-tabs button:hover { color: var(--ink); }
+.metric-tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--ink); }
+.metric-picker { position: relative; min-width: 0; padding-bottom: 6px; }
+#metric-task-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 280px;
+  min-height: 36px; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--surface); color: var(--ink-muted); font: 500 13px/1.5 system-ui, sans-serif; cursor: pointer; }
+#metric-task-toggle:disabled { cursor: default; opacity: .5; }
+#metric-task-toggle[data-active=true] { color: var(--ink); border-color: var(--ink-muted); }
+#metric-task-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#metric-task-toggle svg { flex: 0 0 16px; }
+#metric-task-menu { position: absolute; z-index: 10; top: calc(100% + 4px); right: 0;
+  width: min(360px, calc(100vw - 32px)); padding: 8px; border: 1px solid var(--rule); border-radius: 12px;
+  background: var(--surface); box-shadow: 0 12px 36px #0002; }
+#metric-task-search { width: 100%; min-height: 40px; padding: 8px 10px; margin-bottom: 6px;
+  border: 1px solid var(--rule); border-radius: 7px; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+#metric-task-options { display: flex; flex-direction: column; max-height: min(300px, 40dvh); overflow-y: auto; overscroll-behavior: contain; }
+#metric-task-options button { min-height: 42px; flex-shrink: 0; padding: 9px 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--ink-muted); text-align: left; overflow-wrap: anywhere; font: 13px/1.5 system-ui, sans-serif; cursor: pointer; }
+#metric-task-options button:hover, #metric-task-options button[aria-current=true] { background: var(--surface-2); color: var(--ink); }
+#metric-task-empty { padding: 12px 10px; margin: 0; color: var(--ink-muted); font-size: 13px; }
+.metric-toolbar button:focus-visible, #metric-task-search:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 #metric-frame { border: 0; display: block; width: 100%; height: 180px; }
+#metric-panel[aria-busy=true] #metric-frame { visibility: hidden; }
 #metric-status { color: var(--ink-muted); font-size: 14px; line-height: 1.5; }
 #metric-status:empty { display: none; }
 #metric-retry { min-height: 44px; padding: 8px 16px; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; }
@@ -51,8 +74,16 @@ body[data-embedded=true] .heat-inspector { display: block; }
 body.metric-detail #strip, body.metric-detail #ranking-card,
 body.metric-detail #task-picker, body.metric-detail .wrap > .sub { display: none; }
 body.metric-detail #detail-card { margin-top: 0; }
+body.metric-detail #detail-card > h2 { font-size: 14px; line-height: 1.5; letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
+body.metric-detail .headline .meta { min-width: 0; max-width: 100%; overflow-wrap: anywhere; line-height: 1.5; }
 @media (max-width: 760px) {
   html body[data-page=metrics] .wrap { padding: 24px 16px; }
-  .metric-tabs button { max-width: 220px; }
+  .metric-toolbar { flex-wrap: wrap; gap: 10px; padding-bottom: 12px; }
+  .metric-tabs { width: 100%; gap: 0; border-bottom: 1px solid var(--rule); }
+  .metric-tabs button { flex: 1; }
+  .metric-picker { width: 100%; padding: 0; }
+  #metric-task-toggle { width: 100%; max-width: none; min-height: 44px; }
+  #metric-task-menu { width: 100%; }
+  #metric-task-search { font-size: 16px; }
   body[data-embedded=true] .rank .row .name, body[data-embedded=true] .rank .row .name button { white-space: normal; overflow-wrap: anywhere; }
 }

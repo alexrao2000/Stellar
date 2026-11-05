@@ -113,10 +113,13 @@
       requestAnimationFrame(() => {
         queued = false;
         parent.postMessage({ type: 'stellar:metric-height', url: location.pathname + location.search,
-          height: document.body.getBoundingClientRect().height }, location.origin);
+          height: document.body.getBoundingClientRect().height,
+          ready: !!document.body.dataset.metricReady && !document.documentElement.classList.contains('app-booting'),
+          failed: document.body.dataset.metricReady === 'error' }, location.origin);
       });
     };
     new ResizeObserver(resize).observe(document.body);
+    new MutationObserver(resize).observe(document.body, { attributes: true, attributeFilter: ['data-metric-ready'] });
     new MutationObserver(resize).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     window.addEventListener('load', resize);
     resize();

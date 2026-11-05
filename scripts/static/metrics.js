@@ -1,18 +1,111 @@
-/* Tabs come from saved task records, not a hardcoded list. Module selection and
-   chart controls live locally; record changes are refreshed from the server. */
+/* The selected chart loads before catalog discovery and idle prefetches. All
+   task charts share one in-memory history request; nothing is stored on disk.
+   Record revisions clear the cache. Task discovery stays in a searchable menu
+   so the main navigation remains a single row. */
 (() => {
   const tabs = document.getElementById('metric-tabs');
   if (!tabs) return;
   const frame = document.getElementById('metric-frame');
+  const panel = document.getElementById('metric-panel');
   const status = document.getElementById('metric-status');
   const retry = document.getElementById('metric-retry');
-  let modules = [], revision = null, busy = false, checked = 0, queued = false, initialized = false;
+  const picker = document.querySelector('.metric-picker');
+  const toggle = document.getElementById('metric-task-toggle');
+  const menu = document.getElementById('metric-task-menu');
+  const search = document.getElementById('metric-task-search');
+  const options = document.getElementById('metric-task-options');
+  let modules = [
+    { id: 'overview', label: 'Overview', kind: 'overview' },
+    { id: 'weight', label: 'Weight', kind: 'weight' },
+    { id: 'wake', label: 'Wake', kind: 'wake' },
+  ];
+  let revision = null, busy = false, checked = 0, queued = false, initialized = false;
+  let catalogReady = false, catalogError = false, activeReady = false, activeFailed = false, generation = 0, epoch = 0, warmQueued = false;
+  const cache = new Map(), warmed = new Set();
   let selected = new URLSearchParams(location.search).get('tab');
   try { selected ||= localStorage.getItem('stellar:metric-tab'); } catch {}
+  selected ||= 'overview';
+  const endpointFor = module => module.kind === 'weight' ? '/api/weights' : module.kind === 'wake' ? '/api/wake' : '/api/consistency';
+  const dataFor = (endpoint, background = false) => {
+    if (!['/api/weights', '/api/wake', '/api/consistency'].includes(endpoint)) return Promise.reject(Error('Unknown metric'));
+    if (cache.has(endpoint)) return cache.get(endpoint);
+    const promise = fetch(endpoint, { cache: 'no-store', priority: background ? 'low' : 'high' }).then(response => {
+      if (!response.ok) throw Error('Could not load metric');
+      return response.json();
+    }).catch(error => {
+      if (cache.get(endpoint) === promise) cache.delete(endpoint);
+      throw error;
+    });
+    cache.set(endpoint, promise);
+    return promise;
+  };
+  window.stellarMetricData = dataFor;
+  const scheduleWarm = () => {
+    if (warmQueued || !activeReady || !catalogReady || document.hidden) return;
+    const current = modules.find(module => module.id === selected);
+    const endpoint = [...new Set(modules.map(endpointFor))].find(url =>
+      url !== endpointFor(current) && !cache.has(url) && !warmed.has(url));
+    if (!endpoint) return;
+    warmQueued = true;
+    const version = epoch;
+    const run = async () => {
+      warmQueued = false;
+      if (version !== epoch) { scheduleWarm(); return; }
+      if (!activeReady || document.hidden) return;
+      warmed.add(endpoint);
+      try { await dataFor(endpoint, true); } catch {}
+      if (version === epoch) scheduleWarm();
+    };
+    if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 1500 });
+    else setTimeout(run, 150);
+  };
   const urlFor = module => {
     if (module.kind === 'weight' || module.kind === 'wake') return '/' + module.kind + '?embedded=true';
     return '/consistency?embedded=true' + (module.kind === 'task'
       ? '&task=' + encodeURIComponent(module.label) + '&titles=' + encodeURIComponent(JSON.stringify(module.titles)) : '');
+  };
+  const closeMenu = (focus = false) => {
+    menu.hidden = true; toggle.setAttribute('aria-expanded', 'false');
+    if (focus) toggle.focus();
+  };
+  const renderOptions = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    const tasks = modules.filter(module => module.kind === 'task' &&
+      [module.label, ...(module.titles || [])].some(title => title.toLocaleLowerCase().includes(query)));
+    options.replaceChildren(...tasks.map(module => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.dataset.metric = module.id; button.textContent = module.label;
+      button.setAttribute('aria-current', String(module.id === selected));
+      return button;
+    }));
+    document.getElementById('metric-task-empty').hidden = tasks.length > 0;
+  };
+  const syncSelection = () => {
+    const module = modules.find(m => m.id === selected);
+    tabs.querySelectorAll('button').forEach(button => {
+      const active = button.dataset.metric === selected;
+      button.setAttribute('aria-selected', String(active));
+      button.tabIndex = active || (!module || module.kind === 'task') && button.dataset.metric === 'overview' ? 0 : -1;
+    });
+    const active = [...tabs.children].find(button => button.dataset.metric === selected);
+    toggle.dataset.active = String(module?.kind === 'task');
+    toggle.title = module?.kind === 'task' ? module.label : 'Choose a task metric';
+    document.getElementById('metric-task-label').textContent = module?.kind === 'task' ? module.label : 'Task metrics';
+    panel.setAttribute('aria-labelledby', active?.id || toggle.id);
+    renderOptions();
+  };
+  const renderNavigation = () => {
+    tabs.replaceChildren(...modules.filter(module => module.kind !== 'task').map(module => {
+      const button = document.createElement('button');
+      button.type = 'button'; button.id = 'metric-tab-' + module.id; button.dataset.metric = module.id;
+      button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', 'metric-panel');
+      button.textContent = module.label;
+      return button;
+    }));
+    const hasTasks = modules.some(module => module.kind === 'task');
+    picker.hidden = catalogReady && !hasTasks;
+    toggle.disabled = !hasTasks;
+    syncSelection();
   };
   const select = (id, refresh = false, userAction = true) => {
     const module = modules.find(m => m.id === id) || modules[0];
@@ -25,74 +118,109 @@
       if (location.pathname + location.search !== url) history.replaceState(history.state, '', url);
     }
     initialized = true;
-    tabs.querySelectorAll('button').forEach(button => {
-      const active = button.dataset.metric === selected;
-      button.setAttribute('aria-selected', String(active));
-      button.tabIndex = active ? 0 : -1;
-    });
-    const active = [...tabs.children].find(b => b.dataset.metric === selected);
-    document.getElementById('metric-panel').setAttribute('aria-labelledby', active.id);
+    syncSelection();
     const url = urlFor(module);
-    if (refresh || frame.dataset.url !== url) {
-      frame.style.height = '180px'; frame.dataset.url = url;
-      frame.contentWindow.location.replace(url);
+    if (refresh || frame.dataset.key !== url) {
+      activeReady = false; activeFailed = false;
+      panel.setAttribute('aria-busy', 'true');
+      status.textContent = 'Loading ' + module.label.toLocaleLowerCase() + '…'; retry.hidden = true;
+      frame.style.height = '180px'; frame.dataset.key = url;
+      frame.dataset.url = url + '&metric_version=' + (++generation);
+      frame.contentWindow.location.replace(frame.dataset.url);
     }
     frame.title = module.label + ' metrics';
-    if (active.offsetLeft < tabs.scrollLeft || active.offsetLeft + active.offsetWidth > tabs.scrollLeft + tabs.clientWidth) {
-      tabs.scrollLeft = Math.max(0, active.offsetLeft - tabs.offsetLeft);
-    }
   };
   const load = async (force = false) => {
     if (busy) { queued ||= force; return; }
     if (!force && Date.now() - checked < 15000) return;
     busy = true;
     try {
-      const response = await fetch('/api/metrics', { cache: 'no-store' });
+      const response = await fetch('/api/metrics', { cache: 'no-store', priority: 'low' });
       if (!response.ok) throw Error('Could not load metrics');
       const data = await response.json();
-      const changed = JSON.stringify(modules) !== JSON.stringify(data.modules);
+      if (!Array.isArray(data.modules) || !data.modules.length) throw Error('Missing metrics');
+      const changed = !catalogReady || JSON.stringify(modules) !== JSON.stringify(data.modules);
       const refresh = revision !== null && revision !== data.revision;
-      modules = data.modules;
-      revision = data.revision;
-      if (changed) {
-        tabs.replaceChildren(...modules.map((module, i) => {
-          const button = document.createElement('button');
-          button.type = 'button'; button.id = 'metric-tab-' + i; button.dataset.metric = module.id;
-          button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', 'metric-panel');
-          button.textContent = module.label;
-          return button;
-        }));
-      }
+      modules = data.modules; revision = data.revision; catalogReady = true; catalogError = false;
+      if (refresh) { cache.clear(); warmed.clear(); epoch++; }
+      if (changed) renderNavigation();
       select(selected, refresh, false);
-      status.textContent = ''; retry.hidden = true;
+      if (activeReady) {
+        status.textContent = activeFailed ? 'Could not load this metric. Check your connection and retry.' : '';
+        retry.hidden = !activeFailed;
+      }
       checked = Date.now();
+      scheduleWarm();
     } catch {
-      status.textContent = 'Could not refresh your metrics. Check your connection and retry.';
+      catalogError = true;
+      status.textContent = 'Could not refresh the task list. Check your connection and retry.';
       retry.hidden = false;
     } finally { busy = false; if (queued) { queued = false; load(true); } }
   };
-  tabs.addEventListener('click', event => { const button = event.target.closest('[data-metric]'); if (button) select(button.dataset.metric); });
+  tabs.addEventListener('click', event => { const button = event.target.closest('[data-metric]'); if (button) { closeMenu(); select(button.dataset.metric); } });
   tabs.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    const index = modules.findIndex(m => m.id === selected);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? modules.length - 1
-      : (index + (event.key === 'ArrowRight' ? 1 : -1) + modules.length) % modules.length;
-    select(modules[next].id);
-    tabs.querySelector('[aria-selected=true]').focus();
+    const buttons = [...tabs.children], index = buttons.indexOf(event.target.closest('button'));
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+    select(buttons[next].dataset.metric); buttons[next].focus();
   });
+  toggle.addEventListener('click', () => {
+    if (!menu.hidden) { closeMenu(); return; }
+    search.value = ''; renderOptions(); menu.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true'); search.focus();
+  });
+  search.addEventListener('input', renderOptions);
+  options.addEventListener('click', event => {
+    const button = event.target.closest('[data-metric]');
+    if (button) { select(button.dataset.metric); closeMenu(true); }
+  });
+  picker.addEventListener('keydown', event => {
+    if (menu.hidden) return;
+    if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) ||
+        event.target === search && ['Home', 'End'].includes(event.key)) return;
+    const buttons = [...options.children];
+    if (!buttons.length) return;
+    event.preventDefault();
+    const index = buttons.indexOf(document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : index < 0 ? (event.key === 'ArrowUp' ? buttons.length - 1 : 0)
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next].focus();
+  });
+  document.addEventListener('click', event => { if (!picker.contains(event.target)) closeMenu(); });
+  picker.addEventListener('focusout', () => setTimeout(() => { if (!picker.contains(document.activeElement)) closeMenu(); }, 0));
   window.addEventListener('message', event => {
-    if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.type !== 'stellar:metric-height') return;
+    if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.type !== 'stellar:metric-height' ||
+        !frame.dataset.url) return;
     const url = new URL(frame.dataset.url, location.origin);
     if (event.data.url !== url.pathname + url.search) return;
     const height = Number(event.data.height);
     if (Number.isFinite(height) && height > 0 && height < 30000) frame.style.height = Math.ceil(height) + 'px';
+    if (event.data.ready) {
+      activeReady = true; activeFailed = !!event.data.failed; panel.setAttribute('aria-busy', 'false');
+      if (event.data.failed) {
+        status.textContent = 'Could not load this metric. Check your connection and retry.'; retry.hidden = false;
+      } else if (!catalogError) { status.textContent = ''; retry.hidden = true; }
+      if (!catalogReady && !busy && !catalogError) load(true);
+      scheduleWarm();
+    }
   });
-  retry.addEventListener('click', () => load(true));
-  window.addEventListener('focus', () => load());
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+  retry.addEventListener('click', () => {
+    if (catalogError || !catalogReady) load(true);
+    if (activeFailed) {
+      const module = modules.find(m => m.id === selected);
+      cache.delete(endpointFor(module)); select(selected, true);
+    }
+  });
+  window.addEventListener('focus', () => { if (catalogReady) load(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (catalogReady) load(); scheduleWarm(); } });
   window.addEventListener('stellar:records-changed', () => load(true));
   window.addEventListener('storage', event => { if (event.key === 'stellar:records-changed') load(true); });
-  setInterval(() => { if (!document.hidden) load(); }, 60000);
-  load(true);
+  setInterval(() => { if (!document.hidden && catalogReady) load(); }, 60000);
+  renderNavigation();
+  if (modules.some(module => module.id === selected)) select(selected, false, false);
+  else load(true);
 })();
