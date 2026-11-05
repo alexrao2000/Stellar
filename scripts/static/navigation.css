@@ -1,9 +1,9 @@
 /* Sidebar widths are shared with the workspace. Metric modules resize to their
    content so the page has one scroll surface on phones and desktop. */
-.sidenav .nav-icon { display: inline-flex; justify-content: center; align-items: center;
-  width: 22px; flex: 0 0 22px; font: 20px/1 system-ui, sans-serif; }
-.sidenav a, .sidenav .signout button { gap: 10px; }
-.sidenav .signout button { display: flex; align-items: center; }
+.sidenav .nav-icon { display: block; width: 20px; height: 20px; flex: 0 0 20px; }
+.sidenav a, .sidenav .signout button, .sidenav .install-button { gap: 10px; }
+.sidenav .signout button, .sidenav .install-button { display: flex; align-items: center; }
+.sidenav .install-button { justify-content: center; }
 .sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px 16px; }
 .sidenav .sidebar-header .brand { min-width: 0; padding: 4px 0; gap: 8px; font-size: 11px; letter-spacing: .12em; }
 .sidebar-collapse { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px;
@@ -20,14 +20,13 @@
   .sidebar-collapsed .sidenav .brand { justify-content: center; }
   .sidebar-collapsed .sidenav a, .sidebar-collapsed .sidenav .signout button { justify-content: center; padding: 10px 0; min-height: 44px; gap: 0; }
   .sidebar-collapsed .sidenav a { border-left-width: 0; }
-  .sidebar-collapsed .sidenav .install-button { font-size: 0; padding: 10px 0; }
-  .sidebar-collapsed .sidenav .install-button::before { content: '↓'; font: 22px/1 system-ui, sans-serif; }
+  .sidebar-collapsed .sidenav .install-button { padding: 10px 0; }
 }
 @media (pointer: coarse) {
   .sidebar-collapse { flex-basis: 44px; width: 44px; height: 44px; }
   .sidenav .sidebar-header .brand { gap: 6px; font-size: 10px; letter-spacing: .06em; }
 }
-@media (max-width: 760px) { .sidebar-header { display: none; } .sidenav .nav-icon { display: none; } }
+@media (max-width: 760px) { .sidebar-header { display: none; } }
 html body[data-page=metrics] { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; }
 body[data-page=metrics] * { box-sizing: border-box; }
 .metrics-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 20px 48px; }

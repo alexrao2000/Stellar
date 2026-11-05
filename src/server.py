@@ -591,13 +591,30 @@ _BOOT_GATE_JS = """<script>
 </script>"""
 
 
+def _nav_icon(name: str) -> str:
+    shapes = {
+        "/": '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m6 10 2 2 3-4M14 9h4M14 15h4M6 16h4"/>',
+        "/metrics": '<path d="M4 4v16h16M9 15v-4M14 15V6M19 15V9"/>',
+        "/data": '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
+        "/pool": '<path d="M12 3c1.5 6 3 7.5 9 9-6 1.5-7.5 3-9 9-1.5-6-3-7.5-9-9 6-1.5 7.5-3 9-9Z"/>',
+        "/tasks": '<path d="M4 6h4m6 0h6M4 12h9m6 0h1M4 18h1m6 0h9"/><circle cx="11" cy="6" r="3"/><circle cx="16" cy="12" r="3"/><circle cx="8" cy="18" r="3"/>',
+        "/docs": '<path d="m7 7-5 5 5 5m10-10 5 5-5 5M14 4l-4 16"/>',
+        "signout": '<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M9 12h12m-4-4 4 4-4 4"/>',
+        "install": '<path d="M12 3v12m-5-5 5 5 5-5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
+    }
+    return (
+        '<svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" '
+        'aria-hidden="true" focusable="false">' + shapes[name] + '</svg>'
+    )
+
+
 def _nav(active: str) -> str:
     if active in {"/weight", "/wake", "/consistency"}:
         active = "/metrics"
-    icons = {"/": "▦", "/metrics": "▥", "/data": "▤", "/pool": "✦", "/tasks": "⚙", "/docs": "⌘"}
     links = "".join(
-        '<a href="{}" title="{}" aria-label="{}"{}><span class="nav-icon" aria-hidden="true">{}</span><span class="nav-label">{}</span></a>'.format(
-            href, label, label, ' class="here" aria-current="page"' if href == active else "", icons[href],
+        '<a href="{}" title="{}" aria-label="{}"{}>{}<span class="nav-label">{}</span></a>'.format(
+            href, label, label, ' class="here" aria-current="page"' if href == active else "", _nav_icon(href),
             ('<span class="nav-task-label">Tasks</span><span class="nav-workspace-label">Tasks + Pool</span>'
              if href == "/" else label)
         )
@@ -607,8 +624,9 @@ def _nav(active: str) -> str:
     if load_config().auth_enabled:
         signout = (
             '<form class="signout" action="/auth/logout" method="post">'
-            '<button type="submit" aria-label="Sign out" title="Sign out"><span class="nav-icon" aria-hidden="true">↪</span><span class="nav-label">Sign out</span></button></form>'
+            '<button type="submit" aria-label="Sign out" title="Sign out">' + _nav_icon("signout") + '<span class="nav-label">Sign out</span></button></form>'
         )
+    install = INSTALL_BUTTON.replace('>Install app</button>', '>' + _nav_icon("install") + '<span class="nav-label">Install app</span></button>')
     return (
         '<nav class="sidenav" aria-label="Views">'
         '<div class="sidebar-header"><div class="brand"><img src="/app-assets/stellar.svg" width="24" height="24" alt=""><span class="brand-name">Stellar</span></div>'
@@ -619,7 +637,7 @@ def _nav(active: str) -> str:
         'aria-controls="app-nav-links" aria-label="Navigation menu">'
         '<img src="/app-assets/stellar.svg" width="24" height="24" alt="">'
         '<span class="nav-current">Stellar</span><span class="nav-hint">Menu</span></button>'
-        '<div class="nav-links" id="app-nav-links">' + links + signout + '</div>' + INSTALL_BUTTON + "</nav>"
+        '<div class="nav-links" id="app-nav-links">' + links + signout + '</div>' + install + "</nav>"
     )
 
 
