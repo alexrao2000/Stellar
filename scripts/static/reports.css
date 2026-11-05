@@ -15,8 +15,7 @@
 .report-picker .report-explanation { margin: 14px 0 0; font-size: 11px; }
 .report-option:focus-visible, .report-close:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 html body .range-check.unreported .mbox { background: transparent; border-color: var(--ink-muted); border-style: dashed; color: var(--ink-muted); }
-html body .range-check.unreported .mbox svg { display: none; }
-html body .range-check.unreported .mbox::after { content: '?'; font: 11px/1 system-ui, sans-serif; }
+html body .range-check.unreported .mbox svg { display: block; fill: currentColor; stroke-width: .5; opacity: .6; }
 html body .range-check.unreported::after { display: none; }
 html body .range-breakdown { grid-column: 1 / -1; margin: 0; color: var(--ink-muted); font: 11px/1.5 system-ui, sans-serif; }
 .daily-completion { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 12px; font-size: 12px; color: var(--ink-muted); }
@@ -24,7 +23,7 @@ html body .range-breakdown { grid-column: 1 / -1; margin: 0; color: var(--ink-mu
 body.ranged .daily-completion { display: none; }
 .report-count-detail { display: block; font-size: 9px; opacity: .75; }
 .report-field-status { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink-muted); font: 12px system-ui, sans-serif; min-height: 36px; padding: 6px 10px; cursor: pointer; }
-.task.unreported .box::after, .field.unreported .box::after, .mini.unreported .mbox::after { content: '?'; display: grid; place-items: center; width: 100%; height: 100%; font: 11px/1 system-ui, sans-serif; }
+.task.unreported .box::after, .field.unreported .box::after, .mini.unreported .mbox::after { content: '✦'; opacity: .6; display: grid; place-items: center; width: 100%; height: 100%; font: 11px/1 system-ui, sans-serif; }
 .task.unreported .box, .field.unreported .box, .mini.unreported .mbox { border-style: dashed; }
 .pill.unreported { background: var(--surface-2); color: var(--ink-muted); }
 .heatgrid i.d.unreported { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-muted); }
@@ -38,7 +37,18 @@ html body .rank .num { white-space: normal; font-size: 11px; line-height: 1.5; }
 html body button.box, html body button.report-measure-status { padding: 0; color: inherit; cursor: pointer; }
 html body button.box { position: relative; }
 html body button.box::before, html body button.report-measure-status::before { content: ''; position: absolute; inset: -12px; }
-html body button.report-measure-status { position: relative; background: transparent; }
+html body button.report-measure-status { position: relative; background: transparent; min-height: 0; min-width: 0; line-height: 1; display: grid; place-items: center; }
 .range-editor > .report-field-status { margin-top: 12px; width: 100%; }
 
 .report-picker:not([popover]) { inset: 0; margin: auto; }
+
+html body .range-check.unreported .mbox::after { content: none; }
+
+html body .range-overview { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; flex: 0 0 auto; }
+.range-total { font-size: 12px; color: var(--ink-muted); }
+.range-total strong { font-size: 16px; font-weight: 600; letter-spacing: -.03em; color: var(--ink); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.range-percent { font: 11px ui-monospace, monospace; color: var(--ink-muted); }
+.range-progress { grid-column: 1 / -1; height: 3px; background: var(--rule); border-radius: 4px; overflow: hidden; }
+.range-progress span { display: block; height: 100%; background: var(--ink); border-radius: inherit; }
+
+body.view-month #board > .range-overview { margin-bottom: 12px; }

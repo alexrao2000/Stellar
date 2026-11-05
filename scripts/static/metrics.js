@@ -37,7 +37,7 @@
     if (cache.has(endpoint)) return cache.get(endpoint);
     const controller = new AbortController();
     requests.add(controller);
-    const promise = fetch(endpoint, { cache: 'no-store', priority: background ? 'low' : 'high', signal: controller.signal }).then(response => {
+    const promise = fetch(endpoint + (endpoint === '/api/consistency' ? '?fresh=true' : ''), { cache: 'no-store', priority: background ? 'low' : 'high', signal: controller.signal }).then(response => {
       if (!response.ok) throw Error('Could not load metric');
       return response.json();
     }).catch(error => {
@@ -185,13 +185,13 @@
     frame.title = module.label + ' metrics';
   };
   const load = async (force = false) => {
-    if (!window.stellarPageActive()) { dirty ||= force; return; }
+    if (!window.stellarPageActive()) { dirty ||= force; return false; }
     force ||= dirty; dirty = false;
-    if (busy) { queued ||= force; return; }
+    if (busy) { queued ||= force; return false; }
     if (!force && Date.now() - checked < 15000) return;
     busy = true;
     try {
-      const response = await fetch('/api/metrics', { cache: 'no-store', priority: 'low' });
+      const response = await fetch('/api/metrics' + (window.StellarSync?.managed ? '?fresh=true' : ''), { cache: 'no-store', priority: 'low' });
       if (!response.ok) throw Error('Could not load metrics');
       const data = await response.json();
       if (!Array.isArray(data.modules) || !data.modules.length) throw Error('Missing metrics');
@@ -209,10 +209,12 @@
       }
       checked = Date.now();
       scheduleWarm();
+      return true;
     } catch {
       catalogError = true;
       status.textContent = 'Could not refresh the task list. Check your connection and retry.';
       retry.hidden = false;
+      return false;
     } finally { busy = false; if (queued) { queued = false; load(true); } }
   };
   tabs.addEventListener('click', event => { const button = event.target.closest('[data-metric]'); if (button) { closeMenu(); select(button.dataset.metric); } });
@@ -271,11 +273,12 @@
   const resume = () => {
     if (!window.stellarPageActive()) return;
     if (!initialized && modules.some(module => module.id === selected)) select(selected, false, false);
-    else if (catalogReady || !initialized) load(!initialized);
+    else if (!window.StellarSync?.managed && (catalogReady || !initialized)) load(!initialized);
+    window.StellarSync?.retry();
     scheduleWarm();
   };
   window.addEventListener('stellar:visibility', resume);
-  window.addEventListener('focus', () => { if (catalogReady) load(); });
+  window.addEventListener('focus', () => { if (catalogReady && !window.StellarSync?.managed) load(); });
   document.addEventListener('visibilitychange', resume);
   window.addEventListener('stellar:records-changed', () => load(true));
   window.addEventListener('storage', event => { if (event.key === 'stellar:records-changed') load(true); });
@@ -288,7 +291,8 @@
     else if (activeView) showActiveState();
     scheduleWarm();
   });
-  setInterval(() => { if (window.stellarPageActive() && catalogReady) load(); }, 60000);
+  setInterval(() => { if (!window.StellarSync?.managed && window.stellarPageActive() && catalogReady) load(); }, 60000);
+  window.StellarSync?.subscribe(['records', 'definitions'], () => load(true));
   renderNavigation();
   resume();
 })();

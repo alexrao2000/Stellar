@@ -511,7 +511,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     if (pending[key]) return pending[key];
     var version = (requestVersion[day] || 0) + 1;
     requestVersion[day] = version;
-    var orderAtStart = orderVersion;
+    var orderAtStart = orderVersion, epochAtStart = writeEpoch;
     pending[key] = fetch('/api/day/' + day + (fresh ? '?fresh=true' : ''),
                          fresh ? { cache: 'no-store' } : {})
       .then(function (r) {
@@ -520,6 +520,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       })
       .then(function (rows) {
         delete pending[key];
+        if (epochAtStart !== writeEpoch || writesInFlight || fresh && editingRecords()) throw new Error('Record changed during read');
         /* A slow background prefetch must never replace a newer live read. */
         if (requestVersion[day] === version) {
           CACHE[day] = rows;
@@ -594,12 +595,12 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     }
     if (!want.length || prefetching) return;
     var start = want[0], end = want[want.length - 1];
-    var versions = {};
+    var versions = {}, epochAtStart = writeEpoch;
     want.forEach(function (d) { versions[d] = requestVersion[d] || 0; });
     prefetching = fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: 'low' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (!data) return;
+        if (!data || epochAtStart !== writeEpoch || writesInFlight) return;
         Object.keys(data.days).forEach(function (d) {
           /* Never overwrite a day read live, or changed here, since this left. */
           if (CACHE[d] || (requestVersion[d] || 0) !== (versions[d] || 0)) return;
@@ -700,11 +701,11 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     };
   }
 
-  var writesInFlight = 0;
+  var writesInFlight = 0, writeEpoch = 0;
 
   function post(url, body) {
-    writesInFlight++;
-    var settled = function () { writesInFlight--; };
+    writesInFlight++; writeEpoch++;
+    var settled = function () { writesInFlight--; writeEpoch++; window.StellarSync?.retry(); };
     var opts = { method: 'POST' };
     if (body !== undefined) {
       opts.headers = { 'Content-Type': 'application/json' };
@@ -785,6 +786,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   });
 
   function render(rows) {
+    var drafts = {}; ['weight', 'wake'].forEach(function (id) { var el = document.getElementById(id); drafts[id] = document.activeElement === el && el.value !== (saved[id] || ''); });
     document.body.classList.add('painting');
     requestAnimationFrame(function () {
       requestAnimationFrame(function () { document.body.classList.remove('painting'); });
@@ -808,7 +810,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       setTile(id, '');
       document.getElementById('item-' + id)._row = null;
       var el = document.getElementById(id);
-      if (document.activeElement === el) return;
+      if (drafts[id]) return;
       el.value = '';
       saved[id] = null;
     });
@@ -824,7 +826,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         setTile('weight', r.is_completed ? 'done' : 'todo');
         if (r.weight_lbs !== null && r.weight_lbs !== undefined) {
           var wEl = document.getElementById('weight');
-          if (document.activeElement !== wEl) {
+          if (!drafts.weight) {
             wEl.value = Number(r.weight_lbs).toFixed(1);
             saved.weight = wEl.value;
           }
@@ -838,7 +840,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         setTile('wake', r.is_completed ? 'done' : 'todo');
         var w = wakeFromNotes(r.notes);
         var kEl = document.getElementById('wake');
-        if (w && document.activeElement !== kEl) {
+        if (w && !drafts.wake) {
           kEl.value = w.value;
           saved.wake = w.value;
         }
@@ -1244,31 +1246,32 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
      thing that felt broken. */
   var POLL_MS = 60000, lastChecked = Date.now(), recordsDirty = false;
 
-  function revalidate() {
-    if (!window.stellarPageActive() || writesInFlight || !recordsDirty && Date.now() - lastChecked < 15000) return;
+  function editingRecords() {
+    return writesInFlight || document.querySelector('.range-editor[open], .when.editing, .report-picker') ||
+      Array.from(document.querySelectorAll('#board .mini input')).some(function (el) { return el.value !== el.defaultValue; }) ||
+      ['weight', 'wake'].some(function (id) { var el = document.getElementById(id); return el === document.activeElement && el.value !== (saved[id] || ''); });
+  }
+  function revalidate(force) {
+    if (!window.stellarPageActive() || editingRecords() || !force && !recordsDirty && Date.now() - lastChecked < 15000) return Promise.resolve(false);
     lastChecked = Date.now(); recordsDirty = false;
     if (VIEW !== 'day') {
       var r = rangeOf(VIEW, DAY);
-      loadRange(r[0], r[1], true);
-      return;
+      return loadRange(r[0], r[1], true);
     }
-    var day = DAY;
+    var day = DAY, epoch = writeEpoch;
     var before = CACHE[day] ? JSON.stringify(CACHE[day]) : null;
-    fetchDay(day, true).then(function (rows) {
-      if (DAY !== day || !before) return;
-      if (JSON.stringify(rows) !== before) {
-        render(rows);
-        say('Updated');
-      }
-    }).catch(function () { /* keep showing what we have */ });
+    return fetchDay(day, true).then(function (rows) {
+      if (DAY !== day || epoch !== writeEpoch || editingRecords()) return false;
+      if (JSON.stringify(rows) !== before) render(rows);
+      return true;
+    }).catch(function () { recordsDirty = true; return false; });
   }
-
-  document.addEventListener('visibilitychange', function () {
-    if (window.stellarPageActive()) revalidate();
-  });
-  window.addEventListener('focus', revalidate);
-  window.addEventListener('storage', function (e) { if (e.key === 'stellar:records-changed') { recordsDirty = true; revalidate(); } });
-  setInterval(revalidate, POLL_MS);
+  window.StellarSync?.subscribe(['records', 'definitions'], function () { recordsDirty = true; return revalidate(true); });
+  function legacyRefresh() { if (!window.StellarSync?.managed) revalidate(); else window.StellarSync.retry(); }
+  document.addEventListener('visibilitychange', legacyRefresh);
+  window.addEventListener('focus', legacyRefresh);
+  window.addEventListener('storage', function (e) { if (e.key === 'stellar:records-changed') { recordsDirty = true; legacyRefresh(); } });
+  setInterval(function () { if (!window.StellarSync?.managed) revalidate(); }, POLL_MS);
 
   /* showDay handles read-only, materialising and the window; the first call
      just points it at the day the server rendered. replace rather than push so
@@ -1353,6 +1356,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   function held(days) { return days.every(function (d) { return CACHE[d]; }); }
 
   function fetchRange(start, end, background) {
+    var epochAtStart = writeEpoch;
     return fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: background ? 'low' : 'high' })
       .then(function (res) {
         return res.json().then(function (j) {
@@ -1361,6 +1365,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         });
       })
       .then(function (data) {
+        if (epochAtStart !== writeEpoch || writesInFlight || background && editingRecords()) throw new Error('Record changed during read');
         Object.keys(data.days).forEach(function (d) {
           requestVersion[d] = (requestVersion[d] || 0) + 1;
           CACHE[d] = data.days[d];
@@ -1390,13 +1395,12 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     if (painted === undefined) painted = SHOWN && SHOWN.join() === days.join() ? snapshot(days) : null;
     return fetchRange(start, end, background)
       .then(function () {
-        if (seq !== rangeSeq) return;              // a newer range was asked for
-        var board = document.getElementById('board');
-        if (background && (document.querySelector('.range-editor[open]') ||
-            board.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) return;
+        if (seq !== rangeSeq) return false;              // a newer range was asked for
+        if (background && editingRecords()) return false;
         if (painted !== snapshot(days)) renderBoard(days);
+        return true;
       })
-      .catch(function (e) { if (seq === rangeSeq) say('Could not load: ' + e.message, true); });
+      .catch(function (e) { if (!background && seq === rangeSeq) say('Could not load: ' + e.message, true); return false; });
   }
 
   /* The range before and after this one, fetched ahead -- only the days not
@@ -1423,14 +1427,14 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   var rangeAssetsReady = null, rangeRenderVersion = 0;
-  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=3"]');
+  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=4"]');
   var rangeStylesReady = !!(rangeStyle && rangeStyle.sheet);
   function loadRangeAssets() {
     if (window.stellarRenderRange && rangeStylesReady) return Promise.resolve();
     if (rangeAssetsReady) return rangeAssetsReady;
     rangeAssetsReady = Promise.all([
-      ['link', 'href', '/app-assets/ranges.css?v=3'],
-      ['script', 'src', '/app-assets/ranges.js?v=3']
+      ['link', 'href', '/app-assets/ranges.css?v=4'],
+      ['script', 'src', '/app-assets/ranges.js?v=4']
     ].map(function (asset) {
       return new Promise(function (resolve, reject) {
         var node = document.createElement(asset[0]);
@@ -1448,13 +1452,6 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     SHOWN = days;
     var board = document.getElementById('board');
     var today = todayNow();
-    var done = 0, total = 0;
-    days.forEach(function (d) {
-      if (d > today) return;
-      var rows = CACHE[d] || [];
-      done += rows.filter(function (r) { return r.is_completed; }).length;
-      total += owed(rows);
-    });
     board.innerHTML = '';
     board.classList.remove('range-board');
     if (VIEW !== 'month') {
@@ -1477,10 +1474,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         column: column, tile: tile, field: field });
       return;
     }
-    var sum = document.createElement('p');
-    sum.className = 'summary';
-    sum.textContent = total ? done + ' of ' + total + ' done so far in view' : 'Nothing due yet in view';
-    board.appendChild(sum);
+    var updateProgress = StellarReports.progress(board, function () { return days.filter(function (day) { return day <= today; }).flatMap(function (day) { return CACHE[day] || []; }); });
     if (VIEW === 'month') {
       var hint = document.createElement('p');
       hint.className = 'month-hint';
@@ -1502,7 +1496,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       grid.className = 'cols';
       grid.style.setProperty('--day-count', days.length);
     }
-    days.forEach(function (d) { grid.appendChild(column(d)); });
+    days.forEach(function (d) { grid.appendChild(column(d, updateProgress)); });
     if (VIEW === 'month') {
       while (grid.children.length % 7) {
         var trailing = document.createElement('div'); trailing.className = 'col blank';
@@ -1611,7 +1605,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     else { input.type = 'time'; }
     input.disabled = locked;
     var shown = isW ? (r.weight_lbs != null ? Number(r.weight_lbs).toFixed(1) : '') : ((wakeFromNotes(r.notes) || {}).value || '');
-    input.value = shown;
+    input.value = input.defaultValue = shown;
     el.innerHTML = '<button type="button" class="mbox report-measure-status" aria-label="Set measurement status"></button><span class="lbl">' + (isW ? 'Weight' : 'Wake') + '</span>';
     var statusButton = el.querySelector('.mbox'); statusButton.disabled = locked;
     bindFieldReport(statusButton, function () { return r; }, function () { paintMini(el, r); if (onUpdate) onUpdate(); });
@@ -1628,7 +1622,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       var was = r.is_completed;
       r.is_completed = true; paintMini(el, r); if (onUpdate) onUpdate();
       post(url).then(function (u) {
-        shown = v;
+        shown = input.defaultValue = v;
         if (u && u.id) { r.id = u.id; delete r.virtual; }
         if (u && 'completed_at' in u) r.completed_at = u.completed_at;
         if (isW && u && u.weight_lbs !== undefined) r.weight_lbs = u.weight_lbs;

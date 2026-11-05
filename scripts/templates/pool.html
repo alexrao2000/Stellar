@@ -385,6 +385,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       });
     }).then(function (value) {
       writesInFlight--;
+      window.StellarSync?.check(); window.StellarSync?.retry();
       return value;
     }, function (err) {
       writesInFlight--;
@@ -804,7 +805,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     post('/api/pool/task/' + id + '/move?x=' + x + '&y=' + y).then(function () {
       position.saving = false;
       if (position.x !== x || position.y !== y) { savePosition(id); return; }
-      position.confirmed = true;
+      position.confirmed = true; position.confirmedAt = Date.now();
       if (noteEl.textContent === 'Position not saved. Retrying…') note('');
     }, function () {
       position.saving = false;
@@ -958,6 +959,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
         var localTime = new Date(t.remind_at);
         reminderInput.value = new Date(localTime.getTime() - localTime.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
       }
+      reminderInput.dataset.saved = reminderInput.value;
       var reminderStatus = document.getElementById('pool-reminder-status');
       function saveReminder(at) {
         var buttons = reminderForm.querySelectorAll('button');
@@ -1166,37 +1168,47 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     return JSON.stringify([tasks, edges]);
   }
   function poolEditing() {
-    return writesInFlight || drag || PENDING || panelEl.contains(document.activeElement);
+    var notes = document.getElementById('pnotes'), reminder = document.getElementById('pool-reminder-time');
+    var prerequisite = document.getElementById('pool-prerequisite');
+    return writesInFlight || drag || PENDING || panelEl.classList.contains('open') && (
+      notes && notes.value !== (byId[PANEL_ID]?.notes || '') ||
+      reminder && reminder.value !== reminder.dataset.saved || prerequisite && prerequisite.value);
   }
   function pollPool() {
-    if (!window.stellarPageActive() || !embeddedVisible || pollBusy || poolEditing()) return;
+    if (!window.stellarPageActive() || !embeddedVisible || pollBusy || poolEditing()) return Promise.resolve(false);
     Object.keys(positions).forEach(savePosition);
-    if (writesInFlight) return;
+    if (writesInFlight) return Promise.resolve(false);
     var revision = poolRevision;
     pollBusy = true;
     if (!poolLoaded) {
       document.getElementById('pool-load-status').textContent = 'Loading Pool…';
       poolLoading.querySelector('.stellar-spinner').hidden = false; poolRetry.hidden = true;
     }
-    fetch('/api/pool?resolved=true').then(function (res) {
+    return fetch('/api/pool?resolved=true', { cache: 'no-store', priority: 'low' }).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     }).then(function (state) {
-      if (revision !== poolRevision || poolEditing()) return;
+      if (revision !== poolRevision || poolEditing()) return false;
       if (state.schema_missing) throw new Error('Pool is unavailable');
-      var tasks = state.tasks || [], edges = state.edges || [];
+      var tasks = state.tasks || [], edges = state.edges || [], awaitingPosition = false;
       tasks.forEach(function (task) {
         var position = positions[task.id];
         if (!position) return;
         if (position.confirmed && Math.abs(Number(task.x) - position.x) < .00001 &&
             Math.abs(Number(task.y) - position.y) < .00001) {
           delete positions[task.id];
+        } else if (position.confirmed && window.StellarSync?.managed && Date.now() - position.confirmedAt > 5000) {
+          delete positions[task.id];
         } else {
+          awaitingPosition = true;
           task.x = position.x; task.y = position.y;
         }
       });
       poolLoaded = true; sky.dataset.loading = 'false'; poolLoading.hidden = true;
-      if (poolSnapshot(tasks, edges) === poolSnapshot(TASKS, EDGES)) return;
+      if (poolSnapshot(tasks, edges) === poolSnapshot(TASKS, EDGES)) return !awaitingPosition;
+      var focused = panelEl.contains(document.activeElement) ? document.activeElement : null;
+      var focusId = focused?.id, selection = focused?.selectionStart, selectionEnd = focused?.selectionEnd;
+      var linkOpen = document.getElementById('pool-link-picker')?.open;
       var selected = PANEL_ID;
       if (requestedStar) {
         selected = requestedStar;
@@ -1208,18 +1220,24 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       paint();
       if (selected && byId[selected] && (SHOW_RESOLVED || isOpen(byId[selected]))) {
         openPanel(byId[selected]);
+        if (linkOpen && document.getElementById('pool-link-picker')) document.getElementById('pool-link-picker').open = true;
+        var restored = focusId && document.getElementById(focusId);
+        if (restored) { restored.focus({ preventScroll: true }); if (selection !== null && selection !== undefined) restored.setSelectionRange?.(selection, selectionEnd); }
       } else if (selected) {
         closePanel();
       }
+      return !awaitingPosition;
     }).catch(function () {
       /* Background refresh failure should not disturb a usable cached page. */
       if (!poolLoaded) {
         document.getElementById('pool-load-status').textContent = 'Could not load Pool. Check your connection and retry.';
         poolLoading.querySelector('.stellar-spinner').hidden = true; poolRetry.hidden = false;
       }
-    }).then(function () { pollBusy = false; });
+      return false;
+    }).finally(function () { pollBusy = false; });
   }
-  window.setInterval(pollPool, 15000);
+  window.StellarSync?.subscribe(['pool'], pollPool);
+  window.setInterval(function () { if (!window.StellarSync?.managed) pollPool(); }, 15000);
   poolRetry.addEventListener('click', pollPool);
   document.addEventListener('visibilitychange', function () {
     if (window.stellarPageActive()) pollPool();

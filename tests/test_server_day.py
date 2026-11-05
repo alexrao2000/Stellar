@@ -166,9 +166,9 @@ def test_today_page_never_writes_into_a_field_being_typed_in():
     """
     html = server.page_today("2026-08-30")
 
-    assert "if (document.activeElement === el) return;" in html
-    assert "if (document.activeElement !== wEl) {" in html
-    assert "if (w && document.activeElement !== kEl) {" in html
+    assert "if (drafts[id]) return;" in html
+    assert "if (!drafts.weight) {" in html
+    assert "if (w && !drafts.wake) {" in html
 
 
 def test_today_page_queues_rapid_task_toggles():

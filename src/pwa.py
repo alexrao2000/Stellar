@@ -22,6 +22,7 @@ ASSET_TYPES = {
     "sections.css": "text/css",
     "reports.js": "text/javascript",
     "reports.css": "text/css",
+    "sync.js": "text/javascript",
     "ranges.js": "text/javascript",
     "ranges.css": "text/css",
     "navigation.css": "text/css",
@@ -61,8 +62,9 @@ HEAD = """<meta charset="utf-8">
 <script src="/app-assets/navigation.js?v=4"></script>
 <script src="/app-assets/sections.js?v=1"></script>
 <link rel="stylesheet" href="/app-assets/sections.css?v=1">
-<script src="/app-assets/reports.js?v=2"></script>
-<link rel="stylesheet" href="/app-assets/reports.css?v=2">
+<script src="/app-assets/sync.js?v=1"></script>
+<script src="/app-assets/reports.js?v=3"></script>
+<link rel="stylesheet" href="/app-assets/reports.css?v=3">
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=7">

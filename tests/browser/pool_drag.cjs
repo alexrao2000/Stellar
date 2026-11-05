@@ -25,6 +25,7 @@ async function check(engine) {
     });
     await context.route('**/api/**', async route => {
       const request = route.request(), url = new URL(request.url());
+      if (url.pathname === '/api/changes') return route.fulfill({ status: 503, body: '{}' });
       assert(url.pathname.startsWith('/api/pool'));
       if (request.method() === 'GET') {
         return route.fulfill({ contentType: 'application/json', body: stale ? original : JSON.stringify(state) });
