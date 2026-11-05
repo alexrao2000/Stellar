@@ -1374,14 +1374,14 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   var rangeAssetsReady = null, rangeRenderVersion = 0;
-  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=1"]');
+  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=2"]');
   var rangeStylesReady = !!(rangeStyle && rangeStyle.sheet);
   function loadRangeAssets() {
     if (window.stellarRenderRange && rangeStylesReady) return Promise.resolve();
     if (rangeAssetsReady) return rangeAssetsReady;
     rangeAssetsReady = Promise.all([
-      ['link', 'href', '/app-assets/ranges.css?v=1'],
-      ['script', 'src', '/app-assets/ranges.js?v=1']
+      ['link', 'href', '/app-assets/ranges.css?v=2'],
+      ['script', 'src', '/app-assets/ranges.js?v=2']
     ].map(function (asset) {
       return new Promise(function (resolve, reject) {
         var node = document.createElement(asset[0]);
@@ -1513,15 +1513,21 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     el.title = r.is_completed && r.completed_at
       ? 'Completed ' + new Date(r.completed_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })
       : '';
-    if (el.classList.contains('range-check')) el.title = el.getAttribute('aria-label') + (el.querySelector('.tag') ? ', ' + el.querySelector('.tag').textContent : '');
+    if (el.classList.contains('range-check')) {
+      var action = el.disabled ? (r.day > todayNow() ? 'Upcoming task' : 'Read-only task') : (r.is_completed ? 'Mark incomplete' : 'Mark complete');
+      el.setAttribute('aria-description', action);
+      el.title = action + ' · ' + r.title + ' · ' + label(r.day, { month: 'short', day: 'numeric' }) +
+        (el.querySelector('.tag') ? ' · ' + el.querySelector('.tag').textContent : '');
+    }
   }
 
-  function tile(r, locked, onUpdate) {
+  function tile(r, locked, onUpdate, compact) {
     var b = document.createElement('button');
     b.type = 'button';
-    b.className = 'mini';
+    b.className = 'mini' + (compact ? ' range-check' : '');
     b.disabled = locked;
-    b.innerHTML = '<span class="mbox"></span><span class="t">' + esc(r.title) + '</span>' + tagFor(r);
+    var star = compact ? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2C13.2 8.5 15.5 10.8 22 12C15.5 13.2 13.2 15.5 12 22C10.8 15.5 8.5 13.2 2 12C8.5 10.8 10.8 8.5 12 2Z"/></svg>' : '';
+    b.innerHTML = '<span class="mbox">' + star + '</span><span class="t">' + esc(r.title) + '</span>' + tagFor(r);
     paintMini(b, r);
     b.addEventListener('click', function () {
       var next = !r.is_completed;

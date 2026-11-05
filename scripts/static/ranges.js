@@ -139,7 +139,7 @@
           button.title = button.getAttribute('aria-label');
           button.addEventListener('click', () => editValue(row, button, ctx, changed)); td.append(button);
         } else {
-          const button = ctx.tile(row, locked, changed); button.classList.add('range-check'); button.title = button.getAttribute('aria-label') + (button.querySelector('.tag') ? ', ' + button.querySelector('.tag').textContent : ''); td.append(button);
+          const button = ctx.tile(row, locked, changed, true); td.append(button);
         }
         tr.append(td);
       });

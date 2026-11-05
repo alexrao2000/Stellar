@@ -634,8 +634,8 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     )
     range_assets = ""
     if template == "today.html" and boot.get("view") in {"3days", "week", "custom"}:
-        range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=1">'
-                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=1">')
+        range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=2">'
+                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=2">')
     html = html.replace("__RANGE_ASSETS__", range_assets)
     # A page whose data is already in the markup has nothing to wait for, and
     # gating it would be strictly worse than not: the gate lifts on the first
