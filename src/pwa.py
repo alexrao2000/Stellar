@@ -49,11 +49,11 @@ HEAD = """<meta charset="utf-8">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
-<script src="/app-assets/navigation.js?v=1"></script>
+<script src="/app-assets/navigation.js?v=2"></script>
 <link rel="stylesheet" href="/app-assets/app.css?v=5">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=3">
-<link rel="stylesheet" href="/app-assets/navigation.css?v=1">
+<link rel="stylesheet" href="/app-assets/navigation.css?v=2">
 <script src="/app-assets/workspace.js?v=4" defer></script>
 <script src="/app-assets/app.js?v=6" defer></script>"""
 

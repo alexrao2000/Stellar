@@ -50,7 +50,6 @@
         button.setAttribute('aria-expanded', String(!collapsed));
         button.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
         button.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
-        button.firstElementChild.textContent = collapsed ? '›' : '‹';
       }
     };
     button?.addEventListener('click', () => {

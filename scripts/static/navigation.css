@@ -4,22 +4,30 @@
   width: 22px; flex: 0 0 22px; font: 20px/1 system-ui, sans-serif; }
 .sidenav a, .sidenav .signout button { gap: 10px; }
 .sidenav .signout button { display: flex; align-items: center; }
-.sidebar-collapse { display: flex; align-items: center; gap: 10px; min-height: 40px;
-  margin: 0 0 12px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px;
-  background: var(--surface); color: var(--ink-muted); font: inherit; cursor: pointer; }
-.sidebar-collapse > span:first-child { width: 22px; font-size: 24px; line-height: 1; }
+.sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px 16px; }
+.sidenav .sidebar-header .brand { min-width: 0; padding: 4px 0; gap: 8px; font-size: 11px; letter-spacing: .12em; }
+.sidebar-collapse { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px;
+  width: 28px; height: 28px; margin: 0; padding: 0; border: 0; border-radius: 7px;
+  background: transparent; color: var(--ink-muted); font: inherit; cursor: pointer; }
+.sidebar-collapse:hover { background: var(--surface-2); color: var(--ink); }
+.sidebar-collapse:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sidebar-collapsed .collapse-chevron { transform: rotate(180deg); transform-origin: 13.5px 12px; }
 @media (min-width: 761px) {
   :root.sidebar-collapsed { --nav-w: 64px; }
   .sidebar-collapsed .sidenav { padding-left: 8px; padding-right: 8px; }
   .sidebar-collapsed .sidenav .nav-label, .sidebar-collapsed .sidenav .brand-name { display: none; }
-  .sidebar-collapsed .sidenav .brand { padding: 4px 0 20px; justify-content: center; }
-  .sidebar-collapsed .sidenav a, .sidebar-collapsed .sidenav .signout button,
-  .sidebar-collapsed .sidebar-collapse { justify-content: center; padding: 10px 0; min-height: 44px; gap: 0; }
+  .sidebar-collapsed .sidebar-header { flex-direction: column; gap: 8px; padding-bottom: 12px; }
+  .sidebar-collapsed .sidenav .brand { justify-content: center; }
+  .sidebar-collapsed .sidenav a, .sidebar-collapsed .sidenav .signout button { justify-content: center; padding: 10px 0; min-height: 44px; gap: 0; }
   .sidebar-collapsed .sidenav a { border-left-width: 0; }
   .sidebar-collapsed .sidenav .install-button { font-size: 0; padding: 10px 0; }
   .sidebar-collapsed .sidenav .install-button::before { content: '↓'; font: 22px/1 system-ui, sans-serif; }
 }
-@media (max-width: 760px) { .sidebar-collapse { display: none; } .sidenav .nav-icon { display: none; } }
+@media (pointer: coarse) {
+  .sidebar-collapse { flex-basis: 44px; width: 44px; height: 44px; }
+  .sidenav .sidebar-header .brand { gap: 6px; font-size: 10px; letter-spacing: .06em; }
+}
+@media (max-width: 760px) { .sidebar-header { display: none; } .sidenav .nav-icon { display: none; } }
 html body[data-page=metrics] { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; }
 body[data-page=metrics] * { box-sizing: border-box; }
 .metrics-wrap { max-width: 1200px; margin: 0 auto; padding: 28px 20px 48px; }

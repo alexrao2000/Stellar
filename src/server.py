@@ -611,8 +611,10 @@ def _nav(active: str) -> str:
         )
     return (
         '<nav class="sidenav" aria-label="Views">'
-        '<div class="brand"><img src="/app-assets/stellar.svg" width="24" height="24" alt=""><span class="brand-name">Stellar</span></div>'
-        '<button type="button" class="sidebar-collapse" aria-expanded="true" aria-controls="app-nav-links" aria-label="Collapse sidebar" title="Collapse sidebar"><span aria-hidden="true">‹</span><span class="nav-label">Collapse</span></button>'
+        '<div class="sidebar-header"><div class="brand"><img src="/app-assets/stellar.svg" width="24" height="24" alt=""><span class="brand-name">Stellar</span></div>'
+        '<button type="button" class="sidebar-collapse" aria-expanded="true" aria-controls="app-nav-links" aria-label="Collapse sidebar" title="Collapse sidebar">'
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path class="collapse-chevron" d="m15 9-3 3 3 3"/></svg></button></div>'
         '<button type="button" class="nav-toggle" aria-expanded="false" '
         'aria-controls="app-nav-links" aria-label="Navigation menu">'
         '<img src="/app-assets/stellar.svg" width="24" height="24" alt="">'
