@@ -45,13 +45,7 @@
     if (days.includes(requested)) focused = requested;
     if (!days.includes(focused)) focused = days.includes(ctx.today) ? ctx.today : days.includes(ctx.day) ? ctx.day : days[0];
     board.classList.add('range-board');
-    const overview = document.createElement('div'); overview.className = 'range-overview';
-    const count = document.createElement('span'); count.className = 'range-total';
-    const percent = document.createElement('span'); percent.className = 'range-percent';
-    const breakdown = document.createElement('p'); breakdown.className = 'range-breakdown'; breakdown.hidden = true;
-    const progress = document.createElement('div'); progress.className = 'range-progress'; progress.setAttribute('aria-hidden', 'true');
-    const bar = document.createElement('span'); progress.append(bar);
-    overview.append(count, percent, progress, breakdown); board.append(overview);
+    const updateProgress = StellarReports.progress(board, () => days.filter(day => day <= ctx.today).flatMap(day => ctx.rows(day)));
     const doneFor = day => ctx.rows(day).filter(row => row.is_completed).length;
     const dateLabel = day => ctx.label(day, { weekday: 'long', month: 'short', day: 'numeric' });
     const dateButton = day => {
@@ -64,12 +58,7 @@
       return button;
     };
     const changed = () => {
-      const counts = StellarReports.counts(days.filter(day => day <= ctx.today).flatMap(day => ctx.rows(day)));
-      count.replaceChildren(); const strong = document.createElement('strong'); strong.textContent = StellarReports.fraction(counts);
-      count.append(strong, ' completed');
-      percent.textContent = counts.percent === null ? '—' : Math.round(counts.percent) + '%';
-      bar.style.width = (counts.percent || 0) + '%';
-      breakdown.hidden = !counts.bonus; breakdown.textContent = StellarReports.description(counts);
+      updateProgress();
       board.querySelectorAll('.range-date').forEach(button => {
         const day = button.dataset.day, total = ctx.owed(ctx.rows(day));
         button.querySelector('.range-count').textContent = day > ctx.today ? '·' : StellarReports.fraction(StellarReports.counts(ctx.rows(day)));

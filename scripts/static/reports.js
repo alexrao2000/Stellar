@@ -34,6 +34,25 @@
     const span = Math.round((Date.parse(past.at(-1).day + 'T12:00:00Z') - Date.parse(past[0].day + 'T12:00:00Z')) / 86400000) + 1;
     return past.filter(row => state(row) === 'done').length * 7 / span;
   };
+  const progress = (host, source) => {
+    const overview = document.createElement('div'); overview.className = 'range-overview';
+    const count = document.createElement('span'); count.className = 'range-total';
+    const percent = document.createElement('span'); percent.className = 'range-percent';
+    const track = document.createElement('div'); track.className = 'range-progress'; track.setAttribute('aria-hidden', 'true');
+    const bar = document.createElement('span'); track.append(bar);
+    const breakdown = document.createElement('p'); breakdown.className = 'range-breakdown';
+    overview.append(count, percent, track, breakdown); host.append(overview);
+    const update = () => {
+      const result = counts(typeof source === 'function' ? source() : source);
+      const strong = document.createElement('strong'); strong.textContent = fraction(result);
+      count.replaceChildren(strong, ' completed');
+      percent.textContent = result.percent === null ? '—' : Math.round(result.percent) + '%';
+      bar.style.width = (result.percent || 0) + '%';
+      breakdown.hidden = !result.bonus; breakdown.textContent = description(result);
+      overview.title = description(result);
+    };
+    update(); return update;
+  };
   const choose = (row, opener) => new Promise(resolve => {
     const existing = document.querySelector('.report-picker');
     if (existing) { existing.hidePopover?.(); existing.close?.(); }
@@ -50,7 +69,7 @@
     dialog.append(close, title, date); dialog.setAttribute('aria-labelledby', title.id);
     for (const value of ['done', 'incomplete', 'unreported']) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'report-option'; button.dataset.state = value;
-      const icon = document.createElement('span'); icon.className = 'report-symbol'; icon.textContent = value === 'unreported' ? '?' : '✦'; icon.setAttribute('aria-hidden', 'true');
+      const icon = document.createElement('span'); icon.className = 'report-symbol'; icon.textContent = '✦'; icon.setAttribute('aria-hidden', 'true');
       button.append(icon, labels[value]); button.setAttribute('aria-pressed', String(state(row) === value));
       button.addEventListener('click', () => { result = value; hide(); }); dialog.append(button);
     }
@@ -97,5 +116,5 @@
   setInterval(tick, 60000);
   window.addEventListener('stellar:visibility', tick);
   document.addEventListener('visibilitychange', tick);
-  window.StellarReports = { state, apply, counts, fraction, description, frequency, choose, bind, labels, overdue, today };
+  window.StellarReports = { state, apply, counts, fraction, description, frequency, progress, choose, bind, labels, overdue, today };
 })();

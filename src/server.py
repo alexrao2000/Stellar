@@ -635,8 +635,8 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     )
     range_assets = ""
     if template == "today.html" and boot.get("view") in {"3days", "week", "custom"}:
-        range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=3">'
-                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=3">')
+        range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=4">'
+                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=4">')
     html = html.replace("__RANGE_ASSETS__", range_assets)
     # A page whose data is already in the markup has nothing to wait for, and
     # gating it would be strictly worse than not: the gate lifts on the first
@@ -665,11 +665,28 @@ def _render(template: str, boot: dict, active: str = "") -> str:
 # --------------------------------------------------------------------------- #
 # API
 # --------------------------------------------------------------------------- #
+@app.get("/api/changes")
+def api_changes(request: Request) -> Response:
+    from hashlib import sha256
+
+    rows = _sb().table("stellar_changes").select("scope,version").order("scope").execute().data or []
+    versions = {row["scope"]: str(row["version"]) for row in rows if row["scope"] in {"records", "definitions", "pool"}}
+    if set(versions) != {"records", "definitions", "pool"}:
+        raise HTTPException(503, "Live sync is not initialized")
+    body = json.dumps(versions, sort_keys=True, separators=(",", ":"))
+    etag = '"' + sha256(body.encode()).hexdigest() + '"'
+    headers = {"Cache-Control": "no-store", "ETag": etag, "Vary": "Cookie"}
+    return Response(status_code=304, headers=headers) if request.headers.get("if-none-match") == etag else Response(body, media_type="application/json", headers=headers)
+
+
 @app.get("/api/task_history")
-def api_task_history() -> list[dict]:
+def api_task_history(fresh: bool = False) -> list[dict]:
     """The reconciled record. Returned whole -- the client does not page this."""
+    if fresh:
+        _cache.pop("task_history", None)
+        _refresh_failed.pop("task_history", None)
     rows = _task_history()
-    definitions = _definitions()
+    definitions = _definitions(fresh=True) if fresh else _definitions()
     by_day: dict[str, list[dict]] = {}
     for row in rows:
         by_day.setdefault(row["day"], []).append(row)
@@ -718,14 +735,14 @@ def api_wake() -> list[dict]:
 
 
 @app.get("/api/consistency")
-def api_consistency() -> list[dict]:
+def api_consistency(fresh: bool = False) -> list[dict]:
     """The fields used by consistency analysis, without notes or metrics.
 
     Optional and deadline rules use the definition in force on each day.
     Missing optional outcomes remain unreported; required outcomes default to
     incomplete after the deadline unless explicitly cleared.
     """
-    defs = _definitions()
+    defs = _definitions(fresh=True) if fresh else _definitions()
     hidden = _binned_titles(defs)
     live = [d for d in defs if _live(d)]
     by_title = _versions_by_title(live)
@@ -1900,7 +1917,15 @@ def _calendar_versions() -> dict:
 
 @app.get("/tasks", response_class=HTMLResponse)
 def page_tasks(tab_frame: bool = False) -> str:
-    """Per-task settings: optional or required, and a deadline."""
+    return _render("tasks.html", {**_task_settings(), "tab_frame": tab_frame}, active="/tasks")
+
+
+@app.get("/api/task_settings")
+def api_task_settings() -> dict:
+    return _task_settings()
+
+
+def _task_settings() -> dict:
     defs = _definitions(fresh=True)
     migrated = all("series_id" in d and "deleted_at" in d and "optional" in d for d in defs)
     today = _today()
@@ -1915,14 +1940,13 @@ def page_tasks(tab_frame: bool = False) -> str:
             summary["deletable"], summary["why_not"] = _deletable(versions, defs)
         tasks.append((_definitions_order_key(_version_on(versions, today), measurements), summary))
     tasks.sort(key=lambda x: x[0])
-    return _render("tasks.html", {
+    return {
         "mode": "inline",
         "migrated": migrated,
         "today": today,
         "floor": WRITE_FLOOR.isoformat(),
         "tasks": [s for _k, s in tasks],
-        "tab_frame": tab_frame,
-    }, active="/tasks")
+    }
 
 
 # Both series render through scripts/templates/series_chart.html. They differ
@@ -1995,13 +2019,13 @@ def page_metrics(tab_frame: bool = False) -> str:
 
 
 @app.get("/api/metrics")
-def api_metrics() -> dict:
+def api_metrics(fresh: bool = False) -> dict:
     from hashlib import sha256
 
     rows = _task_projection("day,list_title,title,is_completed,status,weight_lbs,notes")
     today = _today()
     rows = [r for r in rows if r.get("list_title") == "Daily" and str(r.get("day", ""))[:10] <= today]
-    defs = _definitions()
+    defs = _definitions(fresh=True) if fresh else _definitions()
     hidden = _binned_titles(defs)
     rows = [r for r in rows if r.get("title") not in hidden]
     config = load_config()

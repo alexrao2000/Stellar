@@ -224,7 +224,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
       var fit = function () { title.style.height = 'auto'; title.style.height = (title.scrollHeight + 2) + 'px'; };
       requestAnimationFrame(fit);
       title.addEventListener('input', fit);
-      window.addEventListener('resize', fit);
+      title._fit = fit;
     }
     row.querySelector('.opt').checked = t.optional;
     row.querySelector('.opt').title = 'Extra task: excluded from the required daily target; unreported until you enter an outcome';
@@ -325,9 +325,43 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
     if (!list.length) { host.innerHTML = '<div class="empty">' + emptyText + '</div>'; return; }
     list.forEach(function (t) { host.appendChild(make(t)); });
   }
-  fill('live', live, liveRow, 'No tasks yet. Add one below.');
-  if (stopped.length) { document.getElementById('stopped-card').hidden = false; fill('stopped', stopped, stoppedRow, ''); }
-  if (binned.length) { document.getElementById('bin-card').hidden = false; fill('bin', binned, binRow, ''); }
+  var baseline = new WeakMap(), settingsSnapshot = JSON.stringify(BOOT.tasks), settingsBusy = false;
+  function controlValue(el) { return el.type === 'checkbox' ? el.checked : el.value; }
+  function settingsEditing() {
+    return !!document.querySelector('.row.busy, .row .last') ||
+      Array.from(document.querySelectorAll('#live input, #live textarea')).some(function (el) { return baseline.get(el) !== controlValue(el); });
+  }
+  function renderSettings(tasks) {
+    ['live', 'stopped', 'bin'].forEach(function (id) { document.getElementById(id).replaceChildren(); });
+    live = tasks.filter(function (t) { return !t.binned && !t.stopped; });
+    stopped = tasks.filter(function (t) { return !t.binned && t.stopped; });
+    binned = tasks.filter(function (t) { return t.binned; });
+    fill('live', live, liveRow, 'No tasks yet. Add one below.');
+    document.getElementById('stopped-card').hidden = !stopped.length;
+    document.getElementById('bin-card').hidden = !binned.length;
+    fill('stopped', stopped, stoppedRow, ''); fill('bin', binned, binRow, '');
+    document.querySelectorAll('#live input, #live textarea').forEach(function (el) { baseline.set(el, controlValue(el)); });
+  }
+  renderSettings(BOOT.tasks);
+  window.addEventListener('resize', function () { document.querySelectorAll('#live .title').forEach(function (el) { el._fit?.(); }); });
+  window.StellarSync?.subscribe(['definitions'], async function () {
+    if (settingsBusy || settingsEditing()) return false;
+    settingsBusy = true;
+    try {
+      var response = await fetch('/api/task_settings', { cache: 'no-store', priority: 'low' });
+      if (!response.ok) return false;
+      var data = await response.json();
+      if (settingsEditing()) return false;
+      var next = JSON.stringify(data.tasks);
+      if (next !== settingsSnapshot) {
+        var focused = document.activeElement, title = focused?.getAttribute('aria-label'), start = focused?.selectionStart, end = focused?.selectionEnd;
+        renderSettings(data.tasks); settingsSnapshot = next;
+        var replacement = Array.from(document.querySelectorAll('#live input, #live textarea')).find(function (el) { return title && el.getAttribute('aria-label') === title; });
+        if (replacement) { replacement.focus({ preventScroll: true }); if (start !== null && start !== undefined) replacement.setSelectionRange?.(start, end); }
+      }
+      return true;
+    } catch { return false; } finally { settingsBusy = false; }
+  });
 
   document.getElementById('new-add').addEventListener('click', function () {
     var title = document.getElementById('new-title').value.trim();

@@ -242,24 +242,28 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
   });
 
   var loaded = false, loading = false, dirty = false, checked = 0;
-  function load() {
-    if (!window.stellarPageActive() || loading || loaded && !dirty && Date.now() - checked < 60000) return;
+  function load(force) {
+    force = force === true;
+    if (!window.stellarPageActive() || loading || !force && loaded && !dirty && Date.now() - checked < 60000) return Promise.resolve(false);
     loading = true; dirty = false;
-    (BOOT.mode === 'live'
-      ? fetch(BOOT.endpoint, { headers: BOOT.headers || {}, cache: 'no-store' }).then(function (r) {
+    return (BOOT.mode === 'live'
+      ? fetch(BOOT.endpoint + (BOOT.endpoint.includes('?') ? '&' : '?') + 'fresh=true', { headers: BOOT.headers || {}, cache: 'no-store', priority: 'low' }).then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
         })
       : Promise.resolve(BOOT.data))
       .then(function (data) {
+        var previous = JSON.stringify(ALL);
         ALL = data.slice().sort(function (a, b) {
           return a.day < b.day ? 1 : a.day > b.day ? -1 : a.title.localeCompare(b.title);
         });
-        applyFilters(loaded); loaded = true; checked = Date.now();
+        if (!loaded || previous !== JSON.stringify(ALL)) applyFilters(loaded); loaded = true; checked = Date.now();
+        return true;
       }).catch(function (e) {
         dirty = true;
         if (!loaded) document.getElementById('rows').innerHTML =
           '<tr><td colspan="8" class="empty">Could not load: ' + esc(e.message) + '</td></tr>';
+        return false;
       }).finally(function () { loading = false; });
   }
   function changed() { dirty = true; load(); }
@@ -269,7 +273,8 @@ td.notes { white-space: pre-wrap; max-width: 420px; font-size: .78rem;
   window.addEventListener('stellar:visibility', load);
   document.addEventListener('visibilitychange', load);
   window.addEventListener('focus', load);
-  setInterval(load, 60000);
+  window.StellarSync?.subscribe(['records', 'definitions'], function () { return load(true); });
+  setInterval(function () { if (!window.StellarSync?.managed) load(); }, 60000);
   load();
 })();
 </script>
