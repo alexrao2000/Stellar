@@ -1,5 +1,6 @@
 /* Tasks float inside a full Pool canvas; its controls and stars reserve clear
-   space around the panel. Compact views wrap labels and native controls. */
+   space around the panel. Range days wrap to fit the task panel. Compact views
+   wrap labels and native controls. */
 .dated-tasks { min-width: 0; }
 .nav-workspace-label { display: none; }
 .task-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -142,6 +143,7 @@ input::-webkit-datetime-edit { min-width: 0; padding: 0; }
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .workspace-open[data-task-columns='3'] #tasks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .workspace-open .mini input { width: 100%; min-width: 0; }
+  .workspace-open .cols { grid-template-columns: repeat(var(--workspace-range-columns, 3), minmax(0, 1fr)); overflow-x: visible; }
   .workspace-open .cols .mini { padding: 6px 7px; border-radius: 8px; font-size: 12px; }
   .workspace-open .cols .col-body { gap: 4px; }
   .workspace-open .summary, .workspace-open .month-hint { font-size: 11px; margin: 0 0 8px; }
