@@ -103,21 +103,29 @@ def test_all_views_and_login_have_a_real_mobile_document(client, monkeypatch):
         assert "Task Tracker" not in page
 
 
-def test_embedded_pool_keeps_data_and_controls_without_duplicate_navigation(client, monkeypatch):
+def test_pool_paints_its_shell_before_reading_data(client, monkeypatch):
     monkeypatch.setenv("AUTH_ENABLED", "false")
-    monkeypatch.setattr(server, "_pool_state", lambda **kwargs: {
-        "tasks": [{"id": "7", "title": "Plan the week"}], "edges": [],
-    })
+    calls = []
+
+    def pool_state(**kwargs):
+        calls.append(kwargs)
+        return {"tasks": [{"id": "7", "title": "Plan the week"}], "edges": []}
+    monkeypatch.setattr(server, "_pool_state", pool_state)
     response = client.get("/pool?embedded=true")
     assert response.status_code == 200
     assert 'data-page="pool" data-embedded="true"' in response.text
     assert 'class="sidenav"' not in response.text
     assert 'id="pool-add"' in response.text
     assert 'id="pool-map"' in response.text
-    assert '"title":"Plan the week"' in response.text
+    assert not calls
+    assert 'id="pool-loading"' in response.text
     standalone = client.get("/pool")
     assert 'class="sidenav"' in standalone.text
     assert 'data-embedded="true"' not in standalone.text
+    assert not calls
+    data = client.get("/api/pool?resolved=true")
+    assert data.json()["tasks"][0]["title"] == "Plan the week"
+    assert len(calls) == 1
 
 
 def test_tasks_page_does_not_read_pool_until_the_browser_opens_it(client, monkeypatch):
