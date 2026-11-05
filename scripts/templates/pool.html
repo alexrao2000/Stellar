@@ -5,7 +5,8 @@
    The far sky is cached; only nearby specks redraw, at a limited frame rate.
    Motion pauses offscreen and respects the system's reduced-motion setting.
    Dragging only moves stars; prerequisites are chosen explicitly in task
-   details. Redraws and interrupted gestures cancel any unfinished drag. */
+   details. Interrupted gestures cancel any unfinished drag; background reads
+   started before a local gesture or write cannot overwrite its result. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -327,6 +328,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   var veil = document.getElementById('veil');
   var W = 0, H = 0;
   var writesInFlight = 0;
+  var poolRevision = 0;
   var embeddedVisible = true;
   var poolLoaded = !BOOT.loading;
   var poolLoading = document.getElementById('pool-loading');
@@ -365,6 +367,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     });
   }
   function post(url, method) {
+    poolRevision++;
     writesInFlight++;
     return fetch(url, { method: method || 'POST' }).then(function (res) {
       if (res.ok) return res.json();
@@ -683,6 +686,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 
   function resize() {
     var r = mapField.getBoundingClientRect();
+    if (W === r.width && H === r.height) return;
     W = r.width; H = r.height;
     drawDust();
     paint();
@@ -730,6 +734,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var t = byId[el.dataset.id];
     if (!t) return;
     cancelDrag();
+    poolRevision++;
     el.setPointerCapture(e.pointerId);
     el.classList.add('held');
     drag = { el: el, t: t, id: e.pointerId, moved: false,
@@ -1079,9 +1084,12 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   function poolSnapshot(tasks, edges) {
     return JSON.stringify([tasks, edges]);
   }
+  function poolEditing() {
+    return writesInFlight || drag || PENDING || panelEl.contains(document.activeElement);
+  }
   function pollPool() {
-    if (document.hidden || !embeddedVisible || pollBusy || writesInFlight || drag || PENDING ||
-        panelEl.contains(document.activeElement)) return;
+    if (document.hidden || !embeddedVisible || pollBusy || poolEditing()) return;
+    var revision = poolRevision;
     pollBusy = true;
     if (!poolLoaded) {
       document.getElementById('pool-load-status').textContent = 'Loading Pool…';
@@ -1091,6 +1099,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     }).then(function (state) {
+      if (revision !== poolRevision || poolEditing()) return;
       if (state.schema_missing) throw new Error('Pool is unavailable');
       var tasks = state.tasks || [], edges = state.edges || [];
       poolLoaded = true; sky.dataset.loading = 'false'; poolLoading.hidden = true;
