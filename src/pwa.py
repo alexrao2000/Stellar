@@ -53,7 +53,7 @@ HEAD = """<meta charset="utf-8">
 <link rel="stylesheet" href="/app-assets/app.css?v=5">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=4">
-<link rel="stylesheet" href="/app-assets/navigation.css?v=4">
+<link rel="stylesheet" href="/app-assets/navigation.css?v=5">
 <script src="/app-assets/workspace.js?v=5" defer></script>
 <script src="/app-assets/app.js?v=7" defer></script>"""
 

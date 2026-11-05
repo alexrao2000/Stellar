@@ -60,7 +60,7 @@ body[data-page=metrics] * { box-sizing: border-box; }
 #metric-task-options button:hover, #metric-task-options button[aria-current=true] { background: var(--surface-2); color: var(--ink); }
 #metric-task-empty { padding: 12px 10px; margin: 0; color: var(--ink-muted); font-size: 13px; }
 .metric-toolbar button:focus-visible, #metric-task-search:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-#metric-frame { border: 0; display: block; width: 100%; height: 180px; }
+.metric-frame, #metric-frame { border: 0; display: block; width: 100%; height: 180px; }
 #metric-panel[aria-busy=true] #metric-frame { visibility: hidden; }
 #metric-status { color: var(--ink-muted); font-size: 14px; line-height: 1.5; }
 #metric-status:empty { display: none; }
