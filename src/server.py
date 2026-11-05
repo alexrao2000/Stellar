@@ -8,6 +8,9 @@ the credential stays in this process.
 Reads are cached; writes are bounded to task_history and to the fields a daily
 check-in touches. Nothing here writes to Google.
 
+Only foreground requests gate the first paint. Embedded metric charts report
+readiness to their parent instead of waiting behind a second loading screen.
+
 Run:  make dev        (or: uvicorn src.server:app --reload --port 8000)
 """
 from __future__ import annotations
@@ -568,6 +571,7 @@ _BOOT_GATE_JS = """<script>
   }
 
   window.fetch = function () {
+    if (arguments[1] && arguments[1].priority === 'low') return real.apply(this, arguments);
     started = true;
     inflight++;
     clearTimeout(quiet);
@@ -679,7 +683,7 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     # gating it would be strictly worse than not: the gate lifts on the first
     # quiet network, and with no request to wait on that is a timer rather than
     # an event. Such a page paints complete on the first frame.
-    gate = "" if boot.get("mode") == "inline" else _BOOT_GATE_JS
+    gate = "" if boot.get("mode") == "inline" or boot.get("embedded") else _BOOT_GATE_JS
     # Injected here rather than in each template: every page goes through this
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.

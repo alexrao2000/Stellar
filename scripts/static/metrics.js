@@ -1,11 +1,13 @@
 /* The selected chart loads before catalog discovery and idle prefetches. All
    task charts share one in-memory history request; nothing is stored on disk.
-   Record revisions clear the cache. Task discovery stays in a searchable menu
-   so the main navigation remains a single row. */
+   Loaded chart frames are reused, with core charts warmed one at a time while
+   idle and only two recent task charts retained. Record revisions clear both
+   caches. Task discovery stays in a searchable menu. */
 (() => {
   const tabs = document.getElementById('metric-tabs');
   if (!tabs) return;
-  const frame = document.getElementById('metric-frame');
+  const initialFrame = document.getElementById('metric-frame');
+  let frame = initialFrame, activeView = null;
   const panel = document.getElementById('metric-panel');
   const status = document.getElementById('metric-status');
   const retry = document.getElementById('metric-retry');
@@ -22,6 +24,7 @@
   let revision = null, busy = false, checked = 0, queued = false, initialized = false;
   let catalogReady = false, catalogError = false, activeReady = false, activeFailed = false, generation = 0, epoch = 0, warmQueued = false;
   const cache = new Map(), warmed = new Set();
+  const views = new Map();
   let selected = new URLSearchParams(location.search).get('tab');
   try { selected ||= localStorage.getItem('stellar:metric-tab'); } catch {}
   selected ||= 'overview';
@@ -42,19 +45,24 @@
   window.stellarMetricData = dataFor;
   const scheduleWarm = () => {
     if (warmQueued || !activeReady || !catalogReady || document.hidden) return;
-    const current = modules.find(module => module.id === selected);
-    const endpoint = [...new Set(modules.map(endpointFor))].find(url =>
-      url !== endpointFor(current) && !cache.has(url) && !warmed.has(url));
-    if (!endpoint) return;
+    const module = modules.find(module => module.kind !== 'task' && module.id !== selected &&
+      !views.has(urlFor(module)) && !warmed.has(urlFor(module)));
+    if (!module) return;
     warmQueued = true;
     const version = epoch;
     const run = async () => {
+      if (version !== epoch) { warmQueued = false; scheduleWarm(); return; }
+      if (!activeReady || document.hidden) { warmQueued = false; return; }
+      warmed.add(urlFor(module));
+      try {
+        await dataFor(endpointFor(module), true);
+        if (version === epoch) {
+          if (activeReady && !document.hidden) await buildView(module).promise;
+          else warmed.delete(urlFor(module));
+        }
+      } catch {}
       warmQueued = false;
-      if (version !== epoch) { scheduleWarm(); return; }
-      if (!activeReady || document.hidden) return;
-      warmed.add(endpoint);
-      try { await dataFor(endpoint, true); } catch {}
-      if (version === epoch) scheduleWarm();
+      scheduleWarm();
     };
     if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 1500 });
     else setTimeout(run, 150);
@@ -63,6 +71,43 @@
     if (module.kind === 'weight' || module.kind === 'wake') return '/' + module.kind + '?embedded=true';
     return '/consistency?embedded=true' + (module.kind === 'task'
       ? '&task=' + encodeURIComponent(module.label) + '&titles=' + encodeURIComponent(JSON.stringify(module.titles)) : '');
+  };
+  const showActiveState = () => {
+    activeReady = activeView.ready; activeFailed = activeView.failed;
+    panel.setAttribute('aria-busy', String(!activeReady));
+    if (activeFailed) { status.textContent = 'Could not load this metric. Check your connection and retry.'; retry.hidden = false; }
+    else if (activeReady && !catalogError) { status.textContent = ''; retry.hidden = true; }
+  };
+  const finishView = (view, failed) => {
+    view.ready = true; view.failed = failed; clearTimeout(view.timer); view.resolve();
+    if (view !== activeView) return;
+    showActiveState();
+    if (!catalogReady && !busy && !catalogError) load(true);
+    scheduleWarm();
+  };
+  function buildView(module) {
+    const key = urlFor(module);
+    if (views.has(key)) return views.get(key);
+    const node = initialFrame.isConnected && !initialFrame.dataset.key ? initialFrame : document.createElement('iframe');
+    node.removeAttribute('id'); node.className = 'metric-frame'; node.hidden = true;
+    node.title = module.label + ' metrics'; node.style.height = '180px';
+    node.dataset.key = key; node.dataset.url = key + '&metric_version=' + (++generation);
+    const view = { frame: node, kind: module.kind, ready: false, failed: false, timer: null };
+    view.promise = new Promise(resolve => { view.resolve = resolve; });
+    views.set(key, view);
+    if (!node.isConnected) panel.appendChild(node);
+    node.addEventListener('load', () => {
+      try { if (node.contentWindow.location.href !== 'about:blank' && node.contentDocument.body.dataset.embedded !== 'true') finishView(view, true); }
+      catch { finishView(view, true); }
+    });
+    view.timer = setTimeout(() => { if (!view.ready) finishView(view, true); }, 20000);
+    node.contentWindow.location.replace(node.dataset.url);
+    return view;
+  }
+  const discardView = key => {
+    const view = views.get(key);
+    if (!view) return;
+    clearTimeout(view.timer); view.resolve(); view.frame.remove(); views.delete(key);
   };
   const closeMenu = (focus = false) => {
     menu.hidden = true; toggle.setAttribute('aria-expanded', 'false');
@@ -120,14 +165,16 @@
     initialized = true;
     syncSelection();
     const url = urlFor(module);
-    if (refresh || frame.dataset.key !== url) {
-      activeReady = false; activeFailed = false;
-      panel.setAttribute('aria-busy', 'true');
-      status.textContent = 'Loading ' + module.label.toLocaleLowerCase() + '…'; retry.hidden = true;
-      frame.style.height = '180px'; frame.dataset.key = url;
-      frame.dataset.url = url + '&metric_version=' + (++generation);
-      frame.contentWindow.location.replace(frame.dataset.url);
-    }
+    if (refresh) discardView(url);
+    const view = buildView(module);
+    if (frame !== view.frame) { frame.hidden = true; frame.removeAttribute('id'); }
+    frame = view.frame; activeView = view;
+    frame.id = 'metric-frame'; frame.hidden = false;
+    views.delete(url); views.set(url, view);
+    const taskViews = [...views.entries()].filter(([, item]) => item.kind === 'task');
+    taskViews.slice(0, Math.max(0, taskViews.length - 2)).forEach(([key]) => discardView(key));
+    if (!view.ready) { status.textContent = 'Loading ' + module.label.toLocaleLowerCase() + '…'; retry.hidden = true; }
+    showActiveState();
     frame.title = module.label + ' metrics';
   };
   const load = async (force = false) => {
@@ -142,9 +189,11 @@
       const changed = !catalogReady || JSON.stringify(modules) !== JSON.stringify(data.modules);
       const refresh = revision !== null && revision !== data.revision;
       modules = data.modules; revision = data.revision; catalogReady = true; catalogError = false;
-      if (refresh) { cache.clear(); warmed.clear(); epoch++; }
+      if (refresh) { cache.clear(); warmed.clear(); epoch++; [...views.keys()].forEach(discardView); }
       if (changed) renderNavigation();
       select(selected, refresh, false);
+      const allowed = new Set(modules.map(urlFor));
+      [...views.keys()].filter(key => !allowed.has(key)).forEach(discardView);
       if (activeReady) {
         status.textContent = activeFailed ? 'Could not load this metric. Check your connection and retry.' : '';
         retry.hidden = !activeFailed;
@@ -193,20 +242,14 @@
   document.addEventListener('click', event => { if (!picker.contains(event.target)) closeMenu(); });
   picker.addEventListener('focusout', () => setTimeout(() => { if (!picker.contains(document.activeElement)) closeMenu(); }, 0));
   window.addEventListener('message', event => {
-    if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.type !== 'stellar:metric-height' ||
-        !frame.dataset.url) return;
-    const url = new URL(frame.dataset.url, location.origin);
+    if (event.origin !== location.origin || event.data?.type !== 'stellar:metric-height') return;
+    const view = [...views.values()].find(view => event.source === view.frame.contentWindow);
+    if (!view) return;
+    const url = new URL(view.frame.dataset.url, location.origin);
     if (event.data.url !== url.pathname + url.search) return;
     const height = Number(event.data.height);
-    if (Number.isFinite(height) && height > 0 && height < 30000) frame.style.height = Math.ceil(height) + 'px';
-    if (event.data.ready) {
-      activeReady = true; activeFailed = !!event.data.failed; panel.setAttribute('aria-busy', 'false');
-      if (event.data.failed) {
-        status.textContent = 'Could not load this metric. Check your connection and retry.'; retry.hidden = false;
-      } else if (!catalogError) { status.textContent = ''; retry.hidden = true; }
-      if (!catalogReady && !busy && !catalogError) load(true);
-      scheduleWarm();
-    }
+    if (Number.isFinite(height) && height > 0 && height < 30000) view.frame.style.height = Math.ceil(height) + 'px';
+    if (event.data.ready) finishView(view, !!event.data.failed);
   });
   retry.addEventListener('click', () => {
     if (catalogError || !catalogReady) load(true);

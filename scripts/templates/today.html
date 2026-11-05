@@ -487,6 +487,22 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 
   var requestVersion = {};
 
+  function afterVisiblePaint(callback) {
+    function queue() {
+      requestAnimationFrame(function () {
+        if (window.requestIdleCallback) requestIdleCallback(callback, { timeout: 1500 });
+        else setTimeout(callback, 80);
+      });
+    }
+    var root = document.documentElement;
+    if (!root.classList.contains('app-booting')) { queue(); return; }
+    var observer = new MutationObserver(function () {
+      if (root.classList.contains('app-booting')) return;
+      observer.disconnect(); queue();
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+  }
+
   function fetchDay(day, fresh) {
     if (!fresh && CACHE[day]) return Promise.resolve(CACHE[day]);
     var key = day + (fresh ? ':fresh' : ':cached');
@@ -554,7 +570,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
          throw away focus and any half-typed measurement to show the same
          thing, which is exactly the flicker this is meant to remove. */
       if (JSON.stringify(rows) !== knownJson) render(rows);
-      prefetchAdjacent(day);
+      afterVisiblePaint(function () { if (VIEW === 'day' && DAY === day) prefetchAdjacent(day); });
     }).catch(function (e) {
       /* With a local copy on screen this is a stale-data warning, not a
          failure: say which it is rather than blaming the rows on display. */
@@ -577,7 +593,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var start = want[0], end = want[want.length - 1];
     var versions = {};
     want.forEach(function (d) { versions[d] = requestVersion[d] || 0; });
-    prefetching = fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store' })
+    prefetching = fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: 'low' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data) return;
@@ -1281,8 +1297,8 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
   function held(days) { return days.every(function (d) { return CACHE[d]; }); }
 
-  function fetchRange(start, end) {
-    return fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store' })
+  function fetchRange(start, end, background) {
+    return fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: background ? 'low' : 'high' })
       .then(function (res) {
         return res.json().then(function (j) {
           if (!res.ok) throw new Error(j.detail || ('HTTP ' + res.status));
@@ -1307,7 +1323,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var painted = null;
     if (held(days)) { renderBoard(days); painted = snapshot(days); }
     return loadRange(start, end, false, seq, painted).then(function () {
-      if (seq === rangeSeq) prefetchRanges();
+      afterVisiblePaint(function () { if (seq === rangeSeq && VIEW !== 'day') prefetchRanges(); });
     });
   }
 
@@ -1317,7 +1333,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     seq = seq || ++rangeSeq;
     var days = daysIn(start, end);
     if (painted === undefined) painted = SHOWN && SHOWN.join() === days.join() ? snapshot(days) : null;
-    return fetchRange(start, end)
+    return fetchRange(start, end, background)
       .then(function () {
         if (seq !== rangeSeq) return;              // a newer range was asked for
         var board = document.getElementById('board');
@@ -1331,16 +1347,20 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   /* The range before and after this one, fetched ahead -- only the days not
      already held, each side in one request. */
   function prefetchRanges() {
-    [-1, 1].forEach(function (dir) {
-      var r;
-      if (VIEW === 'month') r = rangeOf('month', addMonths(DAY, dir));
-      else if (VIEW === 'custom') {
-        var span = daysBetween(CUSTOM.start, CUSTOM.end) + 1;
-        r = [shiftDay(CUSTOM.start, dir * span), shiftDay(CUSTOM.end, dir * span)];
-      } else r = rangeOf(VIEW, shiftDay(DAY, dir * (VIEW === 'week' ? 7 : 3)));
-      var missing = daysIn(r[0], r[1]).filter(function (d) { return !CACHE[d]; });
-      if (missing.length) fetchRange(missing[0], missing[missing.length - 1]).catch(function () {});
-    });
+    var sequence = rangeSeq;
+    [-1, 1].reduce(function (previous, dir) {
+      return previous.then(function () {
+        if (sequence !== rangeSeq || VIEW === 'day' || document.hidden) return;
+        var r;
+        if (VIEW === 'month') r = rangeOf('month', addMonths(DAY, dir));
+        else if (VIEW === 'custom') {
+          var span = daysBetween(CUSTOM.start, CUSTOM.end) + 1;
+          r = [shiftDay(CUSTOM.start, dir * span), shiftDay(CUSTOM.end, dir * span)];
+        } else r = rangeOf(VIEW, shiftDay(DAY, dir * (VIEW === 'week' ? 7 : 3)));
+        var missing = daysIn(r[0], r[1]).filter(function (d) { return !CACHE[d]; });
+        if (missing.length) return fetchRange(missing[0], missing[missing.length - 1], true).catch(function () {});
+      });
+    }, Promise.resolve());
   }
 
   function owed(rows) {
