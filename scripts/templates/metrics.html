@@ -3,11 +3,24 @@
   <p class="eyebrow">Stellar</p>
   <h1>Metrics</h1>
   <p class="sub">Charts and progress from your task records.</p>
-  <div id="metric-tabs" class="metric-tabs" role="tablist" aria-label="Metrics"></div>
+  <div class="metric-toolbar">
+    <div id="metric-tabs" class="metric-tabs" role="tablist" aria-label="Metrics"></div>
+    <div class="metric-picker">
+      <button type="button" id="metric-task-toggle" aria-expanded="false" aria-controls="metric-task-menu" aria-haspopup="dialog" disabled>
+        <span id="metric-task-label">Task metrics</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+      </button>
+      <div id="metric-task-menu" role="dialog" aria-label="Choose a task metric" hidden>
+        <input type="search" id="metric-task-search" placeholder="Find a task…" aria-label="Find a task" autocomplete="off">
+        <div id="metric-task-options" aria-label="Recorded tasks"></div>
+        <p id="metric-task-empty" hidden>No matching tasks.</p>
+      </div>
+    </div>
+  </div>
   <p id="metric-status" role="status">Loading your metrics…</p>
   <button type="button" id="metric-retry" hidden>Retry</button>
   <section id="metric-panel" role="tabpanel" aria-label="Metric">
     <iframe id="metric-frame" title="Metrics overview"></iframe>
   </section>
 </div>
-<script src="/app-assets/metrics.js?v=1" defer></script>
+<script src="/app-assets/metrics.js?v=2" defer></script>
