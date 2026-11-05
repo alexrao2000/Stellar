@@ -52,11 +52,11 @@ HEAD = """<meta charset="utf-8">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
-<script src="/app-assets/navigation.js?v=2"></script>
+<script src="/app-assets/navigation.js?v=3"></script>
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=6">
-<link rel="stylesheet" href="/app-assets/navigation.css?v=6">
+<link rel="stylesheet" href="/app-assets/navigation.css?v=7">
 <link rel="stylesheet" href="/app-assets/space-theme.css?v=1">
 <script src="/app-assets/workspace.js?v=7" defer></script>
 <script src="/app-assets/app.js?v=9" defer></script>"""

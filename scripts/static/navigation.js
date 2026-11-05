@@ -44,6 +44,15 @@
   };
   const init = () => {
     const button = document.querySelector('.sidebar-collapse');
+    const desktop = matchMedia('(min-width: 761px)');
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    let animationTimer;
+    const notifySidebar = () => window.dispatchEvent(new Event('stellar:sidebar'));
+    const finishAnimation = () => {
+      clearTimeout(animationTimer);
+      root.classList.remove('sidebar-animating');
+      notifySidebar();
+    };
     const sync = () => {
       const collapsed = root.classList.contains('sidebar-collapsed');
       if (button) {
@@ -53,11 +62,19 @@
       }
     };
     button?.addEventListener('click', () => {
+      clearTimeout(animationTimer);
+      root.classList.toggle('sidebar-animating', desktop.matches && !reducedMotion.matches);
       root.classList.toggle('sidebar-collapsed');
       write('stellar:sidebar-collapsed', String(root.classList.contains('sidebar-collapsed')));
       sync();
-      window.dispatchEvent(new Event('stellar:sidebar'));
+      notifySidebar();
+      if (root.classList.contains('sidebar-animating')) animationTimer = setTimeout(finishAnimation, 380);
     });
+    root.addEventListener('transitionend', event => {
+      if (event.target === root && event.propertyName === '--nav-w') finishAnimation();
+    });
+    desktop.addEventListener('change', finishAnimation);
+    reducedMotion.addEventListener('change', finishAnimation);
     document.querySelectorAll('.sidenav a').forEach(a => {
       if (a.getAttribute('href') === '/') a.dataset.section = 'tasks';
       if (a.getAttribute('href') === '/metrics') a.dataset.section = 'metrics';
