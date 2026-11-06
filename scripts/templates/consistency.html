@@ -1,5 +1,8 @@
 <title>Consistency · Stellar</title>
 <style>
+/* Each task opens its latest year unless the comparison lock is enabled.
+   Cached metric frames reread that preference when activated. Future scheduled
+   records do not move the default beyond the latest year with past records. */
 * { box-sizing: border-box; }
 html, body {
   margin: 0; padding: 0; background: var(--bg); color: var(--ink);
@@ -153,6 +156,12 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 .heat-inspector input { min-width: 0; flex: 1; padding: 8px; border: 1px solid var(--rule);
   border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; }
 .heat-inspector p { font-size: 13px; line-height: 1.5; }
+.heat-year-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 8px; font: 12px/1.5 system-ui, sans-serif; color: var(--ink-muted); }
+.heat-year-controls button { padding: 6px 12px; min-height: 32px; border: 1px solid var(--rule); border-radius: 8px; color: var(--ink); background: var(--surface); font: inherit; cursor: pointer; }
+.heat-year-controls button[aria-pressed=true] { background: var(--surface-2); border-color: var(--ink-muted); }
+.heat-year-controls label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
+.heat-year-controls input { margin: 0; accent-color: var(--ink); }
+#heat-year-note { font-size: 11px; }
 </style>
 
 <div class="wrap">
@@ -185,6 +194,11 @@ button:focus-visible, select:focus-visible, input:focus-visible {
         <div class="meta" id="meta"></div>
       </div>
       <div class="strip" id="tstrip" style="margin-top:0"></div>
+      <div class="heat-year-controls" role="group" aria-label="Calendar year">
+        <button type="button" id="heat-latest" aria-pressed="true" title="Show this task’s latest year">Latest</button>
+        <label title="Keep the same year when switching tasks"><input type="checkbox" id="heat-keep-year"> Keep year</label>
+        <span id="heat-year-note" role="status" aria-live="polite"></span>
+      </div>
       <div class="heatwrap">
         <div class="heatscroll"><div class="heatgrid" id="heat" role="img" aria-label="Completion by day"></div></div>
         <div class="years" id="years"></div>
@@ -364,12 +378,26 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     inspectDay();
   }
 
-  /* Which year the grid shows. The current calendar year, not a rolling 365
-     days: a window that opens in the middle of last August makes it impossible
-     to compare one year with another, which is most of the reason to look.
-     Null until the first render chooses. */
-  var HEAT_YEAR = null;
-  try { HEAT_YEAR = localStorage.getItem('stellar:heat-year'); } catch (e) {}
+  var HEAT_YEAR = null, KEEP_YEAR = false;
+  function readHeatPreference(reset) {
+    try {
+      KEEP_YEAR = localStorage.getItem('stellar:heat-year-pinned') === 'true';
+      var saved = localStorage.getItem('stellar:heat-year');
+      if (KEEP_YEAR) HEAT_YEAR = /^\d{4}$/.test(saved || '') ? saved : null;
+      else if (reset) HEAT_YEAR = null;
+    } catch (e) { if (reset) HEAT_YEAR = null; }
+  }
+  function saveHeatPreference() {
+    try {
+      localStorage.setItem('stellar:heat-year-pinned', String(KEEP_YEAR));
+      if (HEAT_YEAR) localStorage.setItem('stellar:heat-year', HEAT_YEAR);
+    } catch (e) {}
+  }
+  function latestHeatYear(rows) {
+    return heatYears(rows.filter(function (row) { return row.day <= TODAY; }))[0] || heatYears(rows)[0] || TODAY.slice(0, 4);
+  }
+  function currentHeatRows() { return byTitle[document.getElementById('task').value] || []; }
+  readHeatPreference(true);
 
   function heatYears(rows) {
     var seen = {};
@@ -384,13 +412,20 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   function heatmap(rows) {
     var host = document.getElementById('heat');
     var nav = document.getElementById('years');
-    if (!rows.length) { host.innerHTML = ''; nav.innerHTML = ''; return; }
+    var latestButton = document.getElementById('heat-latest'), keep = document.getElementById('heat-keep-year');
+    var note = document.getElementById('heat-year-note');
+    keep.checked = KEEP_YEAR; latestButton.disabled = !rows.length;
+    if (!rows.length) { host.innerHTML = ''; nav.innerHTML = ''; note.textContent = 'No records for this task'; return; }
 
     var years = heatYears(rows);
-    if (years.indexOf(HEAT_YEAR) === -1) {
-      var thisYear = TODAY.slice(0, 4);
-      HEAT_YEAR = years.indexOf(thisYear) !== -1 ? thisYear : years[0];
-    }
+    var latest = latestHeatYear(rows);
+    if (!HEAT_YEAR || !KEEP_YEAR && years.indexOf(HEAT_YEAR) === -1) HEAT_YEAR = latest;
+    if (KEEP_YEAR && years.indexOf(HEAT_YEAR) === -1) years.push(HEAT_YEAR);
+    years.sort().reverse();
+    latestButton.setAttribute('aria-pressed', String(!KEEP_YEAR && HEAT_YEAR === latest));
+    note.textContent = HEAT_YEAR + (KEEP_YEAR ? ' · kept across tasks' : HEAT_YEAR === latest ? ' · latest' : ' · this task');
+    if (!rows.some(function (row) { return row.day.slice(0, 4) === HEAT_YEAR; })) note.textContent += ' · No records in this year';
+    host.dataset.year = HEAT_YEAR;
 
     nav.innerHTML = years.map(function (y) {
       return '<button type="button" data-year="' + y + '"' +
@@ -475,12 +510,28 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     var b = e.target.closest('button[data-year]');
     if (!b || b.dataset.year === HEAT_YEAR) return;
     HEAT_YEAR = b.dataset.year;
-    try { localStorage.setItem('stellar:heat-year', HEAT_YEAR); } catch (e) {}
-    heatmap(byTitle[document.getElementById('task').value] || []);
+    saveHeatPreference();
+    heatmap(currentHeatRows());
   });
 
   document.getElementById('minocc').addEventListener('input', ranking);
-  document.getElementById('task').addEventListener('change', detail);
+  document.getElementById('task').addEventListener('change', function () { readHeatPreference(true); detail(); });
+  document.getElementById('heat-latest').addEventListener('click', function () {
+    KEEP_YEAR = false; HEAT_YEAR = latestHeatYear(currentHeatRows()); saveHeatPreference(); heatmap(currentHeatRows());
+  });
+  document.getElementById('heat-keep-year').addEventListener('change', function (event) {
+    KEEP_YEAR = event.target.checked;
+    if (!KEEP_YEAR) HEAT_YEAR = latestHeatYear(currentHeatRows());
+    saveHeatPreference(); heatmap(currentHeatRows());
+  });
+  window.stellarMetricActivate = function () {
+    readHeatPreference(true);
+    if (ROWS.length) { TODAY = StellarReports.today(); summary(); ranking(); detail(); }
+  };
+  window.addEventListener('storage', function (event) {
+    if (!['stellar:heat-year', 'stellar:heat-year-pinned'].includes(event.key) || document.hidden || window.stellarPageActive?.() === false || window !== parent && frameElement?.hidden) return;
+    readHeatPreference(true); if (ROWS.length) heatmap(currentHeatRows());
+  });
 
   /* Inline: the server already had the rows and embedded them, so there is no
      second round trip and nothing to show a loading state for. Live: fetch.

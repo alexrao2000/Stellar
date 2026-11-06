@@ -2,7 +2,8 @@
    task charts share one in-memory history request; nothing is stored on disk.
    Loaded chart frames are reused, with core charts warmed one at a time while
    idle and only two recent task charts retained. Record revisions clear both
-   caches. Task discovery stays in a searchable menu. */
+   caches. Task discovery stays in a searchable menu. Pointer choices keep
+   search focus until selection so blur cannot hide the option before its click. */
 (() => {
   const tabs = document.getElementById('metric-tabs');
   if (!tabs) return;
@@ -85,8 +86,10 @@
     else if (activeReady && !catalogError) { status.textContent = ''; retry.hidden = true; }
   };
   const finishView = (view, failed) => {
+    const firstReady = !view.ready;
     view.ready = true; view.failed = failed; clearTimeout(view.timer); view.resolve();
     if (view !== activeView || leaving) return;
+    if (firstReady && !failed) { try { view.frame.contentWindow.stellarMetricActivate?.(); } catch {} }
     showActiveState();
     if (!catalogReady && !busy && !catalogError) load(true);
     scheduleWarm();
@@ -173,10 +176,14 @@
     const url = urlFor(module);
     if (refresh || views.get(url)?.failed && (userAction || views.get(url) !== activeView)) discardView(url);
     const view = buildView(module);
+    const changedView = activeView !== view;
     if (frame !== view.frame) { frame.hidden = true; frame.removeAttribute('id'); }
     frame = view.frame; activeView = view;
     frame.id = 'metric-frame'; frame.hidden = false;
-    try { frame.contentWindow.dispatchEvent(new Event('stellar:report-clock')); } catch {}
+    try {
+      if (changedView && frame.contentWindow.stellarMetricActivate) frame.contentWindow.stellarMetricActivate();
+      else frame.contentWindow.dispatchEvent(new Event('stellar:report-clock'));
+    } catch {}
     views.delete(url); views.set(url, view);
     const taskViews = [...views.entries()].filter(([, item]) => item.kind === 'task');
     taskViews.slice(0, Math.max(0, taskViews.length - 2)).forEach(([key]) => discardView(key));
@@ -232,6 +239,7 @@
     toggle.setAttribute('aria-expanded', 'true'); search.focus();
   });
   search.addEventListener('input', renderOptions);
+  options.addEventListener('mousedown', event => { if (event.button === 0) event.preventDefault(); });
   options.addEventListener('click', event => {
     const button = event.target.closest('[data-metric]');
     if (button) { select(button.dataset.metric); closeMenu(true); }
