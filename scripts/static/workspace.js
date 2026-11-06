@@ -1,7 +1,9 @@
 /* Tasks float within the Pool canvas while its editable stars retain clear
    space beside the panel. Pool stays mounted across range changes so edits
    survive. Range comparisons keep a compact width beside the stars.
-   Width changes animate from the current size; Pool controls follow the panel. */
+   Width changes animate from the current size; Pool controls follow the panel.
+   The observed task subtree includes the Pool toggle, so unchanged labels must
+   not be rewritten and schedule another layout. */
 (() => {
   const toggle = document.getElementById('pool-toggle');
   if (!toggle) return;
@@ -41,7 +43,8 @@
     toggle.hidden = !fits;
     fallback.hidden = !desktop.matches || fits;
     toggle.setAttribute('aria-pressed', String(open));
-    toggle.textContent = open ? 'Hide Pool' : 'Show Pool';
+    const label = open ? 'Hide Pool' : 'Show Pool';
+    if (toggle.textContent !== label) toggle.textContent = label;
     host.classList.toggle('workspace-open', open);
     document.body.classList.toggle('space-open', open);
     host.dataset.taskColumns = '1';

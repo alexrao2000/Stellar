@@ -2,7 +2,9 @@
 <style>
 /* Pool colours live on .sky so the shared sidebar retains its theme. Star
    artwork pulses independently while labels, hit targets and links stay put.
-   The far sky is cached; only nearby specks redraw, at a limited frame rate.
+   The far sky has its own static canvas; only nearby specks redraw, at a limited
+   frame rate. Task stars animate their outer SVG layers without changing the
+   internal SVG geometry. Map resizing does not rebuild an unchanged sky.
    Motion pauses offscreen and respects the system's reduced-motion setting.
    Dragging only moves stars; prerequisites are chosen explicitly in task
    details. Redraws wait for a held star. Position writes run in order for each
@@ -34,7 +36,7 @@ html, body { margin: 0; height: 100%; background: #04050A; color: rgba(228,224,2
 }
 @media (max-width: 760px) { .sky { inset: 0; } }
 .sky canvas, .sky svg { position: absolute; inset: 0; }
-.sky #dust { width: 100%; height: 100%; pointer-events: none; }
+.sky :is(#dust,#dust-base) { width: 100%; height: 100%; pointer-events: none; }
 .pool-loading { position: absolute; inset: 0; z-index: 5; color: #c4c0d6; pointer-events: none; }
 .pool-loading button { pointer-events: auto; min-height: 44px; padding: 8px 18px; border: 1px solid var(--line);
   border-radius: 8px; background: #10111e; color: #eee; font: inherit; cursor: pointer; }
@@ -45,22 +47,15 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
 .star:focus-visible .hit { outline: 2px solid var(--line-live); outline-offset: 2px; }
 .star.held { cursor: grabbing; }
-.star:not(.ghost,.ember) .star-glow {
-  transform-box: fill-box; transform-origin: center;
+.star:not(.ghost,.ember) > svg {
+  transform-origin: center;
   animation: star-bloom var(--glow-period) ease-in-out var(--glow-phase) infinite;
 }
-.star:not(.ghost,.ember) .star-core {
-  animation: star-shimmer var(--core-period) ease-in-out var(--core-phase) infinite;
-}
-.star:is(:hover,:focus-visible,.held) :is(.star-glow,.star-core),
-.sky[data-motion-paused=true] :is(.star-glow,.star-core) { animation-play-state: paused; }
+.star:is(:hover,:focus-visible,.held) > svg,
+.sky[data-motion-paused=true] .star > svg { animation-play-state: paused; }
 @keyframes star-bloom {
-  0%, 100% { opacity: var(--star-low); transform: scale(.96); }
-  50% { opacity: 1; transform: scale(var(--star-bloom)); }
-}
-@keyframes star-shimmer {
-  0%, 100% { opacity: .76; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: var(--star-low); transform: translate(var(--star-offset), var(--star-offset)) scale(.96); }
+  50% { opacity: 1; transform: translate(var(--star-offset), var(--star-offset)) scale(var(--star-bloom)); }
 }
 /* Generous, and deliberately so. Empty sky now creates a star, which only
    works if hitting a star is easy -- the two changes hold each other up. */
@@ -278,7 +273,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star.ghost input::placeholder { color: rgba(150,146,185,.4); letter-spacing: .14em; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
-  .star-glow, .star-core { animation: none !important; }
+  .star > svg { animation: none !important; }
 }
 </style>
 
@@ -396,14 +391,14 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   /* ---- the field ------------------------------------------------------- */
   var dust = document.getElementById('dust'), g = dust.getContext('2d');
   var dustBase = document.createElement('canvas'), dustContext = dustBase.getContext('2d');
-  var dustStars = [], dustWidth = 0, dustHeight = 0, dustFrame = 0, dustLast = 0;
+  dustBase.id = 'dust-base'; dustBase.setAttribute('aria-hidden', 'true'); dust.before(dustBase);
+  var dustStars = [], dustWidth = 0, dustHeight = 0, dustDpr = 0, dustFrame = 0, dustTimer = 0;
   var reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
   function motionActive() { return window.stellarPageActive() && embeddedVisible && !reducedMotion.matches; }
   function renderDust(time) {
     if (!dustWidth || !dustHeight) return;
     g.clearRect(0, 0, dustWidth, dustHeight);
-    g.drawImage(dustBase, 0, 0, dustWidth, dustHeight);
     dustStars.forEach(function (s) {
       var alpha = s.alpha * (reducedMotion.matches ? 1 : .78 + .22 * Math.sin(time * s.speed + s.phase));
       g.beginPath();
@@ -415,10 +410,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   function tickDust(time) {
     dustFrame = 0;
     if (!motionActive()) return;
-    if (time - dustLast >= 80) { renderDust(time); dustLast = time; }
-    dustFrame = requestAnimationFrame(tickDust);
+    renderDust(time);
+    dustTimer = setTimeout(function () { dustTimer = 0; dustFrame = requestAnimationFrame(tickDust); }, 80);
   }
   function syncMotion() {
+    clearTimeout(dustTimer); dustTimer = 0;
     if (dustFrame) cancelAnimationFrame(dustFrame);
     dustFrame = 0;
     sky.dataset.motionPaused = String(!motionActive());
@@ -429,6 +425,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   document.addEventListener('visibilitychange', syncMotion);
   window.addEventListener('stellar:visibility', function () { syncMotion(); if (window.stellarPageActive()) { scheduleResize(); pollPool(); } else finishDrag(false); });
   window.addEventListener('pagehide', function () {
+    clearTimeout(dustTimer); dustTimer = 0;
     if (dustFrame) cancelAnimationFrame(dustFrame);
     dustFrame = 0;
   });
@@ -441,6 +438,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   function drawDust() {
     var dpr = window.devicePixelRatio || 1;
     var width = sky.clientWidth, height = sky.clientHeight;
+    if (dustWidth === width && dustHeight === height && dustDpr === dpr) return;
+    dustDpr = dpr;
     dustWidth = width; dustHeight = height; dustStars = [];
     dust.width = width * dpr; dust.height = height * dpr;
     dustBase.width = dust.width; dustBase.height = dust.height;
@@ -546,7 +545,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   function starSVG(id, m) {
     var core = 1.5 + m * 1.15, bloom = 7 + m * 7, spike = 9 + m * 9;
     var s = '<svg width="90" height="90" viewBox="-45 -45 90 90" ' +
-      'style="display:block;transform:translate(-45px,-45px);pointer-events:none">';
+      'style="display:block;--star-offset:-45px;transform:translate(-45px,-45px);pointer-events:none">';
     s += '<defs><radialGradient id="bl' + id + '">' +
          '<stop offset="0%" stop-color="rgba(255,252,245,.85)"/>' +
          '<stop offset="38%" stop-color="rgba(206,214,255,.20)"/>' +
@@ -564,7 +563,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 
   function unlitSVG() {
     return '<svg width="26" height="26" viewBox="0 0 26 26" ' +
-      'style="display:block;transform:translate(-13px,-13px);pointer-events:none">' +
+      'style="display:block;--star-offset:-13px;transform:translate(-13px,-13px);pointer-events:none">' +
       '<circle class="star-core" cx="13" cy="13" r="4.2" fill="none" ' +
       'stroke="rgba(196,200,235,.42)" stroke-width="0.9"/></svg>';
   }
@@ -581,11 +580,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var seed = 2166136261;
     String(id).split('').forEach(function (c) { seed = Math.imul(seed ^ c.charCodeAt(0), 16777619) >>> 0; });
     function rnd() { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; }
-    var glow = 4 + rnd() * 5, core = 3 + rnd() * 4, now = performance.now() / 1000;
+    var glow = 4 + rnd() * 5, now = performance.now() / 1000;
     el.style.setProperty('--glow-period', glow.toFixed(3) + 's');
-    el.style.setProperty('--core-period', core.toFixed(3) + 's');
     el.style.setProperty('--glow-phase', -((now + rnd() * glow) % glow).toFixed(3) + 's');
-    el.style.setProperty('--core-phase', -((now + rnd() * core) % core).toFixed(3) + 's');
     el.style.setProperty('--star-low', (.58 + rnd() * .2).toFixed(3));
     el.style.setProperty('--star-bloom', (1.04 + rnd() * .1).toFixed(3));
   }
