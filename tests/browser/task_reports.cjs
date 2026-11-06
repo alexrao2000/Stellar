@@ -42,6 +42,15 @@ async function check(engine, mobile) {
     await page.goto(base + '/?day=' + day);
     await page.locator('#day-completion strong').waitFor();
     assert.equal(await page.locator('#day-completion strong').innerText(), '8/8');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const visibleDust = await page.locator('#tasks .task.done .report-ember').evaluateAll(nodes => {
+      nodes.forEach(node => node.getAnimations().forEach(animation => { animation.pause(); animation.currentTime = 1400; }));
+      const visible = nodes.some(node => node.getBoundingClientRect().width >= 2 && Number(getComputedStyle(node).opacity) >= .5);
+      nodes.forEach(node => node.getAnimations().forEach(animation => animation.play()));
+      return visible;
+    });
+    assert(visibleDust, 'Completed tasks emit visible stardust at native icon size');
+
     const bonus = page.locator('#tasks .task').filter({ hasText: 'Bonus' });
     assert(await bonus.evaluate(node => node.classList.contains('unreported')));
     await bonus.click(); await page.waitForFunction(() => !document.querySelector('#tasks .task[data-syncing]'));

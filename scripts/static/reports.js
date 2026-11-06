@@ -69,7 +69,8 @@
       '<g transform="translate(3 3) scale(.75)">' + star + '</g>' +
       '<path class="report-no-cutout" d="M5 5L19 19"/><path class="report-no-slash" d="M5 5L19 19"/>';
     if (outcome === 'done') content += [
-      ['a', 7, 6, .12], ['b', 17, 8, .1], ['c', 12, 4, .09]
+      ['a', 7, 9, .28], ['b', 17, 10, .25], ['c', 12, 6, .23],
+      ['d', 9, 13, .21], ['e', 16, 14, .19], ['f', 11, 10, .17]
     ].map(([name, x, y, scale]) => '<g class="report-ember report-ember-' + name + '"><path transform="translate(' + x + ' ' + y + ') scale(' + scale + ') translate(-12 -12)" d="' + starPath + '"/></g>').join('');
     host.innerHTML = '<svg class="report-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + content + '</svg>';
   };
