@@ -69,9 +69,14 @@
       '<g transform="translate(3 3) scale(.75)">' + star + '</g>' +
       '<path class="report-no-cutout" d="M5 5L19 19"/><path class="report-no-slash" d="M5 5L19 19"/>';
     if (outcome === 'done') content += [
-      ['a', 7, 9, .28], ['b', 17, 10, .25], ['c', 12, 6, .23],
-      ['d', 9, 13, .21], ['e', 16, 14, .19], ['f', 11, 10, .17]
-    ].map(([name, x, y, scale]) => '<g class="report-ember report-ember-' + name + '"><path transform="translate(' + x + ' ' + y + ') scale(' + scale + ') translate(-12 -12)" d="' + starPath + '"/></g>').join('');
+      ['a', 11, 10, .22, 'glint'], ['b', 12, 10, .9, 'grain'], ['c', 12, 11, .7, 'grain'],
+      ['d', 13, 12, .22, 'glint'], ['e', 11, 12, .85, 'grain'], ['f', 12, 11, .65, 'grain']
+    ].map(([name, x, y, size, kind]) => {
+      const particle = kind === 'grain'
+        ? '<circle class="report-dust-core" r="' + size + '"/>'
+        : '<path transform="scale(' + size + ') translate(-12 -12)" d="' + starPath + '"/>';
+      return '<g class="report-ember report-ember-' + name + '"><g transform="translate(' + x + ' ' + y + ')">' + particle + '</g></g>';
+    }).join('');
     host.innerHTML = '<svg class="report-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + content + '</svg>';
   };
   const choose = (row, opener) => new Promise(resolve => {
