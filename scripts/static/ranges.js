@@ -11,6 +11,12 @@
     const time = ctx.wakeValue(row.notes);
     return time ? time.value : '—';
   };
+  function paintValue(row, button, ctx) {
+    button.textContent = valueFor(row, ctx);
+    button.dataset.completed = String(!!row.is_completed);
+    button.setAttribute('aria-label', button.dataset.label + ', ' + valueFor(row, ctx) + ', ' + StellarReports.labels[StellarReports.state(row)]);
+    button.title = button.getAttribute('aria-label');
+  }
   function closeEditor() {
     document.querySelector('.range-editor')?.close();
   }
@@ -19,7 +25,7 @@
     const dialog = document.createElement('dialog'); dialog.className = 'range-editor';
     const title = document.createElement('h2'); title.textContent = shortTitle(row, ctx); title.id = 'range-editor-title';
     const date = document.createElement('p'); date.textContent = ctx.label(row.day, { weekday: 'long', month: 'short', day: 'numeric' });
-    const editor = ctx.field(row, false, () => { button.textContent = valueFor(row, ctx); button.setAttribute('aria-label', button.dataset.label + ', ' + valueFor(row, ctx)); button.title = button.getAttribute('aria-label'); if (statusButton) statusButton.textContent = 'Status: ' + StellarReports.labels[StellarReports.state(row)]; changed(); });
+    const editor = ctx.field(row, false, () => { paintValue(row, button, ctx); if (statusButton) statusButton.textContent = 'Status: ' + StellarReports.labels[StellarReports.state(row)]; changed(); });
     const statusButton = editor.querySelector('.report-measure-status');
     if (statusButton) { statusButton.className = 'report-field-status'; statusButton.setAttribute('aria-label', 'Set ' + title.textContent + ' status'); statusButton.textContent = 'Status: ' + StellarReports.labels[StellarReports.state(row)]; }
     const input = editor.querySelector('input');
@@ -124,11 +130,10 @@
         const locked = day > ctx.today || !ctx.writable(day);
         if (title === ctx.weight || title === ctx.wake) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'range-value';
-          button.textContent = valueFor(row, ctx); button.disabled = locked;
+          button.disabled = locked;
           button.dataset.label = shortTitle(row, ctx) + ', ' + dateLabel(day);
           button.setAttribute('aria-haspopup', 'dialog');
-          button.setAttribute('aria-label', button.dataset.label + ', ' + valueFor(row, ctx));
-          button.title = button.getAttribute('aria-label');
+          paintValue(row, button, ctx);
           button.addEventListener('click', () => editValue(row, button, ctx, changed)); td.append(button);
         } else {
           const button = ctx.tile(row, locked, changed, true); td.append(button);
