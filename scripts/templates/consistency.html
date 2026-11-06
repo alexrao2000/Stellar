@@ -1,8 +1,8 @@
 <title>Consistency · Stellar</title>
 <style>
-/* Each task opens its latest year unless the comparison lock is enabled.
-   Cached metric frames reread that preference when activated. Future scheduled
-   records do not move the default beyond the latest year with past records. */
+/* Each task opens the 365 local calendar dates ending today unless a period
+   is kept for comparison. Explicit years use Jan–Dec. Whole-week padding stays
+   blank outside the logical period, including leap years and DST boundaries. */
 * { box-sizing: border-box; }
 html, body {
   margin: 0; padding: 0; background: var(--bg); color: var(--ink);
@@ -194,9 +194,9 @@ button:focus-visible, select:focus-visible, input:focus-visible {
         <div class="meta" id="meta"></div>
       </div>
       <div class="strip" id="tstrip" style="margin-top:0"></div>
-      <div class="heat-year-controls" role="group" aria-label="Calendar year">
-        <button type="button" id="heat-latest" aria-pressed="true" title="Show this task’s latest year">Latest</button>
-        <label title="Keep the same year when switching tasks"><input type="checkbox" id="heat-keep-year"> Keep year</label>
+      <div class="heat-year-controls" role="group" aria-label="Calendar period">
+        <button type="button" id="heat-rolling" aria-pressed="true" title="Show the 365 days ending today">Past 365 days</button>
+        <label title="Keep the same period when switching tasks"><input type="checkbox" id="heat-keep-period"> Keep period</label>
         <span id="heat-year-note" role="status" aria-live="polite"></span>
       </div>
       <div class="heatwrap">
@@ -344,7 +344,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     Array.prototype.forEach.call(document.querySelectorAll('.row .name button'), function (b) {
       b.addEventListener('click', function () {
         document.getElementById('task').value = b.dataset.t;
-        detail();
+        readHeatPreference(true); detail();
       });
     });
   }
@@ -378,23 +378,26 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     inspectDay();
   }
 
-  var HEAT_YEAR = null, KEEP_YEAR = false;
+  var HEAT_PERIOD = '365', KEEP_PERIOD = false, HEAT_RESET_VIEW = true;
   function readHeatPreference(reset) {
+    if (reset) HEAT_RESET_VIEW = true;
     try {
-      KEEP_YEAR = localStorage.getItem('stellar:heat-year-pinned') === 'true';
-      var saved = localStorage.getItem('stellar:heat-year');
-      if (KEEP_YEAR) HEAT_YEAR = /^\d{4}$/.test(saved || '') ? saved : null;
-      else if (reset) HEAT_YEAR = null;
-    } catch (e) { if (reset) HEAT_YEAR = null; }
+      var pinned = localStorage.getItem('stellar:heat-period-pinned');
+      var saved = localStorage.getItem('stellar:heat-period');
+      if (pinned === null) {
+        pinned = localStorage.getItem('stellar:heat-year-pinned');
+        saved = localStorage.getItem('stellar:heat-year');
+      }
+      KEEP_PERIOD = pinned === 'true';
+      if (KEEP_PERIOD) HEAT_PERIOD = saved === '365' || /^[0-9]{4}$/.test(saved || '') ? saved : '365';
+      else if (reset) HEAT_PERIOD = '365';
+    } catch (e) { if (reset) HEAT_PERIOD = '365'; }
   }
   function saveHeatPreference() {
     try {
-      localStorage.setItem('stellar:heat-year-pinned', String(KEEP_YEAR));
-      if (HEAT_YEAR) localStorage.setItem('stellar:heat-year', HEAT_YEAR);
+      localStorage.setItem('stellar:heat-period-pinned', String(KEEP_PERIOD));
+      localStorage.setItem('stellar:heat-period', HEAT_PERIOD);
     } catch (e) {}
-  }
-  function latestHeatYear(rows) {
-    return heatYears(rows.filter(function (row) { return row.day <= TODAY; }))[0] || heatYears(rows)[0] || TODAY.slice(0, 4);
   }
   function currentHeatRows() { return byTitle[document.getElementById('task').value] || []; }
   readHeatPreference(true);
@@ -412,50 +415,48 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   function heatmap(rows) {
     var host = document.getElementById('heat');
     var nav = document.getElementById('years');
-    var latestButton = document.getElementById('heat-latest'), keep = document.getElementById('heat-keep-year');
+    var rolling = HEAT_PERIOD === '365';
+    var scroll = host.parentElement, resetView = HEAT_RESET_VIEW || host.dataset.period !== HEAT_PERIOD;
+    var followEnd = rolling && host.dataset.end !== TODAY && scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft < 3;
+    var rollingButton = document.getElementById('heat-rolling'), keep = document.getElementById('heat-keep-period');
     var note = document.getElementById('heat-year-note');
-    keep.checked = KEEP_YEAR; latestButton.disabled = !rows.length;
-    if (!rows.length) { host.innerHTML = ''; nav.innerHTML = ''; note.textContent = 'No records for this task'; return; }
+    keep.checked = KEEP_PERIOD;
+    rollingButton.setAttribute('aria-pressed', String(rolling));
 
     var years = heatYears(rows);
-    var latest = latestHeatYear(rows);
-    if (!HEAT_YEAR || !KEEP_YEAR && years.indexOf(HEAT_YEAR) === -1) HEAT_YEAR = latest;
-    if (KEEP_YEAR && years.indexOf(HEAT_YEAR) === -1) years.push(HEAT_YEAR);
+    if (!rolling && years.indexOf(HEAT_PERIOD) === -1) years.push(HEAT_PERIOD);
     years.sort().reverse();
-    latestButton.setAttribute('aria-pressed', String(!KEEP_YEAR && HEAT_YEAR === latest));
-    note.textContent = HEAT_YEAR + (KEEP_YEAR ? ' · kept across tasks' : HEAT_YEAR === latest ? ' · latest' : ' · this task');
-    if (!rows.some(function (row) { return row.day.slice(0, 4) === HEAT_YEAR; })) note.textContent += ' · No records in this year';
-    host.dataset.year = HEAT_YEAR;
+    var periodEnd = rolling ? parseDay(TODAY) : parseDay(HEAT_PERIOD + '-12-31');
+    var periodStart = rolling ? periodEnd - 364 * DAY : parseDay(HEAT_PERIOD + '-01-01');
+    var firstDay = fmtDay(periodStart), lastDay = fmtDay(periodEnd);
+    var dateLabel = function (value) { return new Date(value).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }); };
+    note.textContent = (rolling ? dateLabel(periodStart) + ' – ' + dateLabel(periodEnd) : HEAT_PERIOD) + (KEEP_PERIOD ? ' · kept across tasks' : '');
+    if (!rows.some(function (row) { return row.day >= firstDay && row.day <= lastDay; })) note.textContent += ' · No records in this period';
+    host.dataset.period = HEAT_PERIOD; host.dataset.start = firstDay; host.dataset.end = lastDay;
+    if (rolling) delete host.dataset.year; else host.dataset.year = HEAT_PERIOD;
+    host.setAttribute('aria-label', 'Task outcomes, ' + dateLabel(periodStart) + ' to ' + dateLabel(periodEnd));
 
     nav.innerHTML = years.map(function (y) {
       return '<button type="button" data-year="' + y + '"' +
-        (y === HEAT_YEAR ? ' class="on" aria-current="true"' : '') + '>' + y + '</button>';
+        (y === HEAT_PERIOD ? ' class="on" aria-current="true"' : '') + '>' + y + '</button>';
     }).join('');
 
     var byDay = {};
     rows.forEach(function (r) { byDay[r.day] = r; });
 
-    /* Jan 1 back to its Monday, Dec 31 forward to its Sunday, so the grid is
-       whole weeks and every column holds seven cells. */
-    var start = parseDay(HEAT_YEAR + '-01-01');
-    start -= ((new Date(start).getUTCDay() + 6) % 7) * DAY;
-    var end = parseDay(HEAT_YEAR + '-12-31');
-    end += (6 - ((new Date(end).getUTCDay() + 6) % 7)) * DAY;
+    var start = periodStart - ((new Date(periodStart).getUTCDay() + 6) % 7) * DAY;
+    var end = periodEnd + (6 - ((new Date(periodEnd).getUTCDay() + 6) % 7)) * DAY;
 
-    var weeks = [], months = [], lastMonth = -1;
+    var weeks = [], months = [], lastMonth = '';
     for (var ts = start; ts <= end; ts += DAY) {
       var d = new Date(ts);
       if ((d.getUTCDay() + 6) % 7 === 0) {
         weeks.push([]);
-        var m = d.getUTCMonth();
-        if (String(d.getUTCFullYear()) === HEAT_YEAR && m !== lastMonth) {
-          months.push({ m: m, span: 1 });
-          lastMonth = m;
-        } else if (months.length) {
-          months[months.length - 1].span++;
-        } else {
-          months.push({ m: -1, span: 1 });
-        }
+        var monthDate = new Date(Math.max(ts, periodStart));
+        var m = monthDate.getUTCMonth(), monthKey = monthDate.getUTCFullYear() + '-' + m;
+        if (monthKey !== lastMonth) {
+          months.push({ m: m, span: 1 }); lastMonth = monthKey;
+        } else months[months.length - 1].span++;
       }
       weeks[weeks.length - 1].push(ts);
     }
@@ -488,9 +489,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
         var ts = weeks[w][row];
         var key = ts === undefined ? '' : fmtDay(ts);
         var pos = 'grid-column:' + (w + 2) + ';grid-row:' + (row + 2);
-        /* Pad days at either end belong to the neighbouring year. Their cells
-           stay, blank, so the columns keep their shape. */
-        if (!key || key.slice(0, 4) !== HEAT_YEAR) {
+        if (!key || ts < periodStart || ts > periodEnd) {
           out.push('<i class="d blank" style="' + pos + '"></i>');
           continue;
         }
@@ -498,30 +497,32 @@ button:focus-visible, select:focus-visible, input:focus-visible {
         var outcome = r ? StellarReports.state(r) : '';
         var cls = !r ? '' : key > TODAY ? 'future' : outcome;
         var label = key + ' — ' + (!r ? 'not scheduled' : key > TODAY ? 'upcoming' : StellarReports.labels[outcome] + (r.optional ? ' (optional)' : ''));
-        out.push('<i class="d ' + cls + '" style="' + pos + '" title="' + esc(label) + '"></i>');
+        out.push('<i class="d ' + cls + '" data-day="' + key + '" style="' + pos + '" title="' + esc(label) + '"></i>');
       }
     }
     host.innerHTML = out.join('');
+    HEAT_RESET_VIEW = false;
+    if (resetView || followEnd) requestAnimationFrame(function () { scroll.scrollLeft = rolling ? scroll.scrollWidth - scroll.clientWidth : 0; });
   }
 
   window.addEventListener('stellar:report-clock', function () { TODAY = StellarReports.today(); if (ROWS.length) { summary(); ranking(); detail(); } });
 
   document.getElementById('years').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-year]');
-    if (!b || b.dataset.year === HEAT_YEAR) return;
-    HEAT_YEAR = b.dataset.year;
+    if (!b || b.dataset.year === HEAT_PERIOD) return;
+    HEAT_PERIOD = b.dataset.year; HEAT_RESET_VIEW = true;
     saveHeatPreference();
     heatmap(currentHeatRows());
   });
 
   document.getElementById('minocc').addEventListener('input', ranking);
   document.getElementById('task').addEventListener('change', function () { readHeatPreference(true); detail(); });
-  document.getElementById('heat-latest').addEventListener('click', function () {
-    KEEP_YEAR = false; HEAT_YEAR = latestHeatYear(currentHeatRows()); saveHeatPreference(); heatmap(currentHeatRows());
+  document.getElementById('heat-rolling').addEventListener('click', function () {
+    HEAT_PERIOD = '365'; HEAT_RESET_VIEW = true; saveHeatPreference(); heatmap(currentHeatRows());
   });
-  document.getElementById('heat-keep-year').addEventListener('change', function (event) {
-    KEEP_YEAR = event.target.checked;
-    if (!KEEP_YEAR) HEAT_YEAR = latestHeatYear(currentHeatRows());
+  document.getElementById('heat-keep-period').addEventListener('change', function (event) {
+    KEEP_PERIOD = event.target.checked;
+    if (!KEEP_PERIOD) { HEAT_PERIOD = '365'; HEAT_RESET_VIEW = true; }
     saveHeatPreference(); heatmap(currentHeatRows());
   });
   window.stellarMetricActivate = function () {
@@ -529,7 +530,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     if (ROWS.length) { TODAY = StellarReports.today(); summary(); ranking(); detail(); }
   };
   window.addEventListener('storage', function (event) {
-    if (!['stellar:heat-year', 'stellar:heat-year-pinned'].includes(event.key) || document.hidden || window.stellarPageActive?.() === false || window !== parent && frameElement?.hidden) return;
+    if (!['stellar:heat-period', 'stellar:heat-period-pinned', 'stellar:heat-year', 'stellar:heat-year-pinned'].includes(event.key) || document.hidden || window.stellarPageActive?.() === false || window !== parent && frameElement?.hidden) return;
     readHeatPreference(true); if (ROWS.length) heatmap(currentHeatRows());
   });
 
