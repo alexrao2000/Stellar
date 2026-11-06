@@ -63,14 +63,14 @@ HEAD = """<meta charset="utf-8">
 <script src="/app-assets/sections.js?v=1"></script>
 <link rel="stylesheet" href="/app-assets/sections.css?v=1">
 <script src="/app-assets/sync.js?v=1"></script>
-<script src="/app-assets/reports.js?v=6"></script>
-<link rel="stylesheet" href="/app-assets/reports.css?v=9">
+<script src="/app-assets/reports.js?v=7"></script>
+<link rel="stylesheet" href="/app-assets/reports.css?v=10">
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=7">
 <link rel="stylesheet" href="/app-assets/navigation.css?v=8">
 <link rel="stylesheet" href="/app-assets/space-theme.css?v=1">
-<script src="/app-assets/workspace.js?v=10" defer></script>
+<script src="/app-assets/workspace.js?v=11" defer></script>
 <script src="/app-assets/app.js?v=10" defer></script>"""
 
 INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'

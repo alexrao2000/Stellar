@@ -1,7 +1,9 @@
 /* Optional outcomes stay unreported until entered. Mandatory outcomes become
    incomplete at their deadline, or at the end of their day when none is set.
    Bonus completions never replace required work. Optional frequency measures
-   occurrences per calendar week; missing reports remain a separate category. */
+   occurrences per calendar week; missing reports remain a separate category.
+   Dust and halos animate separate HTML layers so SVG filters and geometry do
+   not need repainting every frame. The status star itself stays unchanged. */
 (() => {
   const labels = { done: 'Done', incomplete: 'Incomplete', unreported: 'Unreported' };
   const today = () => { const date = new Date(); return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'); };
@@ -64,20 +66,13 @@
     host.style.setProperty('--report-phase', '-' + (hash % 3600 / 1000) + 's');
     const star = '<path class="report-star" d="' + starPath + '"/>';
     let content = star;
-    if (outcome === 'unreported') content = '<path class="report-glow" d="' + starPath + '"/>' + star;
     if (outcome === 'incomplete') content = '<rect class="report-no-frame" x="1.5" y="1.5" width="21" height="21" rx="4"/>' +
       '<g transform="translate(3 3) scale(.75)">' + star + '</g>' +
       '<path class="report-no-cutout" d="M5 5L19 19"/><path class="report-no-slash" d="M5 5L19 19"/>';
-    if (outcome === 'done') content += [
-      ['a', 11, 10, .22, 'glint'], ['b', 12, 10, .9, 'grain'], ['c', 12, 11, .7, 'grain'],
-      ['d', 13, 12, .22, 'glint'], ['e', 11, 12, .85, 'grain'], ['f', 12, 11, .65, 'grain']
-    ].map(([name, x, y, size, kind]) => {
-      const particle = kind === 'grain'
-        ? '<circle class="report-dust-core" r="' + size + '"/>'
-        : '<path transform="scale(' + size + ') translate(-12 -12)" d="' + starPath + '"/>';
-      return '<g class="report-ember report-ember-' + name + '"><g transform="translate(' + x + ' ' + y + ')">' + particle + '</g></g>';
-    }).join('');
-    host.innerHTML = '<svg class="report-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + content + '</svg>';
+    const dust = outcome === 'done' ? ['a', 'b', 'c', 'd', 'e', 'f'].map((name, i) =>
+      '<span aria-hidden="true" class="report-ember report-ember-' + name + '"><span class="report-dust-core' + (i % 3 === 0 ? ' report-glint' : '') + '"></span></span>').join('') : '';
+    host.innerHTML = (outcome === 'unreported' ? '<span class="report-glow" aria-hidden="true"></span>' : '') +
+      '<svg class="report-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + content + '</svg>' + dust;
   };
   const choose = (row, opener) => new Promise(resolve => {
     const existing = document.querySelector('.report-picker');
