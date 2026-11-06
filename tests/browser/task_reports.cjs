@@ -75,10 +75,12 @@ async function check(engine, mobile) {
     const beforeDismiss = writes.length;
     await open(bonus); await page.keyboard.press('Escape'); assert.equal(writes.length, beforeDismiss);
     const weightStatus = page.locator('#field-weight button.box');
+    assert(await page.locator('#field-weight [data-measurement-complete]').isVisible(), 'Recorded completion has a visible Done badge');
     await open(weightStatus); await page.locator('.report-option[data-state=unreported]').click();
     await page.waitForTimeout(100);
     assert.equal(await page.locator('#weight').inputValue(), '150.4', 'Clearing a report preserves the recorded measurement');
     assert.equal(rows(day)[0].weight_lbs, 150.4);
+    assert(!(await page.locator('#field-weight [data-measurement-complete]').isVisible()), 'A retained value does not imply completion');
     await page.reload(); await bonus.waitFor();
     assert(await bonus.evaluate(node => node.classList.contains('unreported')), 'Unreported survives reload');
     fail = true;

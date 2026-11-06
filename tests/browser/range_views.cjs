@@ -111,12 +111,14 @@ async function check(engine) {
     assert.equal(await page.getByRole('button', { name: 'Run, Nov 4, Done', exact: true }).getAttribute('aria-pressed'), 'true');
     assert(writes.some(url => url.pathname.endsWith('/report')));
     const weight = page.getByRole('button', { name: /Weight, Wednesday, Nov 4, 150.4/ });
+    assert.equal(await weight.getAttribute('data-completed'), 'false', 'Existing readings do not imply completion');
     await weight.click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('spinbutton').fill('151.7');
     await dialog.getByRole('button', { name: 'Done' }).click();
     await page.getByRole('button', { name: /Weight, Wednesday, Nov 4, 151.7/ }).waitFor();
     assert(writes.some(url => url.pathname.endsWith('/weight') && url.searchParams.get('lbs') === '151.7'));
+    assert.equal(await page.getByRole('button', { name: /Weight, Wednesday, Nov 4, 151.7/ }).getAttribute('data-completed'), 'true', 'Saved completion updates the reading indicator');
     await page.getByRole('button', { name: /Weight, Wednesday, Nov 4, 151.7/ }).click();
     await dialog.getByRole('spinbutton').fill('199');
     const beforeCancel = writes.length; await page.keyboard.press('Escape'); await page.waitForTimeout(100);

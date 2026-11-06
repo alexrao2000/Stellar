@@ -2,9 +2,10 @@
    The picker provides explicit outcomes without inferring optional failures.
    Small status glyphs keep square dimensions and separate 44px tap targets.
    Unreported glows white; Incomplete has a square prohibition mark; Done
-   emits gold embers. Only opacity and transforms animate, with motion paused
-   in inactive sections and disabled for reduced-motion preferences. */
-:root { --report-ember: #dca341; --report-ember-light: #ffd18a; }
+   emits shimmering grey stardust. Only opacity and transforms animate, with motion paused
+   in inactive sections and disabled for reduced-motion preferences. Measurement
+   completion labels follow the recorded outcome, not the presence of a value. */
+:root { --report-ember: var(--done-ink); --report-ember-light: color-mix(in srgb, var(--done-ink) 75%, #fff); }
 .report-picker { position: fixed; inset: auto; margin: 0; z-index: 50; width: min(330px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 22px; border: 1px solid var(--rule); border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: 0 20px 80px #0005; }
 .report-picker::backdrop { background: transparent; }
 .report-picker h2 { margin: 0 30px 6px 0; font: 600 18px/1.4 system-ui, sans-serif; overflow-wrap: anywhere; }
@@ -57,7 +58,7 @@ html body .report-icon .report-ember { fill: var(--report-ember-light); stroke: 
 html body .report-icon .report-ember-b { --ember-drift: 5px; --ember-rise: -12px; animation-delay: calc(var(--report-phase, 0s) - 1.25s); }
 html body .report-icon .report-ember-c { --ember-drift: 1px; --ember-rise: -10px; animation-delay: calc(var(--report-phase, 0s) - 2.5s); }
 @keyframes report-star-glow { 0%,100% { opacity: .15; } 50% { opacity: .8; } }
-@keyframes report-star-ember { 0% { opacity: 0; transform: translate(0, 2px) scale(.35); } 20% { opacity: .95; } 100% { opacity: 0; transform: translate(var(--ember-drift), var(--ember-rise)) scale(.2); } }
+@keyframes report-star-ember { 0% { opacity: 0; transform: translate(0, 2px) scale(.35); } 14% { opacity: .65; } 28% { opacity: .2; } 43% { opacity: .85; } 58% { opacity: .25; } 74% { opacity: .55; } 100% { opacity: 0; transform: translate(var(--ember-drift), var(--ember-rise)) scale(.2); } }
 html.reports-paused .report-icon :is(.report-glow,.report-ember) { animation-play-state: paused; }
 html body button:disabled .report-icon :is(.report-glow,.report-ember) { animation: none; opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
@@ -73,3 +74,9 @@ html body .range-overview { display: grid; grid-template-columns: 1fr auto; gap:
 .range-progress span { display: block; height: 100%; background: var(--ink); border-radius: inherit; }
 
 body.view-month #board > .range-overview { margin-bottom: 12px; }
+
+.measurement-complete { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; padding: 2px 5px; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); border-radius: 5px; font: 550 10px/1.3 system-ui, sans-serif; letter-spacing: 0; text-transform: none; white-space: nowrap; }
+.measurement-complete[hidden] { display: none; }
+html body .field label:has(.measurement-complete), html body .mini.field .lbl { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+html body .field.done label:has(.measurement-complete) { text-decoration: none; }
+html body .range-value[data-completed=true]::after { content: '✓ Done'; display: block; margin-top: 3px; color: var(--done-ink); font: 550 9px/1.2 system-ui, sans-serif; }
