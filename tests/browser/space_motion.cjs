@@ -1,6 +1,6 @@
 /* Synthetic records only. Idle Space must settle, the sky bitmap must survive
    range changes, and hidden sections must stop their decorative work. Gold dust
-   stays visible at native size and travels beyond its gray status icon. */
+   stays softly visible at native size and travels beyond its gray status icon. */
 const assert = require('node:assert/strict');
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
@@ -91,9 +91,9 @@ async function check(engine) {
           distance: Math.hypot(far.x - near.x, far.y - near.y), near };
       });
       assert.equal(dust.gray[0], dust.gray[1]); assert.equal(dust.gray[1], dust.gray[2]);
-      assert(dust.background.includes('255, 223, 140'), 'Gold glint has a luminous warm center');
+      assert(dust.background.includes('238, 230, 214'), 'Glint has a pale champagne tint');
       assert.equal(dust.filter, 'none', 'Glows use cached artwork instead of animated SVG filters');
-      assert(dust.near.width >= 12 && dust.near.opacity === 1, 'Glow is visible at native phone size');
+      assert(dust.near.width >= 4 && dust.near.width <= 10 && dust.near.opacity > 0 && dust.near.opacity <= .7, 'Shimmer stays small and soft at native phone size');
       assert(dust.distance > 20, 'Gold dust travels well beyond its icon');
       await icon.evaluate(host => host.querySelectorAll('.report-ember').forEach(node => node.getAnimations().forEach(animation => { animation.pause(); animation.currentTime = 2000; })));
       const rect = await icon.boundingBox();
