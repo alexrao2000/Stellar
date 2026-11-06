@@ -968,6 +968,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     tile.classList.toggle('unreported', !!r && StellarReports.state(r) === 'unreported');
     if (r && tile.tagName === 'BUTTON') { tile.setAttribute('aria-description', StellarReports.labels[StellarReports.state(r)] + '. Click to toggle; right-click for status.'); tile.title = StellarReports.labels[StellarReports.state(r)] + ' · Click to toggle; right-click for status'; }
 
+    if (r) StellarReports.renderIcon(tile.querySelector('.box'), r, r.title + r.day);
     var tag = item.querySelector('.due');
     var st = deadlineState(r);
     if (!st) {
@@ -1553,6 +1554,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   function paintMini(el, r) {
+    StellarReports.renderIcon(el.querySelector('.mbox'), r, r.title + r.day);
     el.classList.toggle('done', !!r.is_completed);
     el.classList.toggle('optional', !!r.optional && !r.is_completed);
     el.classList.toggle('unreported', StellarReports.state(r) === 'unreported');
@@ -1577,8 +1579,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     b.className = 'mini' + (compact ? ' range-check' : '');
     b._row = r;
     b.disabled = locked;
-    var star = compact ? '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2C13.2 8.5 15.5 10.8 22 12C15.5 13.2 13.2 15.5 12 22C10.8 15.5 8.5 13.2 2 12C8.5 10.8 10.8 8.5 12 2Z"/></svg>' : '';
-    b.innerHTML = '<span class="mbox">' + star + '</span><span class="t">' + esc(r.title) + '</span>' + tagFor(r);
+    b.innerHTML = '<span class="mbox"></span><span class="t">' + esc(r.title) + '</span>' + tagFor(r);
     paintMini(b, r);
     StellarReports.bind(b, r, function (next) {
         var previous = { is_completed: r.is_completed, status: r.status, completed_at: r.completed_at };
