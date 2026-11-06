@@ -91,10 +91,18 @@ async function check(engine) {
           distance: Math.hypot(far.x - near.x, far.y - near.y), near };
       });
       assert.equal(dust.gray[0], dust.gray[1]); assert.equal(dust.gray[1], dust.gray[2]);
-      assert(dust.background.includes('238, 230, 214'), 'Glint has a pale champagne tint');
+      assert(dust.background.includes('233, 221, 196'), 'Glint has a muted champagne tint');
       assert.equal(dust.filter, 'none', 'Glows use cached artwork instead of animated SVG filters');
-      assert(dust.near.width >= 4 && dust.near.width <= 10 && dust.near.opacity > 0 && dust.near.opacity <= .7, 'Shimmer stays small and soft at native phone size');
+      assert(dust.near.width >= 9 && dust.near.width <= 12 && dust.near.opacity >= .75 && dust.near.opacity <= .9, 'Shimmer stays visible without the oversized full-bright glow');
       assert(dust.distance > 20, 'Gold dust travels well beyond its icon');
+      const cycle = await icon.evaluate(host => {
+        const animations = [...host.querySelectorAll('.report-ember')].map(node => ({ node, animation: node.getAnimations()[0] }));
+        return Array.from({ length: 12 }, (_, sample) => {
+          animations.forEach(({ animation }) => { animation.pause(); animation.currentTime = Number(animation.effect.getTiming().duration) * (1 + sample / 12); });
+          return animations.filter(({ node }) => Number(getComputedStyle(node).opacity) >= .5).length;
+        });
+      });
+      assert(cycle.every(count => count >= 1 && count <= 2), 'One or two glints stay visible throughout the cycle');
       await icon.evaluate(host => host.querySelectorAll('.report-ember').forEach(node => node.getAnimations().forEach(animation => { animation.pause(); animation.currentTime = 2000; })));
       const rect = await icon.boundingBox();
       await page.screenshot({ path: `/private/tmp/stellar-gold-${engine}-${theme}.png`, clip: { x: Math.max(0, rect.x - 35), y: Math.max(0, rect.y - 38), width: rect.width + 85, height: rect.height + 80 } });

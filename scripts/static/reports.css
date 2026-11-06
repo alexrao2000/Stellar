@@ -54,14 +54,14 @@ html body .report-icon .report-no-frame { fill: none; stroke: currentColor; stro
 html body .report-icon .report-no-cutout { fill: none; stroke: #111; stroke-width: 4.5; }
 html body .report-icon .report-no-slash { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: square; }
 html body .stellar-status .report-glow { position: absolute; inset: -7px; pointer-events: none; border-radius: 50%; background: radial-gradient(circle, #ffffffa0 0%, #ffffff60 18%, #ffffff00 66%); opacity: .4; animation: report-star-glow 3.6s ease-in-out infinite; animation-delay: var(--report-phase, 0s); }
-html body .stellar-status .report-ember { position: absolute; left: calc(50% - 4px); top: calc(50% - 4px); width: 8px; height: 8px; pointer-events: none; opacity: 0; animation: report-star-ember 6s linear infinite; animation-delay: var(--report-phase, 0s); }
-html body .stellar-status .report-dust-core { display: block; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle, #fffaf0 0 7%, #eee6d6b3 12% 18%, #d8c7a238 32%, #d8c7a200 65%); }
-html body .stellar-status .report-glint { background: linear-gradient(#eee6d6b3, #eee6d6b3) center / 1px 4px no-repeat, linear-gradient(#eee6d6b3, #eee6d6b3) center / 4px 1px no-repeat, radial-gradient(circle, #fffaf0 0 7%, #eee6d680 18%, #d8c7a238 32%, #d8c7a200 65%); }
+html body .stellar-status .report-ember { position: absolute; left: calc(50% - 5.5px); top: calc(50% - 5.5px); width: 11px; height: 11px; pointer-events: none; opacity: 0; animation: report-star-ember 6s linear infinite; animation-delay: var(--report-phase, 0s); }
+html body .stellar-status .report-dust-core { display: block; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle, #fff9ec 0 12%, #e9ddc4dd 16% 22%, #b39b6a88 30%, #cfb77c44 44%, #cfb77c00 70%); }
+html body .stellar-status .report-glint { background: linear-gradient(#e9ddc4dd, #e9ddc4dd) center / 1px 5px no-repeat, linear-gradient(#e9ddc4dd, #e9ddc4dd) center / 5px 1px no-repeat, radial-gradient(circle, #fff9ec 0 12%, #e9ddc4bb 22%, #b39b6a66 32%, #cfb77c33 44%, #cfb77c00 70%); }
 .report-ember-a { --ember-drift: -26px; --ember-rise: -26px; }
 html body .stellar-status .report-ember-b { --ember-drift: 27px; --ember-rise: -21px; animation-delay: calc(var(--report-phase, 0s) - 2s); }
 html body .stellar-status .report-ember-c { --ember-drift: -7px; --ember-rise: -35px; animation-delay: calc(var(--report-phase, 0s) - 4s); }
 @keyframes report-star-glow { 0%,100% { opacity: .15; } 50% { opacity: .8; } }
-@keyframes report-star-ember { 0% { opacity: 0; transform: translate3d(0, 0, 0) scale(1); } 12% { opacity: .65; } 30% { opacity: .45; } 55% { opacity: .2; } 85%,100% { opacity: 0; } 100% { transform: translate3d(var(--ember-drift), var(--ember-rise), 0) scale(.65); } }
+@keyframes report-star-ember { 0% { opacity: 0; transform: translate3d(0, 0, 0) scale(1); } 14%,45% { opacity: .82; } 70% { opacity: .45; } 100% { opacity: 0; transform: translate3d(var(--ember-drift), var(--ember-rise), 0) scale(.65); } }
 html.reports-paused .stellar-status :is(.report-glow,.report-ember) { animation-play-state: paused; }
 html body button:disabled .stellar-status :is(.report-glow,.report-ember), html body button.stellar-status:disabled :is(.report-glow,.report-ember) { animation: none; opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
