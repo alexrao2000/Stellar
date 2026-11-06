@@ -355,7 +355,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
                   aria-describedby="weight-warning-tip">&#9888;
               <span id="weight-warning-tip" class="weight-warning-tip" role="tooltip"></span>
             </span>
-            <span class="measurement-complete" data-measurement-complete hidden>✓ Done</span>
+            <span class="measurement-complete" data-measurement-complete hidden>✦ Done</span>
           </label>
           <div class="withunit">
             <input id="weight" type="number" inputmode="decimal" step="0.1" placeholder="0.0">
@@ -368,7 +368,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       <div class="item" id="item-wake">
         <div class="field" id="field-wake">
           <span class="box" aria-hidden="true"></span>
-          <label for="wake">Wake up <span class="measurement-complete" data-measurement-complete hidden>✓ Done</span></label>
+          <label for="wake">Wake up <span class="measurement-complete" data-measurement-complete hidden>✦ Done</span></label>
           <input id="wake" type="time">
           <span class="due" id="due-wake"></span>
         </div>
@@ -1612,7 +1612,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     input.disabled = locked;
     var shown = isW ? (r.weight_lbs != null ? Number(r.weight_lbs).toFixed(1) : '') : ((wakeFromNotes(r.notes) || {}).value || '');
     input.value = input.defaultValue = shown;
-    el.innerHTML = '<button type="button" class="mbox report-measure-status" aria-label="Set measurement status"></button><span class="lbl">' + (isW ? 'Weight' : 'Wake') + '<span class="measurement-complete" data-measurement-complete hidden>✓ Done</span></span>';
+    el.innerHTML = '<button type="button" class="mbox report-measure-status" aria-label="Set measurement status"></button><span class="lbl">' + (isW ? 'Weight' : 'Wake') + '<span class="measurement-complete" data-measurement-complete hidden>✦ Done</span></span>';
     var statusButton = el.querySelector('.mbox'); statusButton.disabled = locked;
     bindFieldReport(statusButton, function () { return r; }, function () { paintMini(el, r); if (onUpdate) onUpdate(); });
     el.appendChild(input);
