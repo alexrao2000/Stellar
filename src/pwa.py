@@ -63,8 +63,8 @@ HEAD = """<meta charset="utf-8">
 <script src="/app-assets/sections.js?v=1"></script>
 <link rel="stylesheet" href="/app-assets/sections.css?v=1">
 <script src="/app-assets/sync.js?v=1"></script>
-<script src="/app-assets/reports.js?v=3"></script>
-<link rel="stylesheet" href="/app-assets/reports.css?v=5">
+<script src="/app-assets/reports.js?v=4"></script>
+<link rel="stylesheet" href="/app-assets/reports.css?v=6">
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
 <link rel="stylesheet" href="/app-assets/stellar.css?v=3">
 <link rel="stylesheet" href="/app-assets/workspace.css?v=7">

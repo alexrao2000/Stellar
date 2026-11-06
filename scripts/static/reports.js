@@ -53,6 +53,26 @@
     };
     update(); return update;
   };
+  const starPath = 'M12 2C13.2 8.5 15.5 10.8 22 12C15.5 13.2 13.2 15.5 12 22C10.8 15.5 8.5 13.2 2 12C8.5 10.8 10.8 8.5 12 2Z';
+  const renderIcon = (host, value, seed = '') => {
+    if (!host) return;
+    const outcome = typeof value === 'string' ? value : state(value);
+    if (host.dataset.reportIcon === outcome) return;
+    host.classList.add('stellar-status'); host.dataset.reportIcon = outcome;
+    let hash = 0;
+    for (const letter of String(seed)) hash = (hash * 31 + letter.charCodeAt(0)) >>> 0;
+    host.style.setProperty('--report-phase', '-' + (hash % 3600 / 1000) + 's');
+    const star = '<path class="report-star" d="' + starPath + '"/>';
+    let content = star;
+    if (outcome === 'unreported') content = '<path class="report-glow" d="' + starPath + '"/>' + star;
+    if (outcome === 'incomplete') content = '<rect class="report-no-frame" x="1.5" y="1.5" width="21" height="21" rx="4"/>' +
+      '<g transform="translate(3 3) scale(.75)">' + star + '</g>' +
+      '<path class="report-no-cutout" d="M5 5L19 19"/><path class="report-no-slash" d="M5 5L19 19"/>';
+    if (outcome === 'done') content += [
+      ['a', 7, 6, .12], ['b', 17, 8, .1], ['c', 12, 4, .09]
+    ].map(([name, x, y, scale]) => '<g class="report-ember report-ember-' + name + '"><path transform="translate(' + x + ' ' + y + ') scale(' + scale + ') translate(-12 -12)" d="' + starPath + '"/></g>').join('');
+    host.innerHTML = '<svg class="report-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + content + '</svg>';
+  };
   const choose = (row, opener) => new Promise(resolve => {
     const existing = document.querySelector('.report-picker');
     if (existing) { existing.hidePopover?.(); existing.close?.(); }
@@ -69,7 +89,7 @@
     dialog.append(close, title, date); dialog.setAttribute('aria-labelledby', title.id);
     for (const value of ['done', 'incomplete', 'unreported']) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'report-option'; button.dataset.state = value;
-      const icon = document.createElement('span'); icon.className = 'report-symbol'; icon.textContent = '✦'; icon.setAttribute('aria-hidden', 'true');
+      const icon = document.createElement('span'); icon.className = 'report-symbol'; icon.setAttribute('aria-hidden', 'true'); renderIcon(icon, value, row.title + row.day);
       button.append(icon, labels[value]); button.setAttribute('aria-pressed', String(state(row) === value));
       button.addEventListener('click', () => { result = value; hide(); }); dialog.append(button);
     }
@@ -112,9 +132,11 @@
     button.addEventListener('pointermove', event => { if (event.pointerId === pointer && origin && Math.hypot(event.clientX - origin[0], event.clientY - origin[1]) > 10) clearTimeout(timer); });
     for (const event of ['pointerup', 'pointercancel', 'pointerleave']) button.addEventListener(event, input => { if (pointer !== null && input.pointerId !== pointer) return; clearTimeout(timer); origin = null; pointer = null; if (pressOpened) { suppressUntil = performance.now() + 700; pressOpened = false; } });
   };
-  const tick = () => { if (!document.hidden && window.stellarPageActive?.() !== false && (window === parent || frameElement && !frameElement.hidden && frameElement.getClientRects().length)) window.dispatchEvent(new Event('stellar:report-clock')); };
+  const pauseMotion = () => document.documentElement.classList.toggle('reports-paused', document.hidden || window.stellarPageActive?.() === false);
+  const tick = () => { pauseMotion(); if (!document.hidden && window.stellarPageActive?.() !== false && (window === parent || frameElement && !frameElement.hidden && frameElement.getClientRects().length)) window.dispatchEvent(new Event('stellar:report-clock')); };
+  pauseMotion();
   setInterval(tick, 60000);
   window.addEventListener('stellar:visibility', tick);
   document.addEventListener('visibilitychange', tick);
-  window.StellarReports = { state, apply, counts, fraction, description, frequency, progress, choose, bind, labels, overdue, today };
+  window.StellarReports = { state, apply, counts, fraction, description, frequency, progress, renderIcon, choose, bind, labels, overdue, today };
 })();
