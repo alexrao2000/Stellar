@@ -69,7 +69,7 @@
     if (outcome === 'incomplete') content = '<rect class="report-no-frame" x="1.5" y="1.5" width="21" height="21" rx="4"/>' +
       '<g transform="translate(3 3) scale(.75)">' + star + '</g>' +
       '<path class="report-no-cutout" d="M5 5L19 19"/><path class="report-no-slash" d="M5 5L19 19"/>';
-    const dust = outcome === 'done' ? ['a', 'b', 'c', 'd', 'e', 'f'].map((name, i) =>
+    const dust = outcome === 'done' ? ['a', 'b', 'c'].map((name, i) =>
       '<span aria-hidden="true" class="report-ember report-ember-' + name + '"><span class="report-dust-core' + (i % 3 === 0 ? ' report-glint' : '') + '"></span></span>').join('') : '';
     host.innerHTML = (outcome === 'unreported' ? '<span class="report-glow" aria-hidden="true"></span>' : '') +
       '<svg class="report-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + content + '</svg>' + dust;

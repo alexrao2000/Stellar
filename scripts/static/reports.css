@@ -2,7 +2,7 @@
    The picker provides explicit outcomes without inferring optional failures.
    Small status glyphs keep square dimensions and separate 44px tap targets.
    Unreported glows white; Incomplete has a square prohibition mark; Done
-   emits luminous gold dust while the icon stays grey. Separate HTML layers
+   emits a sparse champagne shimmer while the icon stays grey. Separate HTML layers
    animate only opacity and transforms. Motion pauses in inactive sections
    and is disabled for reduced-motion preferences. Measurement
    completion labels follow the recorded outcome, not the presence of a value. */
@@ -54,17 +54,14 @@ html body .report-icon .report-no-frame { fill: none; stroke: currentColor; stro
 html body .report-icon .report-no-cutout { fill: none; stroke: #111; stroke-width: 4.5; }
 html body .report-icon .report-no-slash { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: square; }
 html body .stellar-status .report-glow { position: absolute; inset: -7px; pointer-events: none; border-radius: 50%; background: radial-gradient(circle, #ffffffa0 0%, #ffffff60 18%, #ffffff00 66%); opacity: .4; animation: report-star-glow 3.6s ease-in-out infinite; animation-delay: var(--report-phase, 0s); }
-html body .stellar-status .report-ember { position: absolute; left: calc(50% - 7px); top: calc(50% - 7px); width: 14px; height: 14px; pointer-events: none; opacity: 0; animation: report-star-ember 5.2s linear infinite; animation-delay: var(--report-phase, 0s); }
-html body .stellar-status .report-dust-core { display: block; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle, #fff5cc 0 9%, #ffdc70 12% 20%, #f4b831b3 28%, #f4b83155 44%, #f4b83100 70%); }
-html body .stellar-status .report-glint { background: linear-gradient(#ffdf8c, #ffdf8c) center / 1px 8px no-repeat, linear-gradient(#ffdf8c, #ffdf8c) center / 8px 1px no-repeat, radial-gradient(circle, #fff5cc 0 9%, #ffce4bb3 25%, #f4b83155 44%, #f4b83100 70%); }
+html body .stellar-status .report-ember { position: absolute; left: calc(50% - 4px); top: calc(50% - 4px); width: 8px; height: 8px; pointer-events: none; opacity: 0; animation: report-star-ember 6s linear infinite; animation-delay: var(--report-phase, 0s); }
+html body .stellar-status .report-dust-core { display: block; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle, #fffaf0 0 7%, #eee6d6b3 12% 18%, #d8c7a238 32%, #d8c7a200 65%); }
+html body .stellar-status .report-glint { background: linear-gradient(#eee6d6b3, #eee6d6b3) center / 1px 4px no-repeat, linear-gradient(#eee6d6b3, #eee6d6b3) center / 4px 1px no-repeat, radial-gradient(circle, #fffaf0 0 7%, #eee6d680 18%, #d8c7a238 32%, #d8c7a200 65%); }
 .report-ember-a { --ember-drift: -26px; --ember-rise: -26px; }
-html body .stellar-status .report-ember-b { --ember-drift: 27px; --ember-rise: -21px; animation-delay: calc(var(--report-phase, 0s) - .87s); }
-html body .stellar-status .report-ember-c { --ember-drift: -7px; --ember-rise: -35px; animation-delay: calc(var(--report-phase, 0s) - 1.74s); }
-html body .stellar-status .report-ember-d { --ember-drift: 32px; --ember-rise: -6px; animation-delay: calc(var(--report-phase, 0s) - 2.61s); }
-html body .stellar-status .report-ember-e { --ember-drift: -30px; --ember-rise: 5px; animation-delay: calc(var(--report-phase, 0s) - 3.48s); }
-html body .stellar-status .report-ember-f { --ember-drift: 12px; --ember-rise: -32px; animation-delay: calc(var(--report-phase, 0s) - 4.35s); }
+html body .stellar-status .report-ember-b { --ember-drift: 27px; --ember-rise: -21px; animation-delay: calc(var(--report-phase, 0s) - 2s); }
+html body .stellar-status .report-ember-c { --ember-drift: -7px; --ember-rise: -35px; animation-delay: calc(var(--report-phase, 0s) - 4s); }
 @keyframes report-star-glow { 0%,100% { opacity: .15; } 50% { opacity: .8; } }
-@keyframes report-star-ember { 0% { opacity: 0; transform: translate3d(0, 0, 0) scale(1); } 12% { opacity: 1; } 45% { opacity: 1; } 75% { opacity: .65; } 100% { opacity: 0; transform: translate3d(var(--ember-drift), var(--ember-rise), 0) scale(.65); } }
+@keyframes report-star-ember { 0% { opacity: 0; transform: translate3d(0, 0, 0) scale(1); } 12% { opacity: .65; } 30% { opacity: .45; } 55% { opacity: .2; } 85%,100% { opacity: 0; } 100% { transform: translate3d(var(--ember-drift), var(--ember-rise), 0) scale(.65); } }
 html.reports-paused .stellar-status :is(.report-glow,.report-ember) { animation-play-state: paused; }
 html body button:disabled .stellar-status :is(.report-glow,.report-ember), html body button.stellar-status:disabled :is(.report-glow,.report-ember) { animation: none; opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
