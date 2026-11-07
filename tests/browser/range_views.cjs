@@ -153,20 +153,27 @@ async function check(engine) {
       for (const input of await fields.all()) assert((await input.boundingBox()).height >= 44);
       await page.screenshot({ path: `/private/tmp/range-${view}-${engine}-mobile.png` });
     }
-    for (const width of [320, 360, 375, 390, 430]) {
+    await page.locator('.range-dates [data-day="2026-11-04"]').click();
+    assert.equal(await page.locator('.range-focus .mini.field [data-measurement-complete]:visible').count(), 2, 'Completed readings include their badges during the mobile sizing check');
+    for (const width of [320, 360, 375, 390, 393, 430, 480, 481, 760]) {
       await page.setViewportSize({ width, height: 844 });
       for (const input of await page.locator('.range-focus .mini.field input').all()) {
         const dimensions = await input.evaluate(input => {
           const row = input.closest('.mini.field'), box = row.querySelector('.mbox');
-          const card = row.getBoundingClientRect(), field = input.getBoundingClientRect(), icon = box.getBoundingClientRect();
+          const card = row.getBoundingClientRect(), field = input.getBoundingClientRect(), icon = box.getBoundingClientRect(), label = row.querySelector('.lbl').getBoundingClientRect();
           const hit = getComputedStyle(box, '::before');
           return { left: field.left - card.left, right: card.right - field.right,
             bottom: card.bottom - field.bottom, iconWidth: icon.width, iconHeight: icon.height,
-            hitWidth: parseFloat(hit.width), hitHeight: parseFloat(hit.height), height: field.height };
+            hitWidth: parseFloat(hit.width), hitHeight: parseFloat(hit.height), height: field.height,
+            inputWidth: field.width, belowLabel: field.top - label.bottom, scrollWidth: input.scrollWidth, clientWidth: input.clientWidth };
         });
         assert(dimensions.left >= 10 && dimensions.right >= 10 && dimensions.bottom >= 8, `${engine} ${width}: measurement stays inside its card`);
         assert.equal(dimensions.iconHeight, dimensions.iconWidth, `${engine} ${width}: status icon stays square`);
         assert(dimensions.hitWidth >= 44 && dimensions.hitHeight >= 44 && dimensions.height >= 44, 'Controls keep usable touch targets');
+        assert(dimensions.scrollWidth <= dimensions.clientWidth + 1, 'The recorded value fits inside the input');
+        if (width <= 480) {
+          assert(dimensions.belowLabel >= 4 && dimensions.inputWidth >= 180, `${engine} ${width}: input has its own wide row below the label and Done badge`);
+        } else assert(dimensions.inputWidth >= 160, 'Inline native controls keep enough width on larger screens');
       }
       if (width === 320 || width === 390) await page.screenshot({ path: `/private/tmp/stellar-measurements-${engine}-${width}-after.png` });
     }
