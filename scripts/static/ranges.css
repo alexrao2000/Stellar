@@ -1,7 +1,8 @@
 /* Compact date comparisons share the existing panel height. Sticky task names
    keep long custom ranges readable, while phones use a full-width day list.
-   These selectors apply only to 3 Days, Week, and Custom. Narrow phones
-   put measurement inputs below their labels so native time controls fit. */
+   These selectors apply only to 3 Days, Week, and Custom. Phone measurement
+   inputs get a full row below their labels, with wider inline controls on
+   larger screens, so native time controls and completion badges both fit. */
 html body .range-board { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 html body .range-scroll { overflow: auto; min-width: 0; min-height: 0; max-height: 65dvh; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--rule); border-radius: 13px; background: var(--surface); }
 .range-table { width: 100%; min-width: calc(164px + var(--range-days) * 46px); table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
@@ -79,14 +80,14 @@ html body.view-custom .custom input { width: 100%; padding: 8px; font-size: 12px
   html body .range-focus .mini:not(.field) { grid-template-columns: 18px minmax(0, 1fr); column-gap: 10px; }
   html body .range-focus .mini .mbox { width: 17px; height: 17px; border-radius: 5px; }
   html body .range-focus .mini .tag { font-size: 10px; line-height: 1.4; }
-  html body .range-focus .mini.field { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(0, 140px); gap: 6px 10px; align-items: center; min-width: 0; padding: 10px 12px; }
+  html body .range-focus .mini.field { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(160px, 42%); gap: 6px 10px; align-items: center; min-width: 0; padding: 10px 12px; }
   html body .range-focus .mini.field .mbox { grid-column: 1; }
   html body .range-focus .mini.field .lbl { grid-column: 2; font-size: 13px; text-transform: none; letter-spacing: 0; }
-  html body .range-focus .mini.field input { grid-column: 3; display: block; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; margin: 0; padding: 8px; font-size: 16px; }
+  html body .range-focus .mini.field input { grid-column: 3; display: block; box-sizing: border-box; appearance: none; -webkit-appearance: none; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; margin: 0; padding: 8px; font-size: 16px; }
   html body .range-focus .mini.field .tag { grid-column: 2 / -1; justify-self: start; }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 480px) {
   html body .range-focus .mini.field { grid-template-columns: 18px minmax(0, 1fr); }
   html body .range-focus .mini.field input { grid-column: 2; grid-row: 2; }
   html body .range-focus .mini.field .tag { grid-column: 2; }
