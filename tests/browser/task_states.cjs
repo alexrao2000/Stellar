@@ -3,13 +3,21 @@
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 class Clock extends Date { constructor(...args) { super(...(args.length ? args : ['2026-11-05T20:00:00Z'])); } static now() { return Date.parse('2026-11-05T20:00:00Z'); } }
 const window = {};
-vm.runInNewContext(fs.readFileSync('scripts/static/reports.js', 'utf8'), { window: Object.assign(window, { addEventListener() {} }), Date: Clock, setInterval() {}, document: { addEventListener() {} } });
+vm.runInNewContext(fs.readFileSync('scripts/static/reports.js', 'utf8'), {
+  window: Object.assign(window, { addEventListener() {} }), Date: Clock, setInterval() {},
+  document: { documentElement: { classList: { toggle() {} } }, addEventListener() {} },
+});
 const R = window.StellarReports;
 const row = { day: '2026-11-04', status: 'needsAction', is_completed: false, report_due_at: '2026-11-05T07:00:00Z' };
 assert.equal(R.state(row), 'incomplete');
 assert.equal(R.state({ ...row, optional: true }), 'unreported');
 assert.equal(R.state({ ...row, optional: true, status: 'incomplete' }), 'incomplete');
 assert.equal(R.state({ ...row, status: 'unreported' }), 'unreported');
+const uncertain = { ...row, status: 'unknown' };
+assert.equal(R.state(uncertain), 'unknown');
+assert.equal(R.resolved(uncertain), false);
+assert.equal(R.counts([uncertain]).percent, 0);
+assert.equal(R.counts([uncertain]).unknown, 1);
 assert.equal(R.state({ ...row, report_due_at: '2026-11-06T07:00:00Z' }), 'unreported');
 const required = Array.from({ length: 8 }, () => ({ ...row, is_completed: true }));
 const optional = { ...row, optional: true, is_completed: true };

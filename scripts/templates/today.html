@@ -914,7 +914,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
           });
       }
 
-      r._confirmedReport = r.is_completed ? 'done' : r.status === 'incomplete' ? 'incomplete' : 'unreported';
+      r._confirmedReport = StellarReports.recordedState(r) || 'unreported';
       r._desiredReport = r._confirmedReport;
       StellarReports.bind(b, r, function (next) {
           r._desiredReport = next;
@@ -1619,11 +1619,15 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     return col;
   }
 
-  function tagFor(r) {
+  function paintMiniDeadline(el, r) {
     var st = deadlineState(r);
-    if (!st) return '';
+    var tag = el.querySelector('.tag');
+    if (!st) { tag?.remove(); return; }
+    if (!tag) { tag = document.createElement('span'); el.appendChild(tag); }
     var when = hm(st.due) + (localDay(st.due) > r.day ? '+1' : '');
-    return '<span class="tag' + (st.missed ? ' missed' : '') + '">' + (st.missed ? (r.is_completed ? 'late ' : 'missed ') : '') + when + '</span>';
+    var text = (st.missed ? (r.is_completed ? 'late ' : 'missed ') : '') + when;
+    tag.className = st.missed ? 'tag missed' : 'tag';
+    if (tag.textContent !== text) tag.textContent = text;
   }
 
   function storeMini(r) {
@@ -1641,6 +1645,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     el.classList.toggle('done', !!r.is_completed);
     el.classList.toggle('optional', !!r.optional && !r.is_completed);
     el.classList.toggle('unreported', StellarReports.state(r) === 'unreported');
+    paintMiniDeadline(el, r);
     if (el.tagName === 'BUTTON') {
       el.setAttribute('aria-pressed', String(!!r.is_completed));
       el.setAttribute('aria-label', r.title + ', ' + label(r.day, { month: 'short', day: 'numeric' }) + ', ' + StellarReports.labels[StellarReports.state(r)]);
@@ -1662,7 +1667,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     b.className = 'mini' + (compact ? ' range-check' : '');
     b._row = r;
     b.disabled = locked;
-    b.innerHTML = '<span class="mbox"></span><span class="t">' + esc(r.title) + '</span>' + tagFor(r);
+    b.innerHTML = '<span class="mbox"></span><span class="t">' + esc(r.title) + '</span>';
     paintMini(b, r);
     StellarReports.bind(b, r, function (next) {
         var previous = { is_completed: r.is_completed, status: r.status, completed_at: r.completed_at };
@@ -1694,8 +1699,6 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var statusButton = el.querySelector('.mbox'); statusButton.disabled = locked;
     bindFieldReport(statusButton, function () { return r; }, function () { paintMini(el, r); if (onUpdate) onUpdate(); });
     el.appendChild(input);
-    var tag = tagFor(r);
-    if (tag) el.insertAdjacentHTML('beforeend', tag);
     paintMini(el, r);
     el.addEventListener('click', function (e) { if (e.target !== input && !e.target.closest('button') && !input.disabled) input.focus(); });
     input.addEventListener('change', function () {
@@ -1709,6 +1712,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         shown = input.defaultValue = v;
         if (u && u.id) { r.id = u.id; delete r.virtual; }
         if (u && 'completed_at' in u) r.completed_at = u.completed_at;
+        if (u && u.status) r.status = u.status;
         if (isW && u && u.weight_lbs !== undefined) r.weight_lbs = u.weight_lbs;
         if (!isW && u && typeof u.notes === 'string') r.notes = u.notes;
         paintMini(el, r); if (onUpdate) onUpdate();

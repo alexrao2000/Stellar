@@ -1127,7 +1127,7 @@ def _annotated_record(row: dict, definition: dict, day: str, tz) -> dict:
     due = _deadline_at(day, deadline if deadline is not None else 1440, tz)
     if row.get("is_completed"):
         state = "done"
-    elif row.get("status") in {"incomplete", "unreported"}:
+    elif row.get("status") in {"incomplete", "unreported", "unknown"}:
         state = row["status"]
     elif not optional and due and datetime.now(timezone.utc) >= datetime.fromisoformat(due):
         state = "incomplete"
@@ -1311,7 +1311,7 @@ def api_check(day: str, title: str, done: bool) -> dict:
 
 class TaskReport(BaseModel):
     title: str
-    state: Literal["done", "incomplete", "unreported"]
+    state: Literal["done", "incomplete", "unreported", "unknown"]
 
 
 @app.post("/api/day/{day}/report")
@@ -1323,7 +1323,7 @@ def api_report(day: str, body: TaskReport) -> dict:
     row = _materialize(day, body.title)
     result = _sb().table("task_history").update({
         "is_completed": body.state == "done",
-        "status": {"done": "completed", "incomplete": "incomplete", "unreported": "unreported"}[body.state],
+        "status": "completed" if body.state == "done" else body.state,
         "completed_at": (row.get("completed_at") if row.get("is_completed") else datetime.now(timezone.utc).isoformat()) if body.state == "done" else None,
     }).eq("id", row["id"]).execute().data or []
     if not result:
