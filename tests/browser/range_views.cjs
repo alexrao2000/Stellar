@@ -199,7 +199,7 @@ async function check(engine) {
     assert.equal(await page.locator('.dated-tasks').evaluate(panel => panel.getAnimations().filter(animation => animation.playState === 'running').length), 0);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto(base + '/?view=week&day=2026-07-15'); await page.locator('.range-table').waitFor();
-    assert.equal(await page.locator('.range-table tbody td button:not(:disabled)').count(), 0, 'Dates before the write floor remain locked');
+    assert.equal(await page.locator('.range-table tbody td:not(.range-reorder) button:not(:disabled)').count(), 0, 'Dates before the write floor remain locked');
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });
       for (const width of [320, 760, 820, 1100, 1280, 1920]) {
@@ -212,7 +212,7 @@ async function check(engine) {
     const weekRows = page.locator('.range-table tbody tr[data-title]');
     const runGrip = weekRows.getByRole('button', { name: 'Move Run (arrow keys)', exact: true });
     await runGrip.waitFor();
-    const start = await runGrip.boundingBox(), target = await weekRows.first().locator('th').boundingBox();
+    const start = await runGrip.boundingBox(), target = await weekRows.first().locator('.range-reorder').boundingBox();
     const savedOrder = () => page.waitForResponse(response => new URL(response.url()).pathname === '/api/task_order' && response.ok());
     const firstSave = savedOrder();
     await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);

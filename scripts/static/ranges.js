@@ -109,13 +109,16 @@
     table.style.setProperty('--range-days', days.length);
     const caption = document.createElement('caption'); caption.textContent = 'Task records, ' + dateLabel(days[0]) + ' to ' + dateLabel(days.at(-1)); caption.className = 'range-sr'; table.append(caption);
     const columns = document.createElement('colgroup'); columns.append(document.createElement('col'));
-    days.forEach(() => columns.append(document.createElement('col'))); table.append(columns);
+    days.forEach(() => columns.append(document.createElement('col')));
+    columns.append(document.createElement('col')); table.append(columns);
     const thead = document.createElement('thead'), header = document.createElement('tr');
     const corner = document.createElement('th'); corner.scope = 'col'; corner.className = 'range-task-heading'; corner.textContent = 'Tasks'; header.append(corner);
     days.forEach(day => {
       const th = document.createElement('th'); th.scope = 'col';
       const button = dateButton(day); button.addEventListener('click', () => ctx.go('day', day)); th.append(button); header.append(th);
     });
+    const reorderHeading = document.createElement('th'); reorderHeading.scope = 'col'; reorderHeading.className = 'range-reorder';
+    reorderHeading.setAttribute('aria-label', 'Reorder tasks'); header.append(reorderHeading);
     thead.append(header); table.append(thead);
     const body = document.createElement('tbody');
     const allRows = days.flatMap(day => ctx.rows(day));
@@ -124,9 +127,8 @@
       const tr = document.createElement('tr'), name = document.createElement('th'); name.scope = 'row'; name.className = 'range-task-name';
       const row = allRows.find(row => row.title === title);
       tr.dataset.title = title;
-      const heading = document.createElement('div'); heading.className = 'range-task-label';
       const label = document.createElement('span'); label.textContent = shortTitle(row, ctx);
-      heading.append(ctx.grip(title), label); name.append(heading); name.title = title; tr.append(name);
+      name.append(label); name.title = title; tr.append(name);
       days.forEach(day => {
         const td = document.createElement('td'), row = ctx.rows(day).find(row => row.title === title);
         td.classList.toggle('range-today', day === ctx.today);
@@ -144,10 +146,11 @@
         }
         tr.append(td);
       });
-      body.append(tr);
+      const reorder = document.createElement('td'); reorder.className = 'range-reorder';
+      reorder.append(ctx.grip(title)); tr.append(reorder); body.append(tr);
     });
     if (!titles.length) {
-      const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = days.length + 1; td.className = 'range-empty'; td.textContent = 'Nothing scheduled in this range.'; tr.append(td); body.append(tr);
+      const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = days.length + 2; td.className = 'range-empty'; td.textContent = 'Nothing scheduled in this range.'; tr.append(td); body.append(tr);
     }
     if (titles.length) ctx.bindReordering(body);
     table.append(body); scroll.append(table); board.append(scroll);

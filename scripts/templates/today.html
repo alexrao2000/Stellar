@@ -1498,14 +1498,14 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   var rangeAssetsReady = null, rangeRenderVersion = 0;
-  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=7"]');
+  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=8"]');
   var rangeStylesReady = !!(rangeStyle && rangeStyle.sheet);
   function loadRangeAssets() {
     if (window.stellarRenderRange && rangeStylesReady) return Promise.resolve();
     if (rangeAssetsReady) return rangeAssetsReady;
     rangeAssetsReady = Promise.all([
-      ['link', 'href', '/app-assets/ranges.css?v=7'],
-      ['script', 'src', '/app-assets/ranges.js?v=6']
+      ['link', 'href', '/app-assets/ranges.css?v=8'],
+      ['script', 'src', '/app-assets/ranges.js?v=7']
     ].map(function (asset) {
       return new Promise(function (resolve, reject) {
         var node = document.createElement(asset[0]);
