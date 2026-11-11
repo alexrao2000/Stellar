@@ -160,6 +160,6 @@ def test_range_assets_load_only_for_the_selected_layout(client, monkeypatch):
     for view in ("day", "month", "3days", "week", "custom"):
         html = client.get("/?view=" + view).text
         selected = view in {"3days", "week", "custom"}
-        assert ('<link rel="preload" as="script" href="/app-assets/ranges.js?v=6">' in html) == selected
-        assert ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=7">' in html) == selected
+        assert ('<link rel="preload" as="script" href="/app-assets/ranges.js?v=7">' in html) == selected
+        assert ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=8">' in html) == selected
         assert "__RANGE_ASSETS__" not in html

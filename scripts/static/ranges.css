@@ -1,20 +1,22 @@
 /* Compact date comparisons share the existing panel height. Sticky task names
-   keep long custom ranges readable, while phones use a full-width day list.
+   and right-side handles stay visible while dates scroll. Phones use a full-width day list.
    These selectors apply only to 3 Days, Week, and Custom. Phone measurement
    inputs get a full row below their labels, with wider inline controls on
    larger screens, so native time controls and completion badges both fit. */
 html body .range-board { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 html body .range-scroll { overflow: auto; min-width: 0; min-height: 0; max-height: 65dvh; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--rule); border-radius: 13px; background: var(--surface); }
-.range-table { width: 100%; min-width: calc(164px + var(--range-days) * 46px); table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.range-table { --range-grip-width: 44px; width: 100%; min-width: calc(164px + var(--range-days) * 46px + var(--range-grip-width)); table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .range-table col:first-child { width: 164px; }
+.range-table col:last-child { width: var(--range-grip-width); }
 .range-table th, .range-table td { padding: 0; border: 0; border-bottom: 1px solid var(--rule); text-align: center; }
 .range-table thead th { position: sticky; top: 0; z-index: 3; padding: 4px 2px; background: var(--surface); }
 .range-table .range-task-heading, .range-table .range-task-name { position: sticky; left: 0; background: var(--surface); text-align: left; padding: 10px 12px; border-right: 1px solid var(--rule); }
 .range-table .range-task-heading { z-index: 4; font-size: 10px; font-weight: 500; color: var(--ink-muted); letter-spacing: .1em; text-transform: uppercase; }
 .range-table .range-task-name { z-index: 2; font-size: 12px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
 .range-task-name span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.range-task-label { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 6px; align-items: center; }
-.range-task-label .grip { min-height: 32px; }
+.range-table .range-reorder { position: sticky; right: 0; z-index: 2; background: var(--surface); border-left: 1px solid var(--rule); }
+.range-table thead .range-reorder { z-index: 4; }
+.range-reorder .grip { width: 100%; min-height: 44px; }
 .range-table tr.dragging > * { background: var(--surface-2); }
 .range-table tbody tr:last-child > * { border-bottom: 0; }
 .range-table tbody tr:hover :is(td,.range-task-name) { background: var(--surface-2); }
