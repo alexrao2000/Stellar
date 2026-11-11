@@ -635,8 +635,8 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     )
     range_assets = ""
     if template == "today.html" and boot.get("view") in {"3days", "week", "custom"}:
-        range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=6">'
-                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=5">')
+        range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=7">'
+                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=6">')
     html = html.replace("__RANGE_ASSETS__", range_assets)
     # A page whose data is already in the markup has nothing to wait for, and
     # gating it would be strictly worse than not: the gate lifts on the first
@@ -1287,7 +1287,7 @@ def api_range(start: str, end: str, response: Response) -> dict:
         rows.sort(key=lambda r: (position.get(r["title"], len(position)), r["title"]))
         days[day] = _annotate(rows, live, day)
     return {"start": start, "end": end, "today": _today(), "floor": WRITE_FLOOR.isoformat(),
-            "days": days}
+            "days": days, "order": list(position)}
 
 
 @app.post("/api/day/{day}/check")
@@ -1334,6 +1334,7 @@ def api_report(day: str, body: TaskReport) -> dict:
 
 class TaskOrderBody(BaseModel):
     titles: list[str]
+    preserve_unlisted: bool = False
 
 
 @app.post("/api/task_order")
@@ -1343,7 +1344,8 @@ def api_task_order(body: TaskOrderBody) -> dict:
     The page sends the titles in the order it shows them. Titles that are not
     active definitions are ignored -- an old day can show tasks that no longer
     run -- and any active one the page did not send keeps its relative place
-    after the ones it did, so a partial list can never drop a task.
+    after the ones it did. Space can preserve their exact slots when reordering
+    a date range that only shows some of the tasks.
 
     This writes recurring_tasks.sort_order, the definitions' display order. It
     touches no history, so the write floor does not apply. Only rows whose
@@ -1358,7 +1360,13 @@ def api_task_order(body: TaskOrderBody) -> dict:
     listed = [title for title in body.titles if title in by_title]
     if not listed:
         raise HTTPException(400, "none of these titles is an active task")
-    order = listed + [cur["title"] for _s, _v, cur in current if cur["title"] not in set(listed)]
+    listed_set = set(listed)
+    current_order = list(by_title)
+    if body.preserve_unlisted:
+        reordered = iter(listed)
+        order = [next(reordered) if title in listed_set else title for title in current_order]
+    else:
+        order = listed + [title for title in current_order if title not in listed_set]
 
     changed = sum(_set_position(by_title[title], position)
                   for position, title in enumerate(order, 1))
