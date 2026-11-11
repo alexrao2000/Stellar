@@ -788,7 +788,7 @@ def test_range_views_paint_from_the_cache_and_prefetch_neighbours():
 
 def test_report_outcomes_preserve_measurements_and_clear_explicitly(db):
     fake = db([_task(1, "Run", optional=True)], [{"id": 3, "day": "2026-10-12", "title": "Run", "list_title": "Daily", "is_completed": False, "status": "needsAction", "notes": "A note to preserve", "weight_lbs": 150.4}])
-    for state, status in (("done", "completed"), ("incomplete", "incomplete"), ("unreported", "unreported")):
+    for state, status in (("done", "completed"), ("incomplete", "incomplete"), ("unknown", "unknown"), ("unreported", "unreported")):
         result = server.api_report("2026-10-12", server.TaskReport(title="Run", state=state))
         assert result["report_state"] == state
         assert result["status"] == status
@@ -817,6 +817,7 @@ def test_mandatory_deadlines_and_optional_defaults_are_separate():
     assert server._annotated_record(row, {"optional": True}, row["day"], timezone.utc)["report_state"] == "unreported"
     assert server._annotated_record(dict(row, status="incomplete"), {"optional": True}, row["day"], timezone.utc)["report_state"] == "incomplete"
     assert server._annotated_record(dict(row, status="unreported"), {}, row["day"], timezone.utc)["report_state"] == "unreported"
+    assert server._annotated_record(dict(row, status="unknown"), {}, row["day"], timezone.utc)["report_state"] == "unknown"
     assert server._annotated_record(dict(row, is_completed=True), {}, row["day"], timezone.utc)["report_state"] == "done"
 
 

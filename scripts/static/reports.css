@@ -1,7 +1,7 @@
-/* Three report states share the same meaning across task lists and charts.
+/* Four report states share the same meaning across task lists and charts.
    The picker provides explicit outcomes without inferring optional failures.
    Small status glyphs keep square dimensions and separate 44px tap targets.
-   Unreported glows white; Incomplete has a square prohibition mark; Done
+   Unreported glows white, Incomplete has a slash, and Don't Know has a dashed frame. Done
    emits a sparse champagne shimmer while the icon stays grey. Separate HTML layers
    animate only opacity and transforms. Motion pauses in inactive sections
    and is disabled for reduced-motion preferences. Measurement
@@ -24,7 +24,8 @@ html body .range-breakdown { grid-column: 1 / -1; margin: 0; color: var(--ink-mu
 body.ranged .daily-completion { display: none; }
 .report-count-detail { display: block; font-size: 9px; opacity: .75; }
 .report-field-status { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); color: var(--ink-muted); font: 12px system-ui, sans-serif; min-height: 36px; padding: 6px 10px; cursor: pointer; }
-.pill.unreported { background: var(--surface-2); color: var(--ink-muted); }
+.pill.unreported, .pill.unknown { background: var(--surface-2); color: var(--ink-muted); }
+.heatgrid i.d.unknown, .legend i.legend-unknown { background: transparent; border: 1px dashed var(--ink-muted); }
 .heatgrid i.d.unreported { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-muted); }
 .heatgrid i.d.incomplete { background: var(--miss); }
 
@@ -46,11 +47,12 @@ html body .field button.box { min-height: 0; min-width: 0; align-self: center; }
 html body :is(.task,.field,.mini,.report-picker) :is(.box,.mbox,.report-symbol).stellar-status[data-report-icon] { position: relative; display: grid; place-items: center; overflow: visible; background: #111; border: 1px solid #111; border-radius: 5px; color: #fff; -webkit-text-stroke: 0; }
 html body :is(.task,.field,.mini,.report-picker) :is(.box,.mbox,.report-symbol).stellar-status[data-report-icon]::after { content: none; }
 html body :is(.task,.field,.mini,.report-picker) :is(.box,.mbox,.report-symbol).stellar-status[data-report-icon=done] { background: transparent; border-color: color-mix(in srgb, var(--report-ember) 60%, transparent); color: var(--report-ember); }
-html body :is(.task,.field,.mini,.report-picker) :is(.box,.mbox,.report-symbol).stellar-status[data-report-icon=incomplete] { border-color: transparent; }
+html body :is(.task,.field,.mini,.report-picker) :is(.box,.mbox,.report-symbol).stellar-status:is([data-report-icon=incomplete],[data-report-icon=unknown]) { border-color: transparent; }
 html body .stellar-status[data-report-icon] > .report-icon { display: block; width: 100%; height: 100%; overflow: visible; fill: none; stroke: none; pointer-events: none; }
 html body .report-icon .report-star { fill: currentColor; stroke: none; }
 html body [data-report-icon=done] .report-star { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
-html body .report-icon .report-no-frame { fill: none; stroke: currentColor; stroke-width: 1.5; }
+html body .report-icon :is(.report-no-frame,.report-unknown-frame) { fill: none; stroke: currentColor; stroke-width: 1.5; }
+html body .report-icon .report-unknown-frame { stroke-dasharray: 3 2.5; stroke-linecap: round; }
 html body .report-icon .report-no-cutout { fill: none; stroke: #111; stroke-width: 4.5; }
 html body .report-icon .report-no-slash { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: square; }
 html body .stellar-status .report-glow { position: absolute; inset: -7px; pointer-events: none; border-radius: 50%; background: radial-gradient(circle, #ffffffa0 0%, #ffffff60 18%, #ffffff00 66%); opacity: .4; animation: report-star-glow 3.6s ease-in-out infinite; animation-delay: var(--report-phase, 0s); }

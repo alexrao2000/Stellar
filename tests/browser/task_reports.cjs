@@ -23,7 +23,7 @@ async function check(engine, mobile) {
         writes.push(route.request().postDataJSON());
         if (fail) { fail = false; return route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"Demo save failure"}' }); }
         const body = writes.at(-1), row = rows(url.pathname.split('/')[3]).find(row => row.title === body.title);
-        row.is_completed = body.state === 'done'; row.status = { done: 'completed', incomplete: 'incomplete', unreported: 'unreported' }[body.state]; row.completed_at = row.is_completed ? day + 'T06:00:00Z' : null;
+        row.is_completed = body.state === 'done'; row.status = row.is_completed ? 'completed' : body.state; row.completed_at = row.is_completed ? day + 'T06:00:00Z' : null;
         revision++; data = { ...row };
       } else if (url.pathname.startsWith('/api/day/')) data = rows(url.pathname.split('/')[3]);
       else if (url.pathname === '/api/range') {
@@ -35,7 +35,10 @@ async function check(engine, mobile) {
       } else if (url.pathname === '/api/pool') data = { tasks: [], edges: [] };
       else if (url.pathname === '/api/task_history') data = rows(day);
       else if (url.pathname === '/api/metrics') data = { revision: String(revision), modules: [{ id: 'overview', label: 'Overview', kind: 'overview' }, { id: 'task-bonus', label: 'Bonus', kind: 'task', titles: ['Bonus'] }] };
-      else if (url.pathname === '/api/consistency') data = Array.from({ length: 7 }, (_, i) => ({ ...rows(day)[8], day: '2026-10-' + (20 + i), is_completed: i < 2, status: i < 2 ? 'completed' : i < 4 ? 'incomplete' : 'needsAction' }));
+      else if (url.pathname === '/api/consistency') {
+        const statuses = ['completed', 'completed', 'incomplete', 'incomplete', 'unknown', 'needsAction', 'needsAction'];
+        data = statuses.map((status, i) => ({ ...rows(day)[8], day: '2026-10-' + (20 + i), is_completed: status === 'completed', status }));
+      }
       await route.fulfill({ contentType: 'application/json', headers: { 'X-Day-Complete': '1' }, body: JSON.stringify(data) });
     });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
@@ -85,13 +88,16 @@ async function check(engine, mobile) {
     await open(bonus); await page.keyboard.press('Escape'); assert.equal(writes.length, beforeDismiss);
     const weightStatus = page.locator('#field-weight button.box');
     assert(await page.locator('#field-weight [data-measurement-complete]').isVisible(), 'Recorded completion has a visible Done badge');
-    await open(weightStatus); await page.locator('.report-option[data-state=unreported]').click();
-    await page.waitForTimeout(100);
-    assert.equal(await page.locator('#weight').inputValue(), '150.4', 'Clearing a report preserves the recorded measurement');
+    await open(weightStatus); await page.locator('.report-option[data-state=unknown]').click();
+    await page.locator('#field-weight button.box[data-report-icon=unknown]:enabled').waitFor();
+    assert.equal(writes.at(-1).state, 'unknown');
+    assert.equal(await page.locator('#day-completion strong').innerText(), '6/8', 'Unknown does not complete a required task');
+    assert.equal(await page.locator('#weight').inputValue(), '150.4', 'Reporting uncertainty preserves the recorded measurement');
     assert.equal(rows(day)[0].weight_lbs, 150.4);
     assert(!(await page.locator('#field-weight [data-measurement-complete]').isVisible()), 'A retained value does not imply completion');
     await page.reload(); await bonus.waitFor();
     assert(await bonus.evaluate(node => node.classList.contains('unreported')), 'Unreported survives reload');
+    await page.locator('#field-weight button.box[data-report-icon=unknown]').waitFor();
     fail = true;
     await bonus.click(); await page.getByText('Demo save failure', { exact: true }).waitFor();
     assert(await bonus.evaluate(node => node.classList.contains('unreported')), 'Failed writes restore the prior report');
@@ -113,10 +119,11 @@ async function check(engine, mobile) {
     const chart = page.frameLocator('#metric-frame');
     assert.equal(await chart.locator('#pct').innerText(), '2.0/week');
     const cells = chart.locator('#tstrip .cell');
-    for (const [label, value] of [['Done', '2'], ['Incomplete', '2'], ['Unreported', '3']]) {
+    for (const [label, value] of [['Done', '2'], ['Incomplete', '2'], ['Unreported', '2'], ["Don't Know", '1']]) {
       const cell = cells.filter({ has: chart.getByText(label, { exact: true }) });
       assert.equal(await cell.locator('.v').innerText(), value);
     }
+    assert.equal(await chart.locator('.heatgrid [data-day="2026-10-24"].unknown').count(), 1);
     assert(!(await chart.locator('#detail-card').innerText()).includes('%'), 'Optional metrics use frequency');
     assert(!(await chart.locator('#detail-card').innerText()).includes('Missed'));
     await page.goto(base + '/data'); await page.locator('#rows tr').first().waitFor();
@@ -125,6 +132,9 @@ async function check(engine, mobile) {
     assert((await page.locator('#rows').innerText()).includes('Unreported'));
     await page.locator('#status').selectOption('incomplete');
     assert((await page.locator('#rows').innerText()).includes('Required 2'));
+    await page.locator('#status').selectOption('unknown');
+    assert((await page.locator('#rows').innerText()).includes("Don't Know"));
+    assert.equal(await page.locator('#rows .pill.unknown').count(), 1);
     assert.deepEqual(errors, []);
     console.log(`${engine} ${mobile ? 'phone' : 'desktop'}: bonus goals, toggling, clearing, failed saves, measurement retention, frequency and Activity states passed`);
   } finally { await browser.close(); }

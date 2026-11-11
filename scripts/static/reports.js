@@ -1,32 +1,39 @@
 /* Optional outcomes stay unreported until entered. Mandatory outcomes become
    incomplete at their deadline, or at the end of their day when none is set.
    Bonus completions never replace required work. Optional frequency measures
-   occurrences per calendar week; missing reports remain a separate category.
+   occurrences per calendar week. Don't Know records an uncertain outcome.
    Dust and halos animate separate HTML layers so SVG filters and geometry do
    not need repainting every frame. The status star itself stays unchanged. */
 (() => {
-  const labels = { done: 'Done', incomplete: 'Incomplete', unreported: 'Unreported' };
+  const labels = { done: 'Done', incomplete: 'Incomplete', unreported: 'Unreported', unknown: "Don't Know" };
+  const unfinished = new Set(['incomplete', 'unreported', 'unknown']);
   const today = () => { const date = new Date(); return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'); };
   const overdue = row => {
     const due = row.report_due_at || row.deadline_at;
     return due ? Date.now() >= Date.parse(due) : row.day < today();
   };
-  const state = row => row.is_completed ? 'done' : row.status === 'incomplete' ? 'incomplete' : row.status === 'unreported' ? 'unreported' :
-    !row.optional && overdue(row) ? 'incomplete' : 'unreported';
+  const recordedState = row => row.is_completed ? 'done' : unfinished.has(row.status) ? row.status : null;
+  const state = row => recordedState(row) ?? (!row.optional && overdue(row) ? 'incomplete' : 'unreported');
+  const resolved = row => row.is_completed || state(row) === 'incomplete';
   const apply = (row, value) => {
     row.is_completed = value === 'done';
-    row.status = { done: 'completed', incomplete: 'incomplete', unreported: 'unreported' }[value];
+    row.status = value === 'done' ? 'completed' : value;
     row.completed_at = value === 'done' ? new Date().toISOString() : null;
     row.report_state = state(row);
   };
   const counts = rows => {
-    const required = rows.filter(row => !row.optional), done = rows.filter(row => state(row) === 'done').length;
-    const requiredDone = required.filter(row => state(row) === 'done').length;
-    return { done, required: required.length, requiredDone, bonus: done - requiredDone,
-      incomplete: rows.filter(row => state(row) === 'incomplete').length,
-      unreported: rows.filter(row => state(row) === 'unreported').length,
-      percent: required.length ? requiredDone / required.length * 100 : null,
-      complete: required.length > 0 && requiredDone === required.length };
+    const outcomes = { done: 0, incomplete: 0, unreported: 0, unknown: 0 };
+    let required = 0, requiredDone = 0;
+    for (const row of rows) {
+      const outcome = state(row);
+      outcomes[outcome]++;
+      if (row.optional) continue;
+      required++;
+      if (outcome === 'done') requiredDone++;
+    }
+    return { ...outcomes, required, requiredDone, bonus: outcomes.done - requiredDone,
+      percent: required ? requiredDone / required * 100 : null,
+      complete: required > 0 && requiredDone === required };
   };
   const fraction = count => count.required ? count.done + '/' + count.required : count.done + ' optional';
   const description = count => count.requiredDone + '/' + count.required + ' required' + (count.bonus ? ' · +' + count.bonus + ' optional' : '');
@@ -69,6 +76,8 @@
     if (outcome === 'incomplete') content = '<rect class="report-no-frame" x="1.5" y="1.5" width="21" height="21" rx="4"/>' +
       '<g transform="translate(3 3) scale(.75)">' + star + '</g>' +
       '<path class="report-no-cutout" d="M5 5L19 19"/><path class="report-no-slash" d="M5 5L19 19"/>';
+    if (outcome === 'unknown') content = '<rect class="report-unknown-frame" x="1.5" y="1.5" width="21" height="21" rx="4"/>' +
+      '<g transform="translate(3 3) scale(.75)">' + star + '</g>';
     const dust = outcome === 'done' ? ['a', 'b', 'c'].map((name, i) =>
       '<span aria-hidden="true" class="report-ember report-ember-' + name + '"><span class="report-dust-core' + (i % 3 === 0 ? ' report-glint' : '') + '"></span></span>').join('') : '';
     host.innerHTML = (outcome === 'unreported' ? '<span class="report-glow" aria-hidden="true"></span>' : '') +
@@ -88,7 +97,7 @@
     let result = null;
     close.addEventListener('click', hide);
     dialog.append(close, title, date); dialog.setAttribute('aria-labelledby', title.id);
-    for (const value of ['done', 'incomplete', 'unreported']) {
+    for (const value of Object.keys(labels)) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'report-option'; button.dataset.state = value;
       const icon = document.createElement('span'); icon.className = 'report-symbol'; icon.setAttribute('aria-hidden', 'true'); renderIcon(icon, value, row.title + row.day);
       button.append(icon, labels[value]); button.setAttribute('aria-pressed', String(state(row) === value));
@@ -118,7 +127,15 @@
   const bind = (button, row, update) => {
     let timer, origin, pointer = null, pressOpened = false, suppressUntil = 0;
     const current = () => typeof row === 'function' ? row() : row;
-    const open = () => { const existing = document.querySelector('.report-picker'); if (existing?._opener === button && (existing.hasAttribute('popover') && existing.matches(':popover-open') || existing.open)) return; if (!button.disabled && current()) choose(current(), button).then(value => { if (value && (value !== (current().is_completed ? 'done' : current().status === 'incomplete' ? 'incomplete' : 'unreported') || value === 'unreported')) update(value); }); };
+    const open = () => {
+      const existing = document.querySelector('.report-picker');
+      if (existing?._opener === button && (existing.hasAttribute('popover') && existing.matches(':popover-open') || existing.open)) return;
+      const record = current();
+      if (button.disabled || !record) return;
+      choose(record, button).then(value => {
+        if (value && current() === record && (value !== recordedState(record) || value === 'unreported')) update(value);
+      });
+    };
     button.addEventListener('click', event => {
       if (button.disabled || performance.now() < suppressUntil) { event.preventDefault(); return; }
       if (current()) update(state(current()) === 'done' ? 'incomplete' : 'done');
@@ -139,5 +156,5 @@
   setInterval(tick, 60000);
   window.addEventListener('stellar:visibility', tick);
   document.addEventListener('visibilitychange', tick);
-  window.StellarReports = { state, apply, counts, fraction, description, frequency, progress, renderIcon, choose, bind, labels, overdue, today };
+  window.StellarReports = { state, recordedState, resolved, apply, counts, fraction, description, frequency, progress, renderIcon, choose, bind, labels, overdue, today };
 })();

@@ -168,7 +168,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
   <p class="eyebrow">Stellar</p>
   <h1>Consistency</h1>
-  <p class="sub">Required-task completion and optional-task frequency, with unreported outcomes shown separately.</p>
+  <p class="sub">Required task completion, optional task frequency, and daily status history.</p>
 
   <div class="strip" id="strip"></div>
 
@@ -213,6 +213,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
         <span><i style="background:var(--empty)"></i>Not scheduled</span>
         <span><i style="background:transparent;box-shadow:inset 0 0 0 1px var(--rule)"></i>Upcoming</span>
         <span><i style="background:transparent;box-shadow:inset 0 0 0 1px var(--ink-muted)"></i>Unreported</span>
+        <span><i class="legend-unknown"></i>Don't Know</span>
       </div>
     </div>
   </div>
@@ -291,7 +292,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   function summary() {
     var past = ROWS.filter(function (r) { return r.day <= TODAY; });
     var done = past.filter(function (r) { return r.is_completed; });
-    var required = past.filter(function (r) { return !r.optional && StellarReports.state(r) !== 'unreported'; });
+    var required = past.filter(function (r) { return !r.optional && StellarReports.resolved(r); });
     var perDay = {}, allDays = {};
     past.forEach(function (r) { (allDays[r.day] = allDays[r.day] || []).push(r); });
     done.forEach(function (r) { perDay[r.day] = (perDay[r.day] || 0) + 1; });
@@ -322,7 +323,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
       var past = byTitle[t].filter(function (r) { return r.day <= TODAY; });
       var done = past.filter(function (r) { return r.is_completed; }).length;
       var optional = optionalTask(past);
-      var resolved = past.filter(function (r) { return StellarReports.state(r) !== 'unreported'; }).length;
+      var resolved = past.filter(StellarReports.resolved).length;
       return { title: t, n: past.length, done: done, optional: optional,
         label: optional ? frequencyLabel(past) : fmtPct(done, resolved),
         pct: optional ? Math.min(100, (StellarReports.frequency(past) || 0) / 7 * 100) : resolved ? done / resolved * 100 : 0 };
@@ -357,10 +358,8 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     past.sort(function (a, b) { return a.day < b.day ? -1 : 1; });
 
     var flags = past.map(function (r) { return !!r.is_completed; });
-    if (past.length && past.at(-1).day === TODAY && StellarReports.state(past.at(-1)) === 'unreported') flags.pop();
-    var done = past.filter(function (r) { return r.is_completed; }).length;
-    var incomplete = past.filter(function (r) { return StellarReports.state(r) === 'incomplete'; }).length;
-    var unreported = past.length - done - incomplete;
+    if (past.length && past.at(-1).day === TODAY && !StellarReports.resolved(past.at(-1))) flags.pop();
+    var outcomes = StellarReports.counts(past), done = outcomes.done, incomplete = outcomes.incomplete;
     var optional = optionalTask(past), resolved = done + incomplete;
     var pct = resolved ? done / resolved * 100 : 0, st = streaks(flags);
     var el = document.getElementById('pct');
@@ -370,7 +369,8 @@ button:focus-visible, select:focus-visible, input:focus-visible {
     document.getElementById('meta').innerHTML = esc(t) + ' — <b>' + done.toLocaleString() + '</b> completions across <b>' + past.length.toLocaleString() + '</b> scheduled days' + (optional ? ' · Frequency' : ' · Completion rate');
     document.getElementById('tstrip').innerHTML = [
       cell('Scheduled', past.length.toLocaleString()), cell('Done', done.toLocaleString()),
-      cell('Incomplete', incomplete.toLocaleString()), cell('Unreported', unreported.toLocaleString()),
+      cell('Incomplete', incomplete.toLocaleString()), cell('Unreported', outcomes.unreported.toLocaleString()),
+      cell("Don't Know", outcomes.unknown.toLocaleString()),
       cell('Longest streak', st[0] + ' days'), cell('Current streak', st[1] + ' days'),
     ].join('');
 
