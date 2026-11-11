@@ -319,6 +319,16 @@ def test_saving_an_order_rejects_a_repeated_title(monkeypatch):
     assert err.value.status_code == 400
 
 
+def test_range_reorder_preserves_slots_for_unlisted_tasks(monkeypatch):
+    defs = [_defn(1, "Run", 1), _defn(2, "Floss", 2), _defn(3, "Walk", 3)]
+    client = _order_setup(monkeypatch, defs)
+
+    result = server.api_task_order(server.TaskOrderBody(titles=["Walk", "Run"], preserve_unlisted=True))
+
+    assert result["order"] == ["Walk", "Floss", "Run"]
+    assert sorted(client.writes) == [(1, 3), (3, 1)]
+
+
 def test_today_page_lists_measurements_and_tasks_in_one_reorderable_list():
     html = server.page_today("2026-08-30")
 
@@ -326,7 +336,7 @@ def test_today_page_lists_measurements_and_tasks_in_one_reorderable_list():
     tasks = html.index('id="tasks"')
     assert html.index('id="item-weight"') > tasks
     assert html.index('id="item-wake"') > tasks
-    assert "post('/api/task_order', { titles: ORDER })" in html
+    assert "post('/api/task_order', { titles: titles, preserve_unlisted: true })" in html
     # The list is never wiped wholesale: the measurement entries live in it.
     assert "host.innerHTML = ''" not in html
     assert "getElementById('tasks').innerHTML" not in html

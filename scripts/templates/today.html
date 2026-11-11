@@ -217,8 +217,11 @@ h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em; margin: 0; }
 }
 .grip svg { fill: currentColor; }
 .grip:hover { background: var(--surface-2); color: var(--ink); }
+.range-item { display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 0; }
+.range-item > .grip { min-width: 0; }
+.range-item > .mini { min-width: 0; }
 .item.dragging { position: relative; z-index: 1; }
-.item.dragging > .task, .item.dragging > .field {
+.item.dragging > :is(.task, .field, .mini) {
   box-shadow: 0 6px 18px rgba(25, 22, 39, .22);
 }
 body.reordering, body.reordering * { cursor: grabbing !important; user-select: none; }
@@ -439,6 +442,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   var orderVersion = 0;
 
   function setOrder(order) {
+    if (order.length === ORDER.length && order.every(function (title, index) { return title === ORDER[index]; })) return;
     ORDER = order;
     try { localStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch (e) { /* fine */ }
   }
@@ -447,15 +451,17 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
      the day does not show keep their places, so learning from or dragging on a
      day that lacks some task never loses that task's position. */
   function mergeOrder(base, sub) {
-    var inSub = {}, known = {};
-    sub.forEach(function (t) { inSub[t] = true; });
-    base.forEach(function (t) { known[t] = true; });
-    var out = base.slice(), slots = [];
-    out.forEach(function (t, i) { if (inSub[t]) slots.push(i); });
-    var placed = sub.filter(function (t) { return known[t]; });
-    slots.forEach(function (s, k) { out[s] = placed[k]; });
-    sub.forEach(function (t) { if (!known[t]) out.push(t); });
-    return out;
+    var included = new Set(sub), index = 0;
+    return Array.from(new Set(base.concat(sub)), function (title) {
+      return included.has(title) ? sub[index++] : title;
+    });
+  }
+
+  function orderedRows(rows, titleOf) {
+    var rank = new Map(ORDER.map(function (title, index) { return [title, index]; }));
+    return rows.slice().sort(function (a, b) {
+      return (rank.get(titleOf(a)) ?? ORDER.length) - (rank.get(titleOf(b)) ?? ORDER.length);
+    });
   }
 
   /* Last known rows per day, surviving reload and reboot. This is what makes
@@ -532,7 +538,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
            and a not-yet-filled day lists none. Skipped if a reorder happened
            here since the request left, or one is still being saved. */
         var titles = rows.map(function (r) { return r.title; });
-        if (fresh && writable(day) && orderAtStart === orderVersion && !orderSaving &&
+        if (fresh && writable(day) && orderAtStart === orderVersion && !orderSaving && !pendingOrder && !activeReorder &&
             titles.indexOf(WEIGH) >= 0 && titles.indexOf(WAKE) >= 0) {
           setOrder(mergeOrder(ORDER, titles));
         }
@@ -563,6 +569,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
        happens; on a cold one the day is readable while the server boots. */
     var known = CACHE[day] || storeRead(day);
     var knownJson = known ? JSON.stringify(known) : null;
+    var knownOrder = ORDER;
     render(known || []);
 
     /* Confirm against the server behind the paint. Not announced: the check
@@ -573,7 +580,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       /* Only repaint on a real difference. Re-rendering identical rows would
          throw away focus and any half-typed measurement to show the same
          thing, which is exactly the flicker this is meant to remove. */
-      if (JSON.stringify(rows) !== knownJson) render(rows);
+      if (ORDER !== knownOrder || JSON.stringify(rows) !== knownJson) render(rows);
       afterVisiblePaint(function () { if (VIEW === 'day' && DAY === day) prefetchAdjacent(day); });
     }).catch(function (e) {
       /* With a local copy on screen this is a stale-data warning, not a
@@ -789,6 +796,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   });
 
   function render(rows) {
+    activeReorder?.();
     var drafts = {}; ['weight', 'wake'].forEach(function (id) { var el = document.getElementById(id); drafts[id] = document.activeElement === el && el.value !== (saved[id] || ''); });
     document.body.classList.add('painting');
     requestAnimationFrame(function () {
@@ -928,13 +936,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     if (!seen.weight) entries.push({ title: WEIGH, node: document.getElementById('item-weight'), seq: -2 });
     if (!seen.wake) entries.push({ title: WAKE, node: document.getElementById('item-wake'), seq: -1 });
 
-    var rank = {};
-    ORDER.forEach(function (t, i) { rank[t] = i; });
-    entries.sort(function (a, b) {
-      var ra = a.title in rank ? rank[a.title] : Infinity;
-      var rb = b.title in rank ? rank[b.title] : Infinity;
-      return ra !== rb ? (ra < rb ? -1 : 1) : a.seq - b.seq;
-    });
+    entries = orderedRows(entries, function (entry) { return entry.title; });
     arrange(host, entries.map(function (e) { return e.node; }));
     entries.forEach(function (e) { decorate(e.node); });
     showDayCompletion(rows);
@@ -1091,95 +1093,154 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     return g;
   }
 
-  /* ---- reordering --------------------------------------------------------
-     Drag a handle, by mouse or touch; or focus one and use the arrow keys. The
-     list rearranges as you go and the new order is saved when you let go. */
-  var orderSaving = false, orderTimer = null;
-
-  function shownOrder() {
-    return Array.prototype.map.call(
-      document.querySelectorAll('#tasks > .item'), function (n) { return n.dataset.title; });
-  }
+  var orderSaving = false, orderTimer = null, pendingOrder = null;
+  var activeReorder = null;
 
   function saveOrder() {
-    clearTimeout(orderTimer);
-    orderVersion++;
-    setOrder(mergeOrder(ORDER, shownOrder()));
+    if (orderSaving || !pendingOrder) return;
+    var titles = pendingOrder, version = orderVersion;
+    pendingOrder = null;
     orderSaving = true;
-    post('/api/task_order', { titles: ORDER })
-      .catch(function (e) { say('Could not save the order: ' + e.message, true); })
-      .then(function () { orderSaving = false; });
-  }
-  function saveOrderSoon() {
-    clearTimeout(orderTimer);
-    orderVersion++;
-    orderTimer = setTimeout(saveOrder, 600);
-  }
-
-  (function () {
-    var host = document.getElementById('tasks');
-    document.getElementById('item-weight').dataset.title = WEIGH;
-    document.getElementById('item-wake').dataset.title = WAKE;
-    document.getElementById('item-weight').appendChild(makeGrip(WEIGH));
-    document.getElementById('item-wake').appendChild(makeGrip(WAKE));
-
-    var drag = null;
-    function move(e) {
-      var item = drag.item, before = null;
-      var others = Array.prototype.filter.call(host.children, function (n) { return n !== item; });
-      if (getComputedStyle(host).display === 'grid') {
-        var hit = document.elementFromPoint(e.clientX, e.clientY);
-        var target = hit && hit.closest('.item');
-        if (!target || target.parentElement !== host || target === item) return;
-        var items = Array.prototype.slice.call(host.children);
-        before = items.indexOf(item) > items.indexOf(target) ? target : target.nextElementSibling;
-      } else {
-        for (var i = 0; i < others.length; i++) {
-          var r = others[i].getBoundingClientRect();
-          if (e.clientY < r.top + r.height / 2) { before = others[i]; break; }
+    post('/api/task_order', { titles: titles, preserve_unlisted: true })
+      .then(function (result) {
+        if (version === orderVersion && Array.isArray(result.order)) {
+          setOrder(mergeOrder(ORDER, result.order));
         }
-      }
-      if (item.nextElementSibling !== before) {
-        host.insertBefore(item, before);
-        drag.moved = true;
-      }
+      })
+      .catch(function (e) { if (version === orderVersion) say('Could not save the order: ' + e.message, true); })
+      .finally(function () {
+        orderSaving = false;
+        if (!orderTimer) saveOrder();
+      });
+  }
+
+  function queueOrder(host, original, delay) {
+    var titles = Array.from(host.children, function (node) { return node.dataset.title; });
+    if (titles.every(function (title, index) { return title === original[index]; })) return;
+    orderVersion++;
+    setOrder(mergeOrder(mergeOrder(ORDER, original), titles));
+    if (VIEW === 'month') {
+      document.querySelectorAll('#board .col-body:has(> .range-item)').forEach(function (list) {
+        if (list !== host) arrange(list, orderedRows(Array.from(list.children), function (item) { return item.dataset.title; }));
+      });
     }
-    function end() {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-      drag.item.classList.remove('dragging');
-      document.body.classList.remove('reordering');
-      if (drag.moved) saveOrder();
-      drag = null;
-    }
-    host.addEventListener('pointerdown', function (e) {
-      var grip = e.target.closest && e.target.closest('.grip');
-      if (!grip || e.button > 0 || drag) return;
-      e.preventDefault();
-      drag = { item: grip.closest('.item'), moved: false };
-      drag.item.classList.add('dragging');
-      document.body.classList.add('reordering');
+    pendingOrder = ORDER.slice();
+    clearTimeout(orderTimer);
+    orderTimer = delay ? setTimeout(function () { orderTimer = null; saveOrder(); }, delay) : null;
+    if (!orderTimer) saveOrder();
+  }
+
+  function bindReordering(host) {
+    host.addEventListener('pointerdown', function (event) {
+      var grip = event.target.closest('.grip');
+      var item = grip && grip.closest('[data-title]');
+      if (!item || item.parentElement !== host || event.button !== 0 || activeReorder) return;
+      event.preventDefault();
+      var pointer = event.pointerId;
+      var original = Array.from(host.children);
+      var titles = original.map(function (row) { return row.dataset.title; });
+      var originX = event.clientX, originY = event.clientY;
+      var point, frame = 0, started = false;
+      var scroll = host.closest('.range-scroll, .workspace-open #day-card, .workspace-open #board') || document.scrollingElement;
+      activeReorder = cancel;
+
+      function place() {
+        var hit = document.elementFromPoint(point.clientX, point.clientY);
+        var target = hit && hit.closest('[data-title]');
+        if (!target || target === item || target.parentElement !== host) return;
+        var below = Boolean(item.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (getComputedStyle(host).display !== 'grid') {
+          var bounds = target.getBoundingClientRect();
+          if (below !== (point.clientY >= bounds.top + bounds.height / 2)) return;
+        }
+        host.insertBefore(item, below ? target.nextElementSibling : target);
+      }
+
+      function scrollAtEdge() {
+        frame = 0;
+        var viewport = scroll === document.scrollingElement ? { top: 0, bottom: innerHeight } : scroll.getBoundingClientRect();
+        var y = point.clientY;
+        var direction = y < viewport.top + 30 ? -1 : y > viewport.bottom - 30 ? 1 : 0;
+        if (!direction) return;
+        var before = scroll.scrollTop;
+        scroll.scrollTop += direction * 10;
+        if (scroll.scrollTop === before) return;
+        place();
+        frame = requestAnimationFrame(scrollAtEdge);
+      }
+
+      function move(event) {
+        if (event.pointerId !== pointer) return;
+        point = event;
+        if (!started) {
+          if (Math.hypot(event.clientX - originX, event.clientY - originY) < 5) return;
+          started = true;
+          item.classList.add('dragging');
+          document.body.classList.add('reordering');
+        }
+        place();
+        if (!frame) frame = requestAnimationFrame(scrollAtEdge);
+      }
+
+      function finish(save) {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', drop);
+        window.removeEventListener('pointercancel', interrupted);
+        window.removeEventListener('keydown', escape);
+        window.removeEventListener('blur', cancel);
+        cancelAnimationFrame(frame);
+        item.classList.remove('dragging');
+        document.body.classList.remove('reordering');
+        activeReorder = null;
+        if (!started || !host.isConnected) return;
+        if (save) queueOrder(host, titles, 0);
+        else arrange(host, original);
+        window.StellarSync?.retry();
+      }
+
+      function drop(event) {
+        if (event.pointerId !== pointer) return;
+        move(event);
+        finish(true);
+      }
+
+      function cancel() { finish(false); }
+      function interrupted(event) { if (event.pointerId === pointer) cancel(); }
+      function escape(event) {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        cancel();
+      }
+
       window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', end);
-      window.addEventListener('pointercancel', end);
+      window.addEventListener('pointerup', drop);
+      window.addEventListener('pointercancel', interrupted);
+      window.addEventListener('keydown', escape);
+      window.addEventListener('blur', cancel);
     });
-    host.addEventListener('keydown', function (e) {
-      var grip = e.target.closest && e.target.closest('.grip');
-      if (!grip || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-      e.preventDefault();
-      var item = grip.closest('.item');
-      if (e.key === 'ArrowUp' && item.previousElementSibling) {
-        host.insertBefore(item, item.previousElementSibling);
-        grip.focus();
-      } else if (e.key === 'ArrowDown' && item.nextElementSibling) {
-        host.insertBefore(item.nextElementSibling, item);
-      } else {
-        return;
-      }
-      saveOrderSoon();
+    host.addEventListener('keydown', function (event) {
+      var grip = event.target.closest('.grip');
+      var item = grip && grip.closest('[data-title]');
+      if (!item || item.parentElement !== host || activeReorder || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+      event.preventDefault();
+      var sibling = event.key === 'ArrowUp' ? item.previousElementSibling : item.nextElementSibling;
+      if (!sibling) return;
+      var original = Array.from(host.children, function (row) { return row.dataset.title; });
+      if (event.key === 'ArrowUp') host.insertBefore(item, sibling);
+      else host.insertBefore(sibling, item);
+      grip.focus({ preventScroll: true });
+      grip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      queueOrder(host, original, 600);
     });
-  })();
+  }
+
+  ['weight', 'wake'].forEach(function (id) {
+    var item = document.getElementById('item-' + id);
+    var title = id === 'weight' ? WEIGH : WAKE;
+    item.dataset.title = title;
+    item.appendChild(makeGrip(title));
+  });
+  bindReordering(document.getElementById('tasks'));
 
   /* After a write the cached copy of the day is stale, so drop it and let
      fetchDay repopulate. The rest of the window is untouched. */
@@ -1251,7 +1312,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   var POLL_MS = 60000, lastChecked = Date.now(), recordsDirty = false;
 
   function editingRecords() {
-    return writesInFlight || document.querySelector('.range-editor[open], .when.editing, .report-picker') ||
+    return activeReorder || writesInFlight || document.querySelector('.range-editor[open], .when.editing, .report-picker') ||
       Array.from(document.querySelectorAll('#board .mini input')).some(function (el) { return el.value !== el.defaultValue; }) ||
       ['weight', 'wake'].some(function (id) { var el = document.getElementById(id); return el === document.activeElement && el.value !== (saved[id] || ''); });
   }
@@ -1264,9 +1325,10 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     }
     var day = DAY, epoch = writeEpoch;
     var before = CACHE[day] ? JSON.stringify(CACHE[day]) : null;
+    var beforeOrder = ORDER;
     return fetchDay(day, true).then(function (rows) {
       if (DAY !== day || epoch !== writeEpoch || editingRecords()) return false;
-      if (JSON.stringify(rows) !== before) render(rows);
+      if (ORDER !== beforeOrder || JSON.stringify(rows) !== before) render(rows);
       return true;
     }).catch(function () { recordsDirty = true; return false; });
   }
@@ -1315,6 +1377,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   function go(view, day, opts) {
+    activeReorder?.();
     opts = opts || {};
     VIEW = view;
     document.body.dataset.range = view;
@@ -1379,7 +1442,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       });
   }
 
-  function snapshot(days) { return JSON.stringify(days.map(function (d) { return CACHE[d] || null; })); }
+  function snapshot(days) { return JSON.stringify([ORDER, days.map(function (d) { return CACHE[d] || null; })]); }
 
   function showRange(start, end) {
     var seq = ++rangeSeq, days = daysIn(start, end);
@@ -1395,12 +1458,16 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
      typing. A range you asked for always draws. */
   function loadRange(start, end, background, seq, painted) {
     seq = seq || ++rangeSeq;
+    var orderAtStart = orderVersion;
     var days = daysIn(start, end);
     if (painted === undefined) painted = SHOWN && SHOWN.join() === days.join() ? snapshot(days) : null;
     return fetchRange(start, end, background)
-      .then(function () {
+      .then(function (data) {
         if (seq !== rangeSeq) return false;              // a newer range was asked for
         if (background && editingRecords()) return false;
+        if (orderAtStart === orderVersion && !orderSaving && !pendingOrder && !activeReorder && Array.isArray(data.order)) {
+          setOrder(mergeOrder(ORDER, data.order));
+        }
         if (painted !== snapshot(days)) renderBoard(days);
         return true;
       })
@@ -1431,14 +1498,14 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   var rangeAssetsReady = null, rangeRenderVersion = 0;
-  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=6"]');
+  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=7"]');
   var rangeStylesReady = !!(rangeStyle && rangeStyle.sheet);
   function loadRangeAssets() {
     if (window.stellarRenderRange && rangeStylesReady) return Promise.resolve();
     if (rangeAssetsReady) return rangeAssetsReady;
     rangeAssetsReady = Promise.all([
-      ['link', 'href', '/app-assets/ranges.css?v=6'],
-      ['script', 'src', '/app-assets/ranges.js?v=5']
+      ['link', 'href', '/app-assets/ranges.css?v=7'],
+      ['script', 'src', '/app-assets/ranges.js?v=6']
     ].map(function (asset) {
       return new Promise(function (resolve, reject) {
         var node = document.createElement(asset[0]);
@@ -1453,6 +1520,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
 
   function renderBoard(days) {
+    activeReorder?.();
     SHOWN = days;
     var board = document.getElementById('board');
     var today = todayNow();
@@ -1475,7 +1543,9 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       window.stellarRenderRange({ board: board, days: days, day: DAY, today: today, view: VIEW,
         rows: function (day) { return CACHE[day] || []; }, weight: WEIGH, wake: WAKE,
         wakeValue: wakeFromNotes, owed: owed, writable: writable, go: go, label: label,
-        column: column, tile: tile, field: field });
+        column: column, tile: tile, field: field, grip: makeGrip, bindReordering: bindReordering,
+        orderedTitles: function (titles) { return orderedRows(titles, function (title) { return title; }); },
+        cancelReordering: function () { activeReorder?.(); } });
       return;
     }
     var updateProgress = StellarReports.progress(board, function () { return days.filter(function (day) { return day <= today; }).flatMap(function (day) { return CACHE[day] || []; }); });
@@ -1536,7 +1606,15 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     var body = document.createElement('div');
     body.className = 'col-body';
     if (!rows.length) body.innerHTML = '<div class="empty-day">Nothing scheduled</div>';
-    rows.forEach(function (r) { body.appendChild(r.title === WEIGH || r.title === WAKE ? field(r, locked, onUpdate) : tile(r, locked, onUpdate)); });
+    orderedRows(rows, function (row) { return row.title; }).forEach(function (row) {
+      var item = document.createElement('div');
+      item.className = 'item range-item';
+      item.dataset.title = row.title;
+      var control = row.title === WEIGH || row.title === WAKE ? field(row, locked, onUpdate) : tile(row, locked, onUpdate);
+      item.append(control, makeGrip(row.title));
+      body.appendChild(item);
+    });
+    if (rows.length) bindReordering(body);
     col.appendChild(body);
     return col;
   }

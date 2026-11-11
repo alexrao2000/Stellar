@@ -81,6 +81,7 @@
           history.replaceState(history.state, '', url.pathname + url.search);
         }
         strip.querySelectorAll('button').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.day === day)); button.tabIndex = button.dataset.day === day ? 0 : -1; });
+        ctx.cancelReordering();
         focus.replaceChildren(ctx.column(day, changed));
         const head = focus.querySelector('.col-head');
         const label = document.createElement('span'); label.className = 'range-focus-label'; label.textContent = dateLabel(day);
@@ -118,11 +119,14 @@
     thead.append(header); table.append(thead);
     const body = document.createElement('tbody');
     const allRows = days.flatMap(day => ctx.rows(day));
-    const titles = [...new Set(allRows.map(row => row.title))];
+    const titles = ctx.orderedTitles([...new Set(allRows.map(row => row.title))]);
     titles.forEach(title => {
       const tr = document.createElement('tr'), name = document.createElement('th'); name.scope = 'row'; name.className = 'range-task-name';
       const row = allRows.find(row => row.title === title);
-      const label = document.createElement('span'); label.textContent = shortTitle(row, ctx); name.append(label); name.title = title; tr.append(name);
+      tr.dataset.title = title;
+      const heading = document.createElement('div'); heading.className = 'range-task-label';
+      const label = document.createElement('span'); label.textContent = shortTitle(row, ctx);
+      heading.append(ctx.grip(title), label); name.append(heading); name.title = title; tr.append(name);
       days.forEach(day => {
         const td = document.createElement('td'), row = ctx.rows(day).find(row => row.title === title);
         td.classList.toggle('range-today', day === ctx.today);
@@ -145,6 +149,7 @@
     if (!titles.length) {
       const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = days.length + 1; td.className = 'range-empty'; td.textContent = 'Nothing scheduled in this range.'; tr.append(td); body.append(tr);
     }
+    if (titles.length) ctx.bindReordering(body);
     table.append(body); scroll.append(table); board.append(scroll);
     const hint = document.createElement('p'); hint.className = 'range-hint'; hint.textContent = 'Select a date to open its day.';
     if (days.length > 7) hint.textContent += ' Scroll across to compare more days.';
@@ -152,6 +157,7 @@
   };
   phone.addEventListener('change', () => {
     if (!current?.board.classList.contains('range-board') || !['3days', 'week', 'custom'].includes(document.body.dataset.range)) return;
+    current.cancelReordering();
     current.board.replaceChildren(); window.stellarRenderRange(current);
   });
 })();

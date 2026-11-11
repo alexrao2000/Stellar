@@ -13,6 +13,9 @@ html body .range-scroll { overflow: auto; min-width: 0; min-height: 0; max-heigh
 .range-table .range-task-heading { z-index: 4; font-size: 10px; font-weight: 500; color: var(--ink-muted); letter-spacing: .1em; text-transform: uppercase; }
 .range-table .range-task-name { z-index: 2; font-size: 12px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
 .range-task-name span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.range-task-label { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 6px; align-items: center; }
+.range-task-label .grip { min-height: 32px; }
+.range-table tr.dragging > * { background: var(--surface-2); }
 .range-table tbody tr:last-child > * { border-bottom: 0; }
 .range-table tbody tr:hover :is(td,.range-task-name) { background: var(--surface-2); }
 .range-table .range-today { background: color-mix(in srgb, var(--ink) 3%, var(--surface)); }
@@ -76,6 +79,7 @@ html body.view-custom .custom input { width: 100%; padding: 8px; font-size: 12px
   html body .range-focus .col .col-head { padding: 0 0 12px; margin-bottom: 2px; border: 0; background: transparent; color: var(--ink); }
   .range-focus-label { font-size: 13px; font-weight: 600; letter-spacing: -.01em; }
   html body .range-focus .col-body { padding: 0; gap: 7px; }
+  .range-focus .range-item { grid-template-columns: minmax(0, 1fr) 44px; }
   html body .range-focus .mini { padding: 12px; min-height: 48px; border-radius: 12px; font-size: 14px; font-weight: 500; line-height: 1.5; }
   html body .range-focus .mini:not(.field) { grid-template-columns: 18px minmax(0, 1fr); column-gap: 10px; }
   html body .range-focus .mini .mbox { width: 17px; height: 17px; border-radius: 5px; }
@@ -85,9 +89,16 @@ html body.view-custom .custom input { width: 100%; padding: 8px; font-size: 12px
   html body .range-focus .mini.field .lbl { grid-column: 2; font-size: 13px; text-transform: none; letter-spacing: 0; }
   html body .range-focus .mini.field input { grid-column: 3; display: block; box-sizing: border-box; appearance: none; -webkit-appearance: none; width: 100%; min-width: 0; max-width: 100%; min-height: 44px; margin: 0; padding: 8px; font-size: 16px; }
   html body .range-focus .mini.field .tag { grid-column: 2 / -1; justify-self: start; }
+  html body .range-focus .range-item > .mini { grid-column: 1 / -1; grid-row: 1; padding-inline-end: 54px; }
+  .range-focus .range-item > .grip { grid-column: 2; grid-row: 1; align-self: start; height: 44px; }
+  .range-focus .range-item:has(> .mini:not(.done)) > .grip { color: var(--todo-ink); }
+  .range-focus .range-item:has(> .mini.optional:not(.done)) > .grip { color: var(--opt-ink); }
+  .range-focus .range-item > .grip:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
 }
 
 @media (max-width: 480px) {
+  html body .range-focus .range-item > .field { padding-inline-end: 12px; }
+  html body .range-focus .range-item > .field .lbl { padding-inline-end: 44px; }
   html body .range-focus .mini.field { grid-template-columns: 18px minmax(0, 1fr); }
   html body .range-focus .mini.field input { grid-column: 2; grid-row: 2; }
   html body .range-focus .mini.field .tag { grid-column: 2; }

@@ -1,6 +1,6 @@
 /* Run with the isolated local fixture server and demo records only. The range
    layouts must preserve writes, read-only dates, keyboard date selection,
-   responsive resizing, the persistent Pool frame, and the approved views. */
+   responsive resizing, the persistent Pool frame, and task order across views. */
 const assert = require('node:assert/strict');
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
@@ -18,18 +18,25 @@ async function check(engine) {
         static now() { return OriginalDate.now() + offset; }
       };
     });
-    let poolReads = 0;
+    let poolReads = 0, order = names.slice();
     const days = new Map(), writes = [], errors = [];
     const rows = day => {
       if (!days.has(day)) days.set(day, names.filter((title, i) => !(i === 15 && day < '2026-11-03') && !(i === 17 && day > '2026-11-02')).map((title, i) => ({ id: day + ':' + i, day, list_title: 'Daily', title, is_completed: i % 4 === 2 && day <= '2026-11-04', completed_at: null, weight_lbs: title === names[0] ? 150.4 : null, notes: title === names[1] ? 'Wake-up Time: 7:30 am' : '', optional: i % 5 === 4, deadline_at: day + 'T06:30:00Z' })));
-      return days.get(day);
+      return days.get(day).slice().sort((a, b) => order.indexOf(a.title) - order.indexOf(b.title));
     };
     await context.route('**/api/**', async route => {
       const url = new URL(route.request().url());
       let data = [];
       if (route.request().method() !== 'GET') {
         writes.push(url);
-        if (url.pathname.endsWith('/report')) {
+        if (url.pathname === '/api/task_order') {
+          const body = route.request().postDataJSON();
+          assert.equal(body.preserve_unlisted, true);
+          const listed = body.titles.filter(title => order.includes(title));
+          const included = new Set(listed);
+          order = order.map(title => included.has(title) ? listed.shift() : title);
+          data = { order };
+        } else if (url.pathname.endsWith('/report')) {
           const body = route.request().postDataJSON();
           const row = rows(url.pathname.split('/')[3]).find(row => row.title === body.title);
           row.is_completed = body.state === 'done'; row.status = { done: 'completed', incomplete: 'incomplete', unreported: 'unreported' }[body.state]; data = row;
@@ -50,7 +57,7 @@ async function check(engine) {
         for (let day = new Date(url.searchParams.get('start') + 'T12:00:00Z'), end = new Date(url.searchParams.get('end') + 'T12:00:00Z'); day <= end; day.setUTCDate(day.getUTCDate() + 1)) {
           const key = day.toISOString().slice(0, 10); result[key] = rows(key);
         }
-        data = { days: result, today: '2026-11-04', floor: '2026-08-01' };
+        data = { days: result, order, today: '2026-11-04', floor: '2026-08-01' };
       } else if (url.pathname.startsWith('/api/day/')) data = rows(url.pathname.split('/')[3]);
       else if (url.pathname === '/api/pool') { poolReads++; data = { tasks: [{ id: '1', title: 'Demo star', x: .6, y: .4, status: 'open' }], edges: [] }; }
       await route.fulfill({ contentType: 'application/json', headers: { 'X-Day-Complete': '1' }, body: JSON.stringify(data) });
@@ -192,7 +199,7 @@ async function check(engine) {
     assert.equal(await page.locator('.dated-tasks').evaluate(panel => panel.getAnimations().filter(animation => animation.playState === 'running').length), 0);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto(base + '/?view=week&day=2026-07-15'); await page.locator('.range-table').waitFor();
-    assert.equal(await page.locator('.range-table tbody button:not(:disabled)').count(), 0, 'Dates before the write floor remain locked');
+    assert.equal(await page.locator('.range-table tbody td button:not(:disabled)').count(), 0, 'Dates before the write floor remain locked');
     for (const colorScheme of ['dark', 'light']) {
       await page.emulateMedia({ colorScheme });
       for (const width of [320, 760, 820, 1100, 1280, 1920]) {
@@ -200,8 +207,53 @@ async function check(engine) {
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${colorScheme} ${width}: no horizontal page clipping`);
       }
     }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(base + '/?view=week&day=2026-11-04');
+    const weekRows = page.locator('.range-table tbody tr[data-title]');
+    const runGrip = weekRows.getByRole('button', { name: 'Move Run (arrow keys)', exact: true });
+    await runGrip.waitFor();
+    const start = await runGrip.boundingBox(), target = await weekRows.first().locator('th').boundingBox();
+    const savedOrder = () => page.waitForResponse(response => new URL(response.url()).pathname === '/api/task_order' && response.ok());
+    const firstSave = savedOrder();
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target.x + 20, target.y + target.height / 4, { steps: 5 });
+    await page.mouse.up();
+    await firstSave;
+    assert.equal(await weekRows.first().getAttribute('data-title'), 'Run');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const phoneRows = page.locator('.range-focus .col-body > [data-title]');
+    await phoneRows.first().waitFor();
+    assert.equal(await phoneRows.first().getAttribute('data-title'), 'Run');
+    if (engine === 'chromium') {
+      const touch = await context.newCDPSession(page);
+      await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+      const grip = phoneRows.getByRole('button', { name: 'Move Wake Up (arrow keys)', exact: true });
+      await grip.scrollIntoViewIfNeeded();
+      const from = await grip.boundingBox(), to = await phoneRows.first().boundingBox();
+      const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+      const end = { x: to.x + to.width - 20, y: to.y + to.height / 4 };
+      const touchSave = savedOrder();
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [start] });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [end] });
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await touchSave;
+      assert.equal(await phoneRows.first().getAttribute('data-title'), 'Wake Up');
+      await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+      await touch.detach();
+    }
+    const secondSave = savedOrder();
+    const weightGrip = phoneRows.getByRole('button', { name: 'Move Weigh yourself (arrow keys)', exact: true });
+    if (engine === 'chromium') await weightGrip.press('ArrowUp');
+    await weightGrip.press('ArrowUp');
+    await page.locator('[data-view=day]').click();
+    await secondSave;
+    assert.equal(await page.locator('#tasks > .item').first().getAttribute('data-title'), 'Weigh yourself');
+    await page.reload();
+    await page.locator('#tasks .task').first().waitFor();
+    assert.equal(await page.locator('#tasks > .item').first().getAttribute('data-title'), 'Weigh yourself');
     assert.deepEqual(errors, []);
-    console.log(`${engine}: range writes, cancellation, read-only dates, keyboard selection, sticky custom ranges, resizing, themes, panel height and Pool retention passed`);
+    console.log(`${engine}: range editing, measurement layout, Pool retention and saved task reordering passed`);
   } finally { await browser.close(); }
 }
 (async () => { for (const engine of ['chromium', 'webkit']) await check(engine); })().catch(error => { console.error(error); process.exit(1); });
