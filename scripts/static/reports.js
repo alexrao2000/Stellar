@@ -7,6 +7,7 @@
 (() => {
   const labels = { done: 'Done', incomplete: 'Incomplete', unreported: 'Unreported', unknown: "Don't Know" };
   const unfinished = new Set(['incomplete', 'unreported', 'unknown']);
+  const nextStatus = { done: 'incomplete', incomplete: 'unknown', unknown: 'done', unreported: 'done' };
   const today = () => { const date = new Date(); return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'); };
   const overdue = row => {
     const due = row.report_due_at || row.deadline_at;
@@ -124,7 +125,7 @@
     } else dialog.showModal();
     dialog.querySelector('[aria-pressed=true]')?.focus({ preventScroll: true });
   });
-  const bind = (button, row, update) => {
+  const bind = (button, row, update, activate) => {
     let timer, origin, pointer = null, pressOpened = false, suppressUntil = 0;
     const current = () => typeof row === 'function' ? row() : row;
     const open = () => {
@@ -138,7 +139,10 @@
     };
     button.addEventListener('click', event => {
       if (button.disabled || performance.now() < suppressUntil) { event.preventDefault(); return; }
-      if (current()) update(state(current()) === 'done' ? 'incomplete' : 'done');
+      const record = current();
+      if (!record) return;
+      if (activate) activate(record);
+      else update(nextStatus[recordedState(record) || 'unreported']);
     });
     button.addEventListener('contextmenu', event => { event.preventDefault(); clearTimeout(timer); if (pointer !== null) pressOpened = true; suppressUntil = performance.now() + 700; open(); });
     button.addEventListener('keydown', event => { if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') { event.preventDefault(); open(); } });

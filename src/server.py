@@ -515,11 +515,6 @@ _BOOT_GATE_JS = """<script>
 
   function settle() {
     if (--inflight > 0) return;
-    /* /today posts the day into existence before reading it back, and must not
-       be revealed in between. The measured gap between those two is 1ms; 40
-       leaves two orders of magnitude of headroom and still costs a hundred
-       less than the 140 this started at, which had become the largest single
-       component of a fast load. */
     quiet = setTimeout(reveal, 40);
   }
 
@@ -636,13 +631,13 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     range_assets = ""
     if template == "today.html" and boot.get("view") in {"3days", "week", "custom"}:
         range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=8">'
-                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=7">')
+                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=8">')
     html = html.replace("__RANGE_ASSETS__", range_assets)
     # A page whose data is already in the markup has nothing to wait for, and
     # gating it would be strictly worse than not: the gate lifts on the first
     # quiet network, and with no request to wait on that is a timer rather than
     # an event. Such a page paints complete on the first frame.
-    gate = "" if boot.get("mode") == "inline" or boot.get("embedded") else _BOOT_GATE_JS
+    gate = "" if template == "today.html" or boot.get("mode") == "inline" or boot.get("embedded") else _BOOT_GATE_JS
     # Injected here rather than in each template: every page goes through this
     # one function, so there is no way to add a view and forget the icon or the
     # nav, or to leave one page's copy of the link list behind when it changes.

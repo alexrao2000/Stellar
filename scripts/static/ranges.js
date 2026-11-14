@@ -76,6 +76,7 @@
       const focus = document.createElement('div'); focus.className = 'range-focus';
       const select = (day, remember = false) => {
         focused = day;
+        document.querySelector('.wake-editor[open]')?.close();
         if (remember) {
           const url = new URL(location.href); url.searchParams.set('focus', day);
           history.replaceState(history.state, '', url.pathname + url.search);
@@ -140,7 +141,11 @@
           button.dataset.label = shortTitle(row, ctx) + ', ' + dateLabel(day);
           button.setAttribute('aria-haspopup', 'dialog');
           paintValue(row, button, ctx);
-          button.addEventListener('click', () => editValue(row, button, ctx, changed)); td.append(button);
+          if (title === ctx.wake) {
+            const refresh = () => { paintValue(row, button, ctx); changed(); };
+            ctx.bindFieldReport(button, () => row, refresh, () => ctx.editWake(row, button, refresh));
+          } else button.addEventListener('click', () => editValue(row, button, ctx, changed));
+          td.append(button);
         } else {
           const button = ctx.tile(row, locked, changed, true); td.append(button);
         }

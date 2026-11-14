@@ -132,7 +132,7 @@ async function check(engine) {
     assert.equal(writes.length, beforeCancel, 'Escape cancels unsaved edits');
     await page.getByRole('button', { name: /Wake up, Wednesday, Nov 4/ }).click();
     await dialog.locator('input[type=time]').fill('08:15');
-    await dialog.getByRole('button', { name: 'Done' }).click();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('button', { name: /Wake up, Wednesday, Nov 4, 08:15/ }).waitFor();
     assert(writes.some(url => url.pathname.endsWith('/wake') && url.searchParams.get('time') === '08:15'));
     await page.locator('[data-view=custom]').click();

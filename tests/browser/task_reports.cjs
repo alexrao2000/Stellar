@@ -66,6 +66,13 @@ async function check(engine, mobile) {
     await bonus.click(); await page.waitForFunction(() => !document.querySelector('#tasks .task[data-syncing]'));
     assert.equal(writes.at(-1).state, 'incomplete');
     assert(!(await bonus.innerText()).toLowerCase().includes('missed'));
+    for (const task of [bonus, page.locator('#tasks .task').filter({ hasText: 'Required 2' })]) {
+      for (const state of ['unknown', 'done', 'incomplete']) {
+        await task.click();
+        await page.waitForFunction(() => !document.querySelector('#tasks .task[data-syncing]'));
+        assert.equal(writes.at(-1).state, state, 'Both kinds of task cycle through Don’t Know');
+      }
+    }
     const open = async locator => {
       if (mobile) {
         const before = writes.length;

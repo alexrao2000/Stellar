@@ -309,6 +309,26 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--todo-bg); o
    made the long-lived measurement tiles trail the task tiles, which are
    rebuilt and so change at once. */
 body.painting .task, body.painting .field, body.painting .field input { transition: none !important; }
+.wake-editor {
+  width: min(340px, calc(100% - 32px)); max-height: calc(100dvh - 24px);
+  padding: 22px; border: 1px solid var(--rule); border-radius: 16px;
+  background: var(--surface); color: var(--ink);
+}
+.wake-editor::backdrop { background: #04050a66; }
+.wake-editor h2 { margin: 0 0 4px; font-size: 20px; }
+.wake-editor p { margin: 0 0 14px; color: var(--ink-muted); font-size: 13px; }
+.wake-editor input {
+  display: block; width: 100%; min-width: 0; min-height: 48px;
+  padding: 8px 12px; border: 1px solid var(--rule); border-radius: 10px;
+  background: var(--surface-2); color: var(--ink); font: 18px ui-monospace, monospace;
+}
+.wake-editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.wake-editor-actions button { padding: 8px 14px; }
+.wake-editor-actions button[type=submit] { background: var(--ink); color: var(--surface); }
+.wake-editor [role=alert]:empty { display: none; }
+html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
+.field .wake-trigger { cursor: pointer; }
+#day-loading .stellar-loading, #board .stellar-loading { min-height: 100px; }
 </style>
 
 <div class="space-backdrop" aria-hidden="true"></div>
@@ -349,6 +369,9 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   <div id="day-completion" class="daily-completion" aria-live="polite"></div>
   <div class="card" id="day-card">
     <h2>Tasks</h2>
+    <div id="day-loading" hidden>
+      <div class="stellar-loading" role="status"><span class="stellar-spinner" aria-hidden="true"></span><span>Loading tasks…</span></div>
+    </div>
     <div class="body" id="tasks">
       <div class="item" id="item-weight">
         <div class="field" id="field-weight">
@@ -372,7 +395,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         <div class="field" id="field-wake">
           <span class="box" aria-hidden="true"></span>
           <label for="wake">Wake up <span class="measurement-complete" data-measurement-complete hidden>✦ Done</span></label>
-          <input id="wake" type="time">
+          <input id="wake" class="wake-trigger" type="time" readonly aria-haspopup="dialog">
           <span class="due" id="due-wake"></span>
         </div>
       </div>
@@ -497,19 +520,10 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   var requestVersion = {};
 
   function afterVisiblePaint(callback) {
-    function queue() {
-      requestAnimationFrame(function () {
-        if (window.requestIdleCallback) requestIdleCallback(callback, { timeout: 1500 });
-        else setTimeout(callback, 80);
-      });
-    }
-    var root = document.documentElement;
-    if (!root.classList.contains('app-booting')) { queue(); return; }
-    var observer = new MutationObserver(function () {
-      if (root.classList.contains('app-booting')) return;
-      observer.disconnect(); queue();
+    requestAnimationFrame(function () {
+      if (window.requestIdleCallback) requestIdleCallback(callback, { timeout: 1500 });
+      else setTimeout(callback, 80);
     });
-    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
   }
 
   function fetchDay(day, fresh) {
@@ -549,6 +563,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 
   function showDay(day, opts) {
     opts = opts || {};
+    if (DAY !== day) document.querySelector('.wake-editor[open]')?.close();
     DAY = day;
     paintHeader(day);
     if (!opts.pop) {
@@ -568,23 +583,34 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
        instance the confirmation lands in tens of ms and nothing visibly
        happens; on a cold one the day is readable while the server boots. */
     var known = CACHE[day] || storeRead(day);
+    if (known) CACHE[day] = known;
     var knownJson = known ? JSON.stringify(known) : null;
     var knownOrder = ORDER;
+    var loading = document.getElementById('day-loading');
+    var tasks = document.getElementById('tasks');
+    loading.hidden = !!known;
+    tasks.hidden = !known;
     render(known || []);
 
     /* Confirm against the server behind the paint. Not announced: the check
        is for the page's benefit, and a label flashing on every day change is
        noise. A real difference repaints; a failure says so below. */
     return fetchDay(day, true).then(function (rows) {
-      if (DAY !== day) return;                   // stepped past it while loading
+      if (DAY !== day || VIEW !== 'day') return;
       /* Only repaint on a real difference. Re-rendering identical rows would
          throw away focus and any half-typed measurement to show the same
          thing, which is exactly the flicker this is meant to remove. */
       if (ORDER !== knownOrder || JSON.stringify(rows) !== knownJson) render(rows);
+      loading.hidden = true;
+      tasks.hidden = false;
       afterVisiblePaint(function () { if (VIEW === 'day' && DAY === day) prefetchAdjacent(day); });
     }).catch(function (e) {
       /* With a local copy on screen this is a stale-data warning, not a
          failure: say which it is rather than blaming the rows on display. */
+      if (DAY !== day || VIEW !== 'day') return;
+      loading.hidden = true;
+      tasks.hidden = false;
+      if (e.message === 'Record changed during read') return;
       say(known ? 'Showing the last known copy: ' + e.message
                 : 'Could not load: ' + e.message, true);
     });
@@ -746,16 +772,80 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     return tile.classList.contains('done') ? 'done'
          : tile.classList.contains('todo') ? 'todo' : '';
   }
-  /* Clicking anywhere on the tile goes to its input, as tapping a task does. */
-  ['weight', 'wake'].forEach(function (id) {
-    document.getElementById('field-' + id).addEventListener('click', function (e) {
-      var input = document.getElementById(id);
-      if (e.target === input || input.disabled || e.target.closest('button')) return;
-      input.focus();
-      if (id === 'wake' && input.showPicker) {
-        try { input.showPicker(); } catch (err) { /* not a user gesture */ }
-      }
+  document.getElementById('field-weight').addEventListener('click', function (event) {
+    var input = document.getElementById('weight');
+    if (event.target !== input && !input.disabled && !event.target.closest('button')) input.focus();
+  });
+
+  function editWake(row, opener, updated) {
+    if (!row || !writable(row.day) || row.day > todayNow() || document.querySelector('.wake-editor[open]')) return;
+    var dialog = document.createElement('dialog');
+    dialog.className = 'wake-editor';
+    dialog.setAttribute('aria-labelledby', 'wake-editor-title');
+    dialog.innerHTML = '<form><h2 id="wake-editor-title">Wake-up time</h2><p></p>' +
+      '<input type="time" aria-label="Wake-up time" required autofocus>' +
+      '<div class="wake-editor-actions"><button class="step" type="button">Cancel</button>' +
+      '<button class="step" type="submit">Save</button></div><p role="alert"></p></form>';
+    dialog.querySelector('p').textContent = label(row.day, { month: 'long', day: 'numeric', year: 'numeric' });
+    var input = dialog.querySelector('input');
+    var previous = wakeFromNotes(row.notes);
+    input.value = previous ? previous.value : new Intl.DateTimeFormat('en-GB', {
+      timeZone: BOOT.tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).format(new Date());
+    var cancel = dialog.querySelector('[type=button]');
+    var save = dialog.querySelector('[type=submit]');
+    cancel.addEventListener('click', function () { dialog.close(); });
+    dialog.addEventListener('cancel', function (event) { if (save.disabled) event.preventDefault(); });
+    dialog.addEventListener('close', function () {
+      dialog.remove();
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+      window.StellarSync?.retry();
     });
+    dialog.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (save.disabled || !input.value) return;
+      var time = input.value;
+      if (previous?.value === time && row.is_completed) { dialog.close(); return; }
+      save.disabled = cancel.disabled = input.disabled = true;
+      var error = dialog.querySelector('[role=alert]');
+      error.textContent = '';
+      post('/api/day/' + row.day + '/wake?time=' + encodeURIComponent(time)).then(function (result) {
+        Object.assign(row, result);
+        if (result.id != null) delete row.virtual;
+        storeMini(row);
+        updated?.();
+        if (DAY === row.day) say('Wake-up saved: ' + time);
+        dialog.close();
+      }).catch(function (failure) {
+        error.textContent = failure.message;
+      }).finally(function () {
+        save.disabled = cancel.disabled = input.disabled = false;
+      });
+    });
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  }
+
+  var wakeInput = document.getElementById('wake');
+  function openDayWake(opener) {
+    var item = document.getElementById('item-wake');
+    var row = item._row;
+    editWake(row, opener, function () {
+      if (VIEW !== 'day' || item._row !== row || row.day !== DAY) return;
+      wakeInput.value = saved.wake = wakeFromNotes(item._row.notes)?.value || '';
+      setTile('wake', item._row.is_completed ? 'done' : 'todo');
+      decorate(item);
+    });
+  }
+  document.getElementById('field-wake').addEventListener('click', function (event) {
+    if (wakeInput.disabled || event.target.closest('button')) return;
+    event.preventDefault();
+    openDayWake(wakeInput);
+  });
+  wakeInput.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openDayWake(wakeInput);
   });
 
   function showDayCompletion(rows) {
@@ -773,7 +863,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     return post('/api/day/' + row.day + '/report', { title: row.title, state: state });
   }
 
-  function bindFieldReport(button, getRow, refresh) {
+  function bindFieldReport(button, getRow, refresh, activate) {
     StellarReports.bind(button, getRow, function (next) {
       var row = getRow();
       if (!row) return;
@@ -782,7 +872,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       saveReport(row, next).then(function (updated) { Object.assign(row, updated); storeMini(row); })
         .catch(function (error) { Object.assign(row, previous); say(error.message, true); })
         .finally(function () { button.disabled = !writable(row.day) || row.day > todayNow(); refresh(); if (CACHE[DAY]) showDayCompletion(CACHE[DAY]); });
-    });
+    }, activate);
     button.addEventListener('click', function (event) { event.stopPropagation(); });
   }
   ['weight', 'wake'].forEach(function (id) {
@@ -792,7 +882,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     bindFieldReport(button, function () { return item._row; }, function () {
       if (!item._row) return;
       setTile(id, item._row.is_completed ? 'done' : 'todo'); decorate(item);
-    });
+    }, id === 'wake' ? function () { openDayWake(button); } : undefined);
   });
 
   function render(rows) {
@@ -1297,10 +1387,6 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     function (v) { return '/api/day/' + DAY + '/weight?lbs=' + encodeURIComponent(v); },
     function (v) { return 'Weight saved: ' + Number(v).toFixed(1) + ' lbs'; });
 
-  autosave('wake',
-    function (v) { return '/api/day/' + DAY + '/wake?time=' + encodeURIComponent(v); },
-    function (v) { return 'Wake-up saved: ' + v; });
-
   /* Re-read the day on the quiet, and repaint only if the server disagrees.
      Without this the page is correct when opened and drifts from then on --
      which is exactly how it felt stale on a second computer.
@@ -1312,7 +1398,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   var POLL_MS = 60000, lastChecked = Date.now(), recordsDirty = false;
 
   function editingRecords() {
-    return activeReorder || writesInFlight || document.querySelector('.range-editor[open], .when.editing, .report-picker') ||
+    return activeReorder || writesInFlight || document.querySelector('.range-editor[open], .wake-editor[open], .when.editing, .report-picker') ||
       Array.from(document.querySelectorAll('#board .mini input')).some(function (el) { return el.value !== el.defaultValue; }) ||
       ['weight', 'wake'].some(function (id) { var el = document.getElementById(id); return el === document.activeElement && el.value !== (saved[id] || ''); });
   }
@@ -1378,6 +1464,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 
   function go(view, day, opts) {
     activeReorder?.();
+    if (VIEW !== view || DAY !== day) document.querySelector('.wake-editor[open]')?.close();
     opts = opts || {};
     VIEW = view;
     document.body.dataset.range = view;
@@ -1449,6 +1536,12 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     days.forEach(function (d) { if (!CACHE[d]) { var s = storeRead(d); if (s) CACHE[d] = s; } });
     var painted = null;
     if (held(days)) { renderBoard(days); painted = snapshot(days); }
+    else {
+      SHOWN = null;
+      var board = document.getElementById('board');
+      board.classList.remove('range-board');
+      board.innerHTML = '<div class="stellar-loading" role="status"><span class="stellar-spinner" aria-hidden="true"></span><span>Loading range…</span></div>';
+    }
     return loadRange(start, end, false, seq, painted).then(function () {
       afterVisiblePaint(function () { if (seq === rangeSeq && VIEW !== 'day') prefetchRanges(); });
     });
@@ -1471,7 +1564,13 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         if (painted !== snapshot(days)) renderBoard(days);
         return true;
       })
-      .catch(function (e) { if (!background && seq === rangeSeq) say('Could not load: ' + e.message, true); return false; });
+      .catch(function (e) {
+        if (!background && seq === rangeSeq && VIEW !== 'day') {
+          if (!painted) document.getElementById('board').replaceChildren();
+          say('Could not load: ' + e.message, true);
+        }
+        return false;
+      });
   }
 
   /* The range before and after this one, fetched ahead -- only the days not
@@ -1505,7 +1604,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     if (rangeAssetsReady) return rangeAssetsReady;
     rangeAssetsReady = Promise.all([
       ['link', 'href', '/app-assets/ranges.css?v=8'],
-      ['script', 'src', '/app-assets/ranges.js?v=7']
+      ['script', 'src', '/app-assets/ranges.js?v=8']
     ].map(function (asset) {
       return new Promise(function (resolve, reject) {
         var node = document.createElement(asset[0]);
@@ -1542,7 +1641,8 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
       }
       window.stellarRenderRange({ board: board, days: days, day: DAY, today: today, view: VIEW,
         rows: function (day) { return CACHE[day] || []; }, weight: WEIGH, wake: WAKE,
-        wakeValue: wakeFromNotes, owed: owed, writable: writable, go: go, label: label,
+        wakeValue: wakeFromNotes, editWake: editWake, bindFieldReport: bindFieldReport,
+        owed: owed, writable: writable, go: go, label: label,
         column: column, tile: tile, field: field, grip: makeGrip, bindReordering: bindReordering,
         orderedTitles: function (titles) { return orderedRows(titles, function (title) { return title; }); },
         cancelReordering: function () { activeReorder?.(); } });
@@ -1691,21 +1791,39 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
     el._row = r;
     var input = document.createElement('input');
     if (isW) { input.type = 'number'; input.step = '0.1'; input.inputMode = 'decimal'; input.placeholder = 'lbs'; }
-    else { input.type = 'time'; }
+    else { input.type = 'time'; input.readOnly = true; input.className = 'wake-trigger'; input.setAttribute('aria-haspopup', 'dialog'); }
     input.disabled = locked;
     var shown = isW ? (r.weight_lbs != null ? Number(r.weight_lbs).toFixed(1) : '') : ((wakeFromNotes(r.notes) || {}).value || '');
     input.value = input.defaultValue = shown;
     el.innerHTML = '<button type="button" class="mbox report-measure-status" aria-label="Set measurement status"></button><span class="lbl">' + (isW ? 'Weight' : 'Wake') + '<span class="measurement-complete" data-measurement-complete hidden>✦ Done</span></span>';
     var statusButton = el.querySelector('.mbox'); statusButton.disabled = locked;
-    bindFieldReport(statusButton, function () { return r; }, function () { paintMini(el, r); if (onUpdate) onUpdate(); });
+    function refresh() {
+      if (!isW) input.value = input.defaultValue = wakeFromNotes(r.notes)?.value || '';
+      paintMini(el, r);
+      if (onUpdate) onUpdate();
+    }
+    bindFieldReport(statusButton, function () { return r; }, refresh,
+      isW ? undefined : function () { editWake(r, statusButton, refresh); });
     el.appendChild(input);
     paintMini(el, r);
-    el.addEventListener('click', function (e) { if (e.target !== input && !e.target.closest('button') && !input.disabled) input.focus(); });
+    el.addEventListener('click', function (event) {
+      if (input.disabled || event.target.closest('button')) return;
+      if (isW) { if (event.target !== input) input.focus(); return; }
+      event.preventDefault();
+      editWake(r, input, refresh);
+    });
+    if (!isW) {
+      input.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        editWake(r, input, refresh);
+      });
+      return el;
+    }
     input.addEventListener('change', function () {
       var v = input.value;
       if (!v || v === shown) return;
-      var url = isW ? '/api/day/' + r.day + '/weight?lbs=' + encodeURIComponent(v)
-                    : '/api/day/' + r.day + '/wake?time=' + encodeURIComponent(v);
+      var url = '/api/day/' + r.day + '/weight?lbs=' + encodeURIComponent(v);
       var was = r.is_completed;
       r.is_completed = true; paintMini(el, r); if (onUpdate) onUpdate();
       post(url).then(function (u) {
@@ -1713,12 +1831,11 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
         if (u && u.id) { r.id = u.id; delete r.virtual; }
         if (u && 'completed_at' in u) r.completed_at = u.completed_at;
         if (u && u.status) r.status = u.status;
-        if (isW && u && u.weight_lbs !== undefined) r.weight_lbs = u.weight_lbs;
-        if (!isW && u && typeof u.notes === 'string') r.notes = u.notes;
+        if (u && u.weight_lbs !== undefined) r.weight_lbs = u.weight_lbs;
         paintMini(el, r); if (onUpdate) onUpdate();
         storeMini(r);
-        say((isW ? 'Weight ' + Number(v).toFixed(1) + ' lbs' : 'Wake-up ' + v) + ' saved · ' +
-            label(r.day, { month: 'short', day: 'numeric' }) + (isW && u && u.warning ? ' — ' + u.warning : ''));
+        say('Weight ' + Number(v).toFixed(1) + ' lbs saved · ' +
+            label(r.day, { month: 'short', day: 'numeric' }) + (u && u.warning ? ' — ' + u.warning : ''));
       }).catch(function (e) {
         r.is_completed = was; paintMini(el, r); if (onUpdate) onUpdate(); input.value = shown; say(e.message, true);
       });
@@ -1744,6 +1861,7 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
   }
   document.addEventListener('visibilitychange', function () { if (window.stellarPageActive()) rollover(); });
   window.addEventListener('focus', rollover);
+  window.addEventListener('pageshow', rollover);
   window.addEventListener('stellar:visibility', function () { if (window.stellarPageActive()) { rollover(); revalidate(); } });
   setInterval(rollover, 60000);
 
