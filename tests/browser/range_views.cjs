@@ -149,7 +149,30 @@ async function check(engine) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('.range-focus').waitFor();
     assert.equal(await page.locator('.range-table').count(), 0, 'Phones build only the selected day');
-    for (const view of ['3days', 'week', 'custom']) {
+    await page.locator('[data-view="3days"]').click();
+    await page.locator('#pick').fill('2026-11-04');
+    await page.locator('#pick').dispatchEvent('change');
+    const comparison = page.locator('.range-table-compact');
+    await comparison.locator('thead [data-day="2026-11-03"]').waitFor();
+    assert.deepEqual(await comparison.locator('thead .range-date').evaluateAll(dates => dates.map(date => date.dataset.day)),
+      ['2026-11-03', '2026-11-04', '2026-11-05']);
+    assert.equal(await comparison.locator('[aria-current=date] .range-weekday').textContent(), 'Today');
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert(await comparison.evaluate(table => table.parentElement.scrollWidth <= table.parentElement.clientWidth + 1),
+        `${width}px: all three dates and the handle fit without sideways scrolling`);
+    }
+    const phoneTask = comparison.getByRole('button', { name: /^Floss, Nov 4,/ });
+    await phoneTask.click();
+    const completedPhoneTask = comparison.getByRole('button', { name: 'Floss, Nov 4, Done' });
+    await completedPhoneTask.waitFor();
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('.range-table-compact .range-check')).some(button =>
+      button.getAttribute('aria-label') === 'Floss, Nov 4, Done' && !button.disabled));
+    assert.equal(await comparison.getByRole('button', { name: /^Floss, Nov 5,/ }).isEnabled(), false);
+    await page.screenshot({ path: `/private/tmp/range-3days-${engine}-mobile.png` });
+    await comparison.locator('thead [aria-current=date]').click();
+    await page.locator('#day-card').waitFor();
+    for (const view of ['week', 'custom']) {
       await page.locator(`[data-view="${view}"]`).click();
       await page.locator('.range-dates [aria-pressed=true]').waitFor();
       const selected = page.locator('.range-dates [aria-pressed=true]');

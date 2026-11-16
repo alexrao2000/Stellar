@@ -1,7 +1,6 @@
 /* The shorter ranges compare tasks without repeating their names for each day.
-   Phones show one day's full-size controls beneath a date strip. Measurement
-   editors reuse the existing save handlers; date changes and resizing use the
-   same cached records. Day and Month keep their original renderers. */
+   Phones compare all three dates in 3 Days and show one focused day in
+   longer ranges. Measurement editors reuse the existing save handlers. */
 (() => {
   const phone = matchMedia('(max-width: 760px)');
   let focused = null, current = null;
@@ -47,18 +46,20 @@
   window.stellarRenderRange = ctx => {
     current = ctx; closeEditor();
     const { board, days } = ctx;
+    const compareOnPhone = phone.matches && ctx.view === '3days';
+    const showDayStrip = phone.matches && !compareOnPhone;
     const requested = new URLSearchParams(location.search).get('focus');
     if (days.includes(requested)) focused = requested;
     if (!days.includes(focused)) focused = days.includes(ctx.today) ? ctx.today : days.includes(ctx.day) ? ctx.day : days[0];
     board.classList.add('range-board');
     const updateProgress = StellarReports.progress(board, () => days.filter(day => day <= ctx.today).flatMap(day => ctx.rows(day)));
-    const doneFor = day => ctx.rows(day).filter(row => row.is_completed).length;
     const dateLabel = day => ctx.label(day, { weekday: 'long', month: 'short', day: 'numeric' });
     const dateButton = day => {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'range-date'; button.dataset.day = day;
       button.classList.toggle('is-today', day === ctx.today); button.classList.toggle('is-future', day > ctx.today);
       button.innerHTML = '<span class="range-weekday"></span><span class="range-number"></span><span class="range-count"></span>';
-      button.querySelector('.range-weekday').textContent = ctx.label(day, ctx.view === 'custom' && !phone.matches || day.endsWith('-01') ? { month: 'short' } : { weekday: 'short' });
+      const weekday = ctx.label(day, ctx.view === 'custom' && !phone.matches || day.endsWith('-01') ? { month: 'short' } : { weekday: 'short' });
+      button.querySelector('.range-weekday').textContent = compareOnPhone && day === ctx.today ? 'Today' : weekday;
       button.querySelector('.range-number').textContent = ctx.label(day, { day: 'numeric' });
       if (day === ctx.today) button.setAttribute('aria-current', 'date');
       return button;
@@ -66,12 +67,13 @@
     const changed = () => {
       updateProgress();
       board.querySelectorAll('.range-date').forEach(button => {
-        const day = button.dataset.day, total = ctx.owed(ctx.rows(day));
+        const day = button.dataset.day;
         button.querySelector('.range-count').textContent = day > ctx.today ? '·' : StellarReports.fraction(StellarReports.counts(ctx.rows(day)));
-        button.setAttribute('aria-label', (phone.matches ? 'Show ' : 'Open ') + dateLabel(day) + (day > ctx.today ? ', upcoming' : ', ' + StellarReports.description(StellarReports.counts(ctx.rows(day)))));
+        const status = day > ctx.today ? 'upcoming' : StellarReports.description(StellarReports.counts(ctx.rows(day)));
+        button.setAttribute('aria-label', (showDayStrip ? 'Show ' : 'Open ') + dateLabel(day) + (day === ctx.today ? ', today' : '') + ', ' + status);
       });
     };
-    if (phone.matches) {
+    if (showDayStrip) {
       const strip = document.createElement('div'); strip.className = 'range-dates'; strip.setAttribute('role', 'group'); strip.setAttribute('aria-label', 'Days in range');
       const focus = document.createElement('div'); focus.className = 'range-focus';
       const select = (day, remember = false) => {
@@ -106,7 +108,7 @@
     const scroll = document.createElement('div'); scroll.className = 'range-scroll'; scroll.tabIndex = 0;
     scroll.addEventListener('keydown', event => { if (event.key.startsWith('Arrow')) event.stopPropagation(); });
     scroll.setAttribute('role', 'region'); scroll.setAttribute('aria-label', 'Task records by day');
-    const table = document.createElement('table'); table.className = 'range-table';
+    const table = document.createElement('table'); table.className = compareOnPhone ? 'range-table range-table-compact' : 'range-table';
     table.style.setProperty('--range-days', days.length);
     const caption = document.createElement('caption'); caption.textContent = 'Task records, ' + dateLabel(days[0]) + ' to ' + dateLabel(days.at(-1)); caption.className = 'range-sr'; table.append(caption);
     const columns = document.createElement('colgroup'); columns.append(document.createElement('col'));
