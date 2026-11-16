@@ -419,6 +419,8 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   var DAY = BOOT.day;
   var MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var WD = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var mobileMonth = matchMedia('(max-width: 760px)');
+  var dateFormats = new Map(), todayFormat;
 
   function parts(day) { return day.split('-').map(Number); }
   function shiftDay(day, n) {
@@ -436,7 +438,10 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
      overnight treated the new day as one that hadn't happened and locked it.
      Read in the app's timezone, not the browser's, to agree with the server. */
   function todayNow() {
-    try { return new Date().toLocaleDateString('en-CA', { timeZone: BOOT.tz }); }
+    try {
+      todayFormat ||= new Intl.DateTimeFormat('en-CA', { timeZone: BOOT.tz });
+      return todayFormat.format(new Date());
+    }
     catch (e) { return BOOT.today; }
   }
 
@@ -501,8 +506,15 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   }
 
   function storeWrite(day, rows) {
+    storeDays([[day, rows]]);
+  }
+
+  function storeDays(entries) {
+    if (!entries.length) return;
     try {
-      localStorage.setItem(STORE + day, JSON.stringify(rows));
+      entries.forEach(function ([day, rows]) {
+        localStorage.setItem(STORE + day, JSON.stringify(rows));
+      });
       var keys = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
@@ -517,48 +529,44 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     } catch (e) { /* quota or private mode -- the app is fine without it */ }
   }
 
-  var requestVersion = {};
+  var appliedVersion = {}, readVersion = 0, orderReadVersion = 0;
 
-  function afterVisiblePaint(callback) {
-    requestAnimationFrame(function () {
-      if (window.requestIdleCallback) requestIdleCallback(callback, { timeout: 1500 });
-      else setTimeout(callback, 80);
-    });
+  function learnOrder(titles, version, orderAtStart) {
+    if (version < orderReadVersion || orderAtStart !== orderVersion || orderSaving || pendingOrder || activeReorder) return;
+    orderReadVersion = version;
+    setOrder(mergeOrder(ORDER, titles));
   }
 
-  function fetchDay(day, fresh) {
-    if (!fresh && CACHE[day]) return Promise.resolve(CACHE[day]);
-    var key = day + (fresh ? ':fresh' : ':cached');
-    if (pending[key]) return pending[key];
-    var version = (requestVersion[day] || 0) + 1;
-    requestVersion[day] = version;
+  function afterVisiblePaint(callback) {
+    requestAnimationFrame(function () { setTimeout(callback, 0); });
+  }
+
+  function fetchDay(day, forceFresh) {
     var orderAtStart = orderVersion, epochAtStart = writeEpoch;
-    pending[key] = fetch('/api/day/' + day + (fresh ? '?fresh=true' : ''),
-                         fresh ? { cache: 'no-store' } : {})
+    var key = day + ':' + epochAtStart;
+    if (!forceFresh && pending[key]) return pending[key];
+    var version = ++readVersion;
+    var request = fetch('/api/day/' + day + '?fresh=true', { cache: 'no-store' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
       .then(function (rows) {
-        delete pending[key];
-        if (epochAtStart !== writeEpoch || writesInFlight || fresh && editingRecords()) throw new Error('Record changed during read');
-        /* A slow background prefetch must never replace a newer live read. */
-        if (requestVersion[day] === version) {
-          CACHE[day] = rows;
-          storeWrite(day, rows);
-        }
+        if (epochAtStart !== writeEpoch || editingRecords()) throw new Error('Record changed during read');
+        if (version < (appliedVersion[day] || 0)) return CACHE[day];
+        cacheRange([day], { [day]: rows }, version);
         /* The server's order, learned from a live read of a current day that
            has both measurements -- an old day lists tasks that no longer run,
            and a not-yet-filled day lists none. Skipped if a reorder happened
            here since the request left, or one is still being saved. */
         var titles = rows.map(function (r) { return r.title; });
-        if (fresh && writable(day) && orderAtStart === orderVersion && !orderSaving && !pendingOrder && !activeReorder &&
-            titles.indexOf(WEIGH) >= 0 && titles.indexOf(WAKE) >= 0) {
-          setOrder(mergeOrder(ORDER, titles));
+        if (writable(day) && titles.includes(WEIGH) && titles.includes(WAKE)) {
+          learnOrder(titles, version, orderAtStart);
         }
-        return rows;
-      }, function (e) { delete pending[key]; throw e; });
-    return pending[key];
+        return CACHE[day];
+      }).finally(function () { if (pending[key] === request) delete pending[key]; });
+    pending[key] = request;
+    return request;
   }
 
   function showDay(day, opts) {
@@ -595,7 +603,8 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     /* Confirm against the server behind the paint. Not announced: the check
        is for the page's benefit, and a label flashing on every day change is
        noise. A real difference repaints; a failure says so below. */
-    return fetchDay(day, true).then(function (rows) {
+    if (known) scheduleRangeWarmup();
+    return fetchDay(day).then(function (rows) {
       if (DAY !== day || VIEW !== 'day') return;
       /* Only repaint on a real difference. Re-rendering identical rows would
          throw away focus and any half-typed measurement to show the same
@@ -603,7 +612,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
       if (ORDER !== knownOrder || JSON.stringify(rows) !== knownJson) render(rows);
       loading.hidden = true;
       tasks.hidden = false;
-      afterVisiblePaint(function () { if (VIEW === 'day' && DAY === day) prefetchAdjacent(day); });
+      if (!known) scheduleRangeWarmup();
     }).catch(function (e) {
       /* With a local copy on screen this is a stale-data warning, not a
          failure: say which it is rather than blaming the rows on display. */
@@ -614,36 +623,6 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
       say(known ? 'Showing the last known copy: ' + e.message
                 : 'Could not load: ' + e.message, true);
     });
-  }
-
-  /* Three days either side, in one live request, so the next day is already
-     here -- and correct -- when you step to it. Only days not yet held are
-     asked for; a day already shown has had its own live read. */
-  var PREFETCH = 3, prefetching = null;
-  function prefetchAdjacent(day) {
-    if (!window.stellarPageActive()) return;
-    var want = [];
-    for (var i = -PREFETCH; i <= PREFETCH; i++) {
-      var d = shiftDay(day, i);
-      if (i && !CACHE[d]) want.push(d);
-    }
-    if (!want.length || prefetching) return;
-    var start = want[0], end = want[want.length - 1];
-    var versions = {}, epochAtStart = writeEpoch;
-    want.forEach(function (d) { versions[d] = requestVersion[d] || 0; });
-    prefetching = fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: 'low' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (data) {
-        if (!data || epochAtStart !== writeEpoch || writesInFlight) return;
-        Object.keys(data.days).forEach(function (d) {
-          /* Never overwrite a day read live, or changed here, since this left. */
-          if (CACHE[d] || (requestVersion[d] || 0) !== (versions[d] || 0)) return;
-          CACHE[d] = data.days[d];
-          storeWrite(d, data.days[d]);
-        });
-      })
-      .catch(function () { /* the day's own live read covers it */ })
-      .then(function () { prefetching = null; });
   }
 
   /* ---- views ---------------------------------------------------------------
@@ -739,7 +718,13 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 
   function post(url, body) {
     writesInFlight++; writeEpoch++;
-    var settled = function () { writesInFlight--; writeEpoch++; window.StellarSync?.retry(); };
+    var settled = function () {
+      writesInFlight--; writeEpoch++;
+      if (!writesInFlight && VIEW !== 'day' && !SHOWN && recordsDirty) {
+        setTimeout(function () { revalidate(true); }, 0);
+      }
+      window.StellarSync?.retry();
+    };
     var opts = { method: 'POST' };
     if (body !== undefined) {
       opts.headers = { 'Content-Type': 'application/json' };
@@ -1337,7 +1322,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   function load() {
     var day = DAY;
     delete CACHE[day];
-    return fetchDay(day, true).then(function (rows) {
+    return fetchDay(day).then(function (rows) {
       if (DAY === day) render(rows);
     });
   }
@@ -1404,16 +1389,17 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   }
   function revalidate(force) {
     if (!window.stellarPageActive() || editingRecords() || !force && !recordsDirty && Date.now() - lastChecked < 15000) return Promise.resolve(false);
+    var forceFresh = force || recordsDirty;
     lastChecked = Date.now(); recordsDirty = false;
     if (VIEW !== 'day') {
       var r = rangeOf(VIEW, DAY);
-      return loadRange(r[0], r[1], true);
+      return loadRange(daysIn(r[0], r[1]), true, forceFresh);
     }
     var day = DAY, epoch = writeEpoch;
     var before = CACHE[day] ? JSON.stringify(CACHE[day]) : null;
     var beforeOrder = ORDER;
-    return fetchDay(day, true).then(function (rows) {
-      if (DAY !== day || epoch !== writeEpoch || editingRecords()) return false;
+    return fetchDay(day, forceFresh).then(function (rows) {
+      if (VIEW !== 'day' || DAY !== day || epoch !== writeEpoch || editingRecords()) return false;
       if (ORDER !== beforeOrder || JSON.stringify(rows) !== before) render(rows);
       return true;
     }).catch(function () { recordsDirty = true; return false; });
@@ -1451,9 +1437,12 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     return [day, day];
   }
   function label(day, opts) {
-    var q = parts(day);
-    return new Date(Date.UTC(q[0], q[1] - 1, q[2])).toLocaleDateString([],
-      Object.assign({ timeZone: 'UTC' }, opts));
+    var key = JSON.stringify(opts), format = dateFormats.get(key);
+    if (!format) {
+      format = new Intl.DateTimeFormat([], Object.assign({ timeZone: 'UTC' }, opts));
+      dateFormats.set(key, format);
+    }
+    return format.format(new Date(day + 'T00:00:00Z'));
   }
 
   function urlFor(view, day) {
@@ -1466,6 +1455,8 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     activeReorder?.();
     if (VIEW !== view || DAY !== day) document.querySelector('.wake-editor[open]')?.close();
     opts = opts || {};
+    rangeSeq++;
+    SHOWN = null;
     VIEW = view;
     document.body.dataset.range = view;
     var span = rangeOf(view, day);
@@ -1496,11 +1487,10 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     return showRange(r[0], r[1]);
   }
 
-  /* Ranges share the day view's per-day cache. A range paints at once from
-     what is held, is confirmed by one live read behind the paint -- redrawn
-     only if that read disagrees -- and the ranges either side are fetched
-     ahead, so stepping back and forth never waits on the network. */
-  var SHOWN = null, rangeSeq = 0;
+  /* Range views share Day's cache and reuse a running read when it covers the
+     requested dates. The warmup fills gaps only. The visible view stays
+     responsible for refreshing its own records. */
+  var SHOWN = null, rangeSeq = 0, rangeReads = [], rangeWarmup = null;
 
   function daysIn(start, end) {
     var out = [];
@@ -1509,113 +1499,138 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   }
   function held(days) { return days.every(function (d) { return CACHE[d]; }); }
 
-  function fetchRange(start, end, background) {
-    var epochAtStart = writeEpoch;
-    return fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: background ? 'low' : 'high' })
+  function restoreDays(days) {
+    days.forEach(function (day) {
+      if (!CACHE[day]) {
+        var rows = storeRead(day);
+        if (rows) CACHE[day] = rows;
+      }
+    });
+  }
+
+  function cacheRange(days, records, version, fillOnly) {
+    var changed = [];
+    days.forEach(function (day) {
+      var rows = records[day], known = CACHE[day];
+      if (!Array.isArray(rows) || version < (appliedVersion[day] || 0) || fillOnly && known) return;
+      appliedVersion[day] = version;
+      if (known && JSON.stringify(known) === JSON.stringify(rows)) return;
+      CACHE[day] = rows;
+      changed.push([day, rows]);
+    });
+    storeDays(changed);
+    return changed.length > 0;
+  }
+
+  function readRange(start, end, background, forceFresh) {
+    var pending = !forceFresh && rangeReads.find(function (read) {
+      return read.epoch === writeEpoch && read.start <= start && read.end >= end;
+    });
+    if (pending) return pending;
+    var read = { start: start, end: end, epoch: writeEpoch, version: ++readVersion, order: orderVersion };
+    read.promise = fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: background ? 'low' : 'high' })
       .then(function (res) {
         return res.json().then(function (j) {
           if (!res.ok) throw new Error(j.detail || ('HTTP ' + res.status));
           return j;
         });
-      })
-      .then(function (data) {
-        if (epochAtStart !== writeEpoch || writesInFlight || background && editingRecords()) throw new Error('Record changed during read');
-        Object.keys(data.days).forEach(function (d) {
-          requestVersion[d] = (requestVersion[d] || 0) + 1;
-          CACHE[d] = data.days[d];
-          storeWrite(d, data.days[d]);
-        });
-        return data;
+      }).finally(function () {
+        rangeReads.splice(rangeReads.indexOf(read), 1);
       });
+    rangeReads.unshift(read);
+    return read;
   }
 
-  function snapshot(days) { return JSON.stringify([ORDER, days.map(function (d) { return CACHE[d] || null; })]); }
-
   function showRange(start, end) {
-    var seq = ++rangeSeq, days = daysIn(start, end);
-    days.forEach(function (d) { if (!CACHE[d]) { var s = storeRead(d); if (s) CACHE[d] = s; } });
-    var painted = null;
-    if (held(days)) { renderBoard(days); painted = snapshot(days); }
+    if (VIEW !== 'month') loadRangeAssets().catch(function () {});
+    var days = daysIn(start, end);
+    restoreDays(days);
+    if (held(days)) renderBoard(days);
     else {
-      SHOWN = null;
       var board = document.getElementById('board');
       board.classList.remove('range-board');
       board.innerHTML = '<div class="stellar-loading" role="status"><span class="stellar-spinner" aria-hidden="true"></span><span>Loading range…</span></div>';
     }
-    return loadRange(start, end, false, seq, painted).then(function () {
-      afterVisiblePaint(function () { if (seq === rangeSeq && VIEW !== 'day') prefetchRanges(); });
+    return loadRange(days, false).then(function (loaded) {
+      if (loaded) scheduleRangeWarmup();
     });
   }
 
-  /* `background` is the periodic re-read: it must never redraw under someone
-     typing. A range you asked for always draws. */
-  function loadRange(start, end, background, seq, painted) {
-    seq = seq || ++rangeSeq;
-    var orderAtStart = orderVersion;
-    var days = daysIn(start, end);
-    if (painted === undefined) painted = SHOWN && SHOWN.join() === days.join() ? snapshot(days) : null;
-    return fetchRange(start, end, background)
+  function loadRange(days, background, forceFresh) {
+    var seq = rangeSeq, read = readRange(days[0], days.at(-1), background || !!SHOWN, forceFresh);
+    return read.promise
       .then(function (data) {
-        if (seq !== rangeSeq) return false;              // a newer range was asked for
-        if (background && editingRecords()) return false;
-        if (orderAtStart === orderVersion && !orderSaving && !pendingOrder && !activeReorder && Array.isArray(data.order)) {
-          setOrder(mergeOrder(ORDER, data.order));
-        }
-        if (painted !== snapshot(days)) renderBoard(days);
+        if (seq !== rangeSeq) return false;
+        if (!SHOWN && read.epoch !== writeEpoch && !editingRecords()) return loadRange(days, background, forceFresh);
+        if (read.epoch !== writeEpoch || editingRecords()) { recordsDirty = true; return false; }
+        var beforeOrder = ORDER, changed = cacheRange(days, data.days, read.version);
+        if (Array.isArray(data.order)) learnOrder(data.order, read.version, read.order);
+        if (!SHOWN) say('');
+        if (!SHOWN || changed || ORDER !== beforeOrder) renderBoard(days);
         return true;
       })
       .catch(function (e) {
-        if (!background && seq === rangeSeq && VIEW !== 'day') {
-          if (!painted) document.getElementById('board').replaceChildren();
+        if (seq !== rangeSeq) return false;
+        if (!background && !SHOWN && (read.start !== days[0] || read.end !== days.at(-1))) return loadRange(days, false);
+        recordsDirty = true;
+        if (!background || !SHOWN) {
+          if (!SHOWN) document.getElementById('board').replaceChildren();
           say('Could not load: ' + e.message, true);
         }
         return false;
       });
   }
 
-  /* The range before and after this one, fetched ahead -- only the days not
-     already held, each side in one request. */
-  function prefetchRanges() {
-    var sequence = rangeSeq;
-    [-1, 1].reduce(function (previous, dir) {
-      return previous.then(function () {
-        if (sequence !== rangeSeq || VIEW === 'day' || !window.stellarPageActive()) return;
-        var r;
-        if (VIEW === 'month') r = rangeOf('month', addMonths(DAY, dir));
-        else if (VIEW === 'custom') {
-          var span = daysBetween(CUSTOM.start, CUSTOM.end) + 1;
-          r = [shiftDay(CUSTOM.start, dir * span), shiftDay(CUSTOM.end, dir * span)];
-        } else r = rangeOf(VIEW, shiftDay(DAY, dir * (VIEW === 'week' ? 7 : 3)));
-        var missing = daysIn(r[0], r[1]).filter(function (d) { return !CACHE[d]; });
-        if (missing.length) return fetchRange(missing[0], missing[missing.length - 1], true).catch(function () {});
-      });
-    }, Promise.resolve());
+  function scheduleRangeWarmup() {
+    var sequence = rangeSeq, day = DAY;
+    afterVisiblePaint(function () {
+      if (sequence !== rangeSeq || day !== DAY || !window.stellarPageActive()) return;
+      if (mobileMonth.matches) loadRangeAssets().catch(function () {});
+      if (rangeWarmup || writesInFlight) return;
+      var month = rangeOf('month', day);
+      var early = shiftDay(day, -6), late = shiftDay(day, 6);
+      var start = early < month[0] ? early : month[0], end = late > month[1] ? late : month[1];
+      var days = daysIn(start, end);
+      restoreDays(days);
+      if (held(days)) return;
+      var read = readRange(start, end, true);
+      rangeWarmup = read.promise.then(function (data) {
+        if (read.epoch === writeEpoch && !writesInFlight) cacheRange(days, data.days, read.version, true);
+      }).catch(function () {}).finally(function () { rangeWarmup = null; });
+    });
   }
 
   function owed(rows) {
     return rows.filter(function (r) { return !r.optional; }).length;
   }
 
-  var rangeAssetsReady = null, rangeRenderVersion = 0;
-  var rangeStyle = document.querySelector('link[href="/app-assets/ranges.css?v=9"]');
-  var rangeStylesReady = !!(rangeStyle && rangeStyle.sheet);
+  var rangeRenderVersion = 0, rangeStylesReady = false;
+  var rangeAssets = new Map();
   function loadRangeAssets() {
     if (window.stellarRenderRange && rangeStylesReady) return Promise.resolve();
-    if (rangeAssetsReady) return rangeAssetsReady;
-    rangeAssetsReady = Promise.all([
+    return Promise.all([
       ['link', 'href', '/app-assets/ranges.css?v=9'],
       ['script', 'src', '/app-assets/ranges.js?v=9']
-    ].map(function (asset) {
-      return new Promise(function (resolve, reject) {
-        var node = document.createElement(asset[0]);
-        if (asset[0] === 'link') node.rel = 'stylesheet';
-        node[asset[1]] = asset[2];
-        node.onload = resolve;
-        node.onerror = function () { node.remove(); reject(new Error('Could not load range')); };
+    ].map(function ([tag, attribute, url]) {
+      if (rangeAssets.has(url)) return rangeAssets.get(url);
+      var promise = new Promise(function (resolve, reject) {
+        var node = document.createElement(tag);
+        if (tag === 'link') node.rel = 'stylesheet';
+        node[attribute] = url;
+        node.onload = function () {
+          if (tag === 'link') rangeStylesReady = true;
+          resolve();
+        };
+        node.onerror = function () {
+          node.remove();
+          rangeAssets.delete(url);
+          reject(new Error('Could not load range'));
+        };
         document.head.appendChild(node);
       });
-    })).then(function () { rangeStylesReady = true; }).catch(function (error) { rangeAssetsReady = null; throw error; });
-    return rangeAssetsReady;
+      rangeAssets.set(url, promise);
+      return promise;
+    }));
   }
 
   function renderBoard(days) {
@@ -1649,39 +1664,34 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
       return;
     }
     var updateProgress = StellarReports.progress(board, function () { return days.filter(function (day) { return day <= today; }).flatMap(function (day) { return CACHE[day] || []; }); });
-    if (VIEW === 'month') {
-      var hint = document.createElement('p');
-      hint.className = 'month-hint';
-      hint.textContent = 'Tap a date to open its tasks.';
-      board.appendChild(hint);
-    }
+    var hint = document.createElement('p');
+    hint.className = 'month-hint';
+    hint.textContent = 'Tap a date to open its tasks.';
+    board.appendChild(hint);
 
     var grid = document.createElement('div');
-    if (VIEW === 'month') {
-      grid.className = 'month';
-      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(function (w) {
-        var h = document.createElement('div'); h.className = 'wd'; h.textContent = w; grid.appendChild(h);
-      });
-      for (var i = 0; i < (weekday(days[0]) + 6) % 7; i++) {
-        var blank = document.createElement('div'); blank.className = 'col blank';
-        blank.setAttribute('aria-hidden', 'true'); grid.appendChild(blank);
-      }
-    } else {
-      grid.className = 'cols';
-      grid.style.setProperty('--day-count', days.length);
+    grid.className = 'month';
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(function (w) {
+      var h = document.createElement('div'); h.className = 'wd'; h.textContent = w; grid.appendChild(h);
+    });
+    function appendBlank() {
+      var blank = document.createElement('div');
+      blank.className = 'col blank';
+      blank.setAttribute('aria-hidden', 'true');
+      grid.appendChild(blank);
     }
-    days.forEach(function (d) { grid.appendChild(column(d, updateProgress)); });
-    if (VIEW === 'month') {
-      while (grid.children.length % 7) {
-        var trailing = document.createElement('div'); trailing.className = 'col blank';
-        trailing.setAttribute('aria-hidden', 'true'); grid.appendChild(trailing);
-      }
-      grid.style.setProperty('--month-weeks', (grid.children.length - 7) / 7);
-    }
+    for (var i = 0; i < (weekday(days[0]) + 6) % 7; i++) appendBlank();
+    days.forEach(function (d) { grid.appendChild(column(d, updateProgress, mobileMonth.matches)); });
+    while (grid.children.length % 7) appendBlank();
+    grid.style.setProperty('--month-weeks', (grid.children.length - 7) / 7);
     board.appendChild(grid);
   }
 
-  function column(day, onUpdate) {
+  mobileMonth.addEventListener('change', function () {
+    if (VIEW === 'month' && SHOWN) renderBoard(SHOWN);
+  });
+
+  function column(day, onUpdate, summaryOnly) {
     var rows = CACHE[day] || [];
     var today = todayNow(), future = day > today, locked = future || !writable(day);
     var col = document.createElement('div');
@@ -1703,6 +1713,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     head.addEventListener('click', function () { go('day', day); });
     col.appendChild(head);
 
+    if (summaryOnly) return col;
     var body = document.createElement('div');
     body.className = 'col-body';
     if (!rows.length) body.innerHTML = '<div class="empty-day">Nothing scheduled</div>';

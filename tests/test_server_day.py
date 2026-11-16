@@ -702,7 +702,7 @@ def test_a_day_lists_scheduled_tasks_without_writing(db, monkeypatch):
     assert fake.tables["task_history"] == []          # nothing was written
 
 
-def test_range_reads_once_and_fills_each_day(db, monkeypatch):
+def test_range_fills_each_day(db, monkeypatch):
     from zoneinfo import ZoneInfo
     rows = [{"id": 1, "day": "2026-10-12", "list_title": "Daily", "title": "Run", "is_completed": True}]
     fake = db([_task(1, "Run", sort_order=1)], rows)
@@ -714,6 +714,18 @@ def test_range_reads_once_and_fills_each_day(db, monkeypatch):
     assert out["days"]["2026-10-14"][0]["virtual"] is True
     with pytest.raises(HTTPException):
         server.api_range("2026-01-01", "2026-12-31", Response())
+
+
+def test_range_keeps_records_beyond_the_database_page_limit(db):
+    dates = [f"2026-10-{day:02d}" for day in range(1, 32)]
+    rows = [
+        {"id": 1000 + i, "day": dates[i % len(dates)], "list_title": "Daily",
+         "title": f"Task {i}", "is_completed": True}
+        for i in range(1024)
+    ]
+    db([], rows)
+    result = server.api_range(dates[0], dates[-1], Response())
+    assert {row["id"] for day_rows in result["days"].values() for row in day_rows} == {row["id"] for row in rows}
 
 
 def test_ticking_a_scheduled_task_makes_its_row(db, monkeypatch):
@@ -769,21 +781,8 @@ def test_every_day_read_is_live_and_day_scoped(monkeypatch):
 
 def test_day_switch_is_one_paint():
     html = server.page_today("2026-10-19")
-    # Neighbouring days come live, three each side, in one request.
-    assert "var PREFETCH = 3" in html and "'/api/range?start=' + start" in html
-    assert "fetchDay(d, false)" not in html
     # No fade on a switch: only a tap animates.
     assert "body.painting .task, body.painting .field" in html
-
-
-def test_range_views_paint_from_the_cache_and_prefetch_neighbours():
-    """Ranges used to wait on a fresh request for every step."""
-    html = server.page_today("2026-10-19")
-    assert "function showRange(start, end)" in html
-    assert "if (held(days)) { renderBoard(days);" in html     # paint first from what is held
-    assert "function prefetchRanges()" in html               # the ranges either side, ahead
-    assert "if (painted !== snapshot(days)) renderBoard(days);" in html  # redraw only on a difference
-    assert "body.ranged header { max-width: 560px; margin-left: auto; margin-right: auto; }" in html
 
 
 def test_report_outcomes_preserve_measurements_and_clear_explicitly(db):

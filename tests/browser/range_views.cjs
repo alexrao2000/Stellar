@@ -180,7 +180,9 @@ async function check(engine) {
       assert((await page.url()).includes('focus='));
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       const fields = page.locator('.range-focus input');
-      for (const input of await fields.all()) assert((await input.boundingBox()).height >= 44);
+      await fields.first().waitFor();
+      const heights = await fields.evaluateAll(inputs => inputs.map(input => input.getBoundingClientRect().height));
+      assert(heights.length > 0 && heights.every(height => height >= 44));
       await page.screenshot({ path: `/private/tmp/range-${view}-${engine}-mobile.png` });
     }
     await page.locator('.range-dates [data-day="2026-11-04"]').click();

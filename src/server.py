@@ -1247,8 +1247,8 @@ RANGE_MAX_DAYS = 62
 def api_range(start: str, end: str, response: Response) -> dict:
     """Every day from start to end inclusive, each as /api/day would return it.
 
-    One query for the rows, so a week or a month costs the same round trip as a
-    day. Days with nothing recorded still list what was scheduled.
+    Read the month's worth of rows together, paging only if it exceeds the
+    database response limit. Days with no records still list scheduled tasks.
     """
     _check_day(start)
     _check_day(end)
@@ -1266,13 +1266,24 @@ def api_range(start: str, end: str, response: Response) -> dict:
     for i, d in enumerate(live):
         position.setdefault(d["title"], i)
 
-    raw = (_sb().table("task_history").select("*")
-           .filter("day", "gte", start).filter("day", "lte", end).execute().data or [])
+    client = _sb()
+    page_size = 1000
+    cursor = None
     by_day: dict[str, list[dict]] = {}
-    for r in raw:
-        rec = _shape(r)
-        if rec["title"] not in hidden:
-            by_day.setdefault(rec["day"], []).append(rec)
+    while True:
+        query = (client.table("task_history").select(",".join(HISTORY_COLS))
+                 .filter("day", "gte", start).filter("day", "lte", end)
+                 .order("id").limit(page_size))
+        if cursor is not None:
+            query = query.filter("id", "gt", cursor)
+        page = query.execute().data or []
+        for row in page:
+            rec = _shape(row)
+            if rec["title"] not in hidden:
+                by_day.setdefault(rec["day"], []).append(rec)
+        if len(page) < page_size:
+            break
+        cursor = page[-1]["id"]
 
     days = {}
     for i in range((d1 - d0).days + 1):
