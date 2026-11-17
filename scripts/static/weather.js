@@ -1,5 +1,6 @@
 /* Weather is loaded on demand. Only the optional Space backdrop refreshes
-   with the planner closed, and location requests contain no task data. */
+   with the planner closed, and location requests contain no task data.
+   Hidden or occluded scenes pause in place to resume without a phase reset. */
 
 import { dayKeyFor, daylightAt, describeWeather, planOutdoorTime, readForecast } from './weather-model.js?v=2';
 
@@ -248,7 +249,14 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     pool?.contentDocument?.documentElement.toggleAttribute('data-weather-backdrop', themed && !!forecast);
   }
 
+  function syncMotion() {
+    const visible = !document.hidden && window.stellarPageActive();
+    backdrop.dataset.weatherMotion = visible && themed && !dialog.open ? 'running' : 'paused';
+    dialog.dataset.weatherMotion = visible && dialog.open ? 'running' : 'paused';
+  }
+
   async function applyTheme() {
+    syncMotion();
     const ticket = ++themeVersion;
     const active = themed && forecast;
     if (active) syncPool();
@@ -286,6 +294,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   }
 
   function paintForecast() {
+    syncMotion();
     if (!dialog.open) return;
     ui.current.hidden = !forecast && !themed;
     $('.weather-current-details').hidden = !forecast;
@@ -539,7 +548,10 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     selectedDay = button.dataset.day;
     paintPlanner();
   });
-  dialog.addEventListener('close', () => trigger.focus({ preventScroll: true }));
+  dialog.addEventListener('close', () => {
+    syncMotion();
+    trigger.focus({ preventScroll: true });
+  });
 
   if (place) rememberPlace(place);
   paintCities();
@@ -547,6 +559,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   if (themed) refreshForecast();
   window.StellarSync?.subscribe(['records', 'definitions'], observed => refreshTasks(true, observed));
   function tick() {
+    syncMotion();
     if (!window.stellarPageActive() || !dialog.open && !themed) return;
     if (dialog.open) paintForecast();
     if (themed && forecast) applyTheme();
@@ -558,6 +571,10 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   window.addEventListener('focus', tick);
   window.addEventListener('stellar:visibility', tick);
   document.addEventListener('visibilitychange', tick);
+  window.addEventListener('pageshow', tick);
+  window.addEventListener('pagehide', () => {
+    backdrop.dataset.weatherMotion = dialog.dataset.weatherMotion = 'paused';
+  });
   return {
     open() {
       if (!dialog.open) return;

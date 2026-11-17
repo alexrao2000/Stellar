@@ -90,13 +90,33 @@ async function check(engine, mobile) {
     const backdrop = page.locator('body > .space-backdrop > .weather-scene');
     await backdrop.and(page.locator('[data-scene=rain].is-current')).waitFor();
     const spacePanel = page.locator('.wrap:not(.workspace-open), .workspace-open > .dated-tasks');
-    assert.match(await spacePanel.evaluate(el => getComputedStyle(el).backdropFilter), /blur\(22px\)/);
+    assert.match(await spacePanel.evaluate(el => getComputedStyle(el).backdropFilter), /blur/);
+    assert.equal(await backdrop.first().evaluate(el => getComputedStyle(el, '::before').animationPlayState), 'paused', 'Space pauses behind the weather modal');
     if (!mobile) {
       const root = page.frameLocator('#pool-frame').locator('html');
       assert.equal(await root.getAttribute('data-weather-backdrop'), '');
       await page.frameLocator('#pool-frame').locator('.star[data-id="1"] .hit').waitFor();
     }
     await dialog.getByRole('button', { name: 'Close weather' }).click();
+    await page.waitForFunction(() => document.querySelector('body > .space-backdrop').dataset.weatherMotion === 'running');
+    assert.equal(await page.locator('.weather-dialog-sky .is-current').evaluate(el => getComputedStyle(el, '::after').animationPlayState), 'paused', 'The closed dialog retains its scene without animating it');
+    await page.evaluate(() => {
+      window.testPageActive = window.stellarPageActive;
+      window.stellarPageActive = () => false;
+      window.dispatchEvent(new Event('stellar:visibility'));
+    });
+    const sceneTime = await backdrop.first().evaluate(el => {
+      const state = getComputedStyle(el, '::before').animationPlayState;
+      return { state, time: el.getAnimations({ subtree: true }).find(a => a.animationName === 'weather-drift').currentTime };
+    });
+    assert.equal(sceneTime.state, 'paused', 'Leaving Space pauses the retained sky');
+    await page.evaluate(() => {
+      window.stellarPageActive = window.testPageActive;
+      delete window.testPageActive;
+      window.dispatchEvent(new Event('stellar:visibility'));
+    });
+    assert(await backdrop.first().evaluate(el => el.getAnimations({ subtree: true }).find(a => a.animationName === 'weather-drift').currentTime) >= sceneTime.time,
+      'Returning to Space resumes the existing animation phase');
     code = 0;
     await page.clock.setFixedTime(new Date((hour(8) + 16 * 60) * 1000));
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));

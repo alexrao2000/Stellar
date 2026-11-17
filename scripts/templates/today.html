@@ -1962,7 +1962,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     if (!weatherStyle) {
       weatherStyle = new Promise(function (resolve, reject) {
         var link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=3';
+        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=4';
         link.onload = resolve;
         link.onerror = function () { link.remove(); weatherStyle = null; reject(new Error('Weather styles unavailable')); };
         document.head.append(link);
@@ -1970,7 +1970,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     }
     weatherStatus.textContent = 'Loading weather…';
     weatherRetry.hidden = true;
-    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=4')]).then(function (ready) {
+    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=5')]).then(function (ready) {
       return ready[1].mountWeather({
         dialog: weatherDialog, trigger: weatherTrigger, taskTimeZone: BOOT.tz,
         openDay: function (day) { go('day', day); },
