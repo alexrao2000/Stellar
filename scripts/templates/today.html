@@ -329,6 +329,15 @@ body.painting .task, body.painting .field, body.painting .field input { transiti
 html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 .field .wake-trigger { cursor: pointer; }
 #day-loading .stellar-loading, #board .stellar-loading { min-height: 100px; }
+.space-actions { display: flex; align-items: center; gap: 6px; }
+#weather-open { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 6px 10px; min-height: 34px; border: 1px solid #aaa8ce67; border-radius: 10px;
+  color: #f4f2ff; background: linear-gradient(130deg,#26354d,#4b405f); font: 650 12px/1.2 system-ui, sans-serif; }
+#weather-open [aria-hidden] { color: #ffdfa1; font-size: 16px; }
+#weather-open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.weather-load { width: min(400px, 100%); padding: 20px; text-align: center; }
+.weather-load form { display: flex; justify-content: end; }
+.weather-dialog:not([open]) { display: none; }
 </style>
 
 <div class="space-backdrop" aria-hidden="true"></div>
@@ -338,9 +347,12 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     <p class="eyebrow">Stellar</p>
     <div class="task-panel-heading">
       <h1>Space</h1>
-      <button type="button" id="pool-toggle" class="pool-toggle" aria-pressed="false"
-              aria-controls="pool-pane" hidden>Show Pool</button>
-      <a href="/pool" id="pool-fallback" class="pool-toggle" hidden>Open Pool</a>
+      <div class="space-actions">
+        <button type="button" id="weather-open" aria-haspopup="dialog" aria-controls="weather-dialog"><span aria-hidden="true">☀</span>Weather <span data-weather-temp hidden></span></button>
+        <button type="button" id="pool-toggle" class="pool-toggle" aria-pressed="false"
+                aria-controls="pool-pane" hidden>Show Pool</button>
+        <a href="/pool" id="pool-fallback" class="pool-toggle" hidden>Open Pool</a>
+      </div>
     </div>
     <div class="views" id="views" role="group" aria-label="Range">
       <button type="button" data-view="day">Day</button>
@@ -411,6 +423,15 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     <iframe id="pool-frame" title="Undated task pool"></iframe>
   </aside>
 </div>
+
+<dialog id="weather-dialog" class="weather-dialog" aria-labelledby="weather-title">
+  <div class="weather-load">
+    <form method="dialog"><button class="step" aria-label="Close weather">×</button></form>
+    <h2 id="weather-title">Weather</h2>
+    <p role="status" id="weather-load-status">Loading weather…</p>
+    <button class="step wide" type="button" id="weather-load-retry" hidden>Retry</button>
+  </div>
+</dialog>
 
 <script id="bootstrap" type="application/json">__BOOTSTRAP__</script>
 <script>
@@ -667,7 +688,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   });
   document.addEventListener('keydown', function (e) {
     if (!window.stellarPageActive()) return;
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.target.closest?.('#weather-dialog')) return;
     if (e.key === 'ArrowLeft') step(-1);
     if (e.key === 'ArrowRight') step(1);
   });
@@ -1876,6 +1897,53 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   window.addEventListener('stellar:visibility', function () { if (window.stellarPageActive()) { rollover(); revalidate(); } });
   setInterval(rollover, 60000);
 
+  var weatherTrigger = document.getElementById('weather-open');
+  var weatherDialog = document.getElementById('weather-dialog');
+  var weatherStatus = document.getElementById('weather-load-status');
+  var weatherRetry = document.getElementById('weather-load-retry');
+  var weatherModule, weatherStyle;
+
+  function loadWeather() {
+    if (weatherModule) return weatherModule;
+    if (!weatherStyle) {
+      weatherStyle = new Promise(function (resolve, reject) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=1';
+        link.onload = resolve;
+        link.onerror = function () { link.remove(); weatherStyle = null; reject(new Error('Weather styles unavailable')); };
+        document.head.append(link);
+      });
+    }
+    weatherStatus.textContent = 'Loading weather…';
+    weatherRetry.hidden = true;
+    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=1')]).then(function (ready) {
+      return ready[1].mountWeather({
+        dialog: weatherDialog, trigger: weatherTrigger, taskTimeZone: BOOT.tz,
+        openDay: function (day) { go('day', day); },
+        loadTaskDays: function (start, end, fresh) {
+          return readRange(start, end, false, fresh).promise.then(function (result) { return result.days; });
+        },
+      });
+    }).catch(function () {
+      weatherModule = null;
+      weatherStatus.textContent = 'Could not open weather.';
+      weatherRetry.hidden = false;
+      return null;
+    });
+    return weatherModule;
+  }
+  function openWeather() {
+    if (!weatherDialog.open) weatherDialog.showModal();
+    loadWeather().then(function (weather) { weather?.open(); });
+  }
+  weatherTrigger.addEventListener('click', openWeather);
+  weatherRetry.addEventListener('click', openWeather);
+
   go(VIEW, DAY, { replace: true });
+  try {
+    if (localStorage.getItem('stellar:weather:theme') === 'true') {
+      afterVisiblePaint(function () { loadWeather(); });
+    }
+  } catch (e) { /* private mode */ }
 })();
 </script>
