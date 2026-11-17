@@ -40,7 +40,7 @@ from .pwa import ASSETS, INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, RANGE
 from .postgrest import PostgrestError
 from .read import read_rows
 from .web_auth import AuthError, AuthSession, web_auth
-from . import reminders
+from . import reminders, weather
 
 log = logging.getLogger("cal-task-sync")
 
@@ -74,6 +74,7 @@ _refresh_failed: dict[str, float] = {}
 app = FastAPI(title="Stellar", docs_url=None)
 app.include_router(pwa_router)
 app.include_router(reminders.router)
+app.include_router(weather.router)
 
 
 @app.exception_handler(PostgrestError)

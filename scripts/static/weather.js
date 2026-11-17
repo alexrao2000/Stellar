@@ -1,11 +1,15 @@
 /* Weather is loaded on demand. Only the optional Space backdrop refreshes
    with the planner closed, and location requests contain no task data. */
 
-import { dayKeyFor, daylightAt, describeWeather, forecastFields, planOutdoorTime, readForecast } from './weather-model.js?v=2';
+import { dayKeyFor, daylightAt, describeWeather, planOutdoorTime, readForecast } from './weather-model.js?v=2';
 
 const PREFIX = 'stellar:weather:';
 const FORECAST_TTL = 15 * 60000;
 const CACHE_AGE = 45 * 60000;
+const DEFAULT_CITIES = [
+  { name: 'Fremont', detail: 'California, United States', latitude: 37.54827, longitude: -121.98857 },
+  { name: 'Los Angeles', detail: 'California, United States', latitude: 34.05223, longitude: -118.24368 },
+];
 const SCENE_IMAGES = {
   sun: 'fair', cloud: 'fair', night: 'sky', nightcloud: 'sky',
   rain: 'storm', storm: 'storm', snow: 'storm', fog: 'storm',
@@ -23,6 +27,14 @@ function saveSetting(name, value) {
   catch {}
 }
 
+function savedCity(value) {
+  if (!value || typeof value.name !== 'string' || !value.name.trim() ||
+      !Number.isFinite(value.latitude) || Math.abs(value.latitude) > 90 ||
+      !Number.isFinite(value.longitude) || Math.abs(value.longitude) > 180) return null;
+  return { name: value.name.trim().slice(0, 100), latitude: value.latitude, longitude: value.longitude,
+    detail: typeof value.detail === 'string' ? value.detail.slice(0, 140) : '' };
+}
+
 function element(tag, text, className) {
   const el = document.createElement(tag);
   if (text != null) el.textContent = text;
@@ -37,7 +49,11 @@ async function getJSON(base, params) {
     const url = new URL(base, location.origin);
     url.search = new URLSearchParams(params);
     const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('Your session expired. Reopen Stellar to sign in.');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(typeof error.detail === 'string' ? error.detail : 'Weather could not load. Try again.');
+    }
     return await response.json();
   } finally { clearTimeout(timeout); }
 }
@@ -121,7 +137,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
       <div class="weather-top">
         <h2 id="weather-title">Weather</h2>
         <div class="weather-actions">
-          <button type="button" class="weather-button" data-change hidden>Change city</button>
+          <button type="button" class="weather-button" data-change hidden>Cities</button>
           <button type="button" class="weather-button weather-close" aria-label="Close weather" autofocus>×</button>
         </div>
       </div>
@@ -137,10 +153,11 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
       </div>
       <section class="weather-location" aria-label="Weather location" hidden>
         <h3>Weather where you are</h3>
+        <div class="weather-saved-cities"></div>
         <form class="weather-search">
           <label for="weather-city">City or postal code</label>
           <div>
-            <input id="weather-city" type="search" required minlength="2" maxlength="100" autocomplete="off" placeholder="Search for a city">
+            <input id="weather-city" type="search" required minlength="2" maxlength="100" autocomplete="off" enterkeyhint="search" placeholder="Search for a city">
             <button class="weather-button" type="submit">Search</button>
           </div>
         </form>
@@ -184,12 +201,48 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   const dialogScene = changeScene($('.weather-dialog-sky'));
   const spaceScene = changeScene(backdrop);
   const appDay = dayKeyFor(taskTimeZone);
-  let place = readSetting('place'), task = readSetting('task'), forecast, forecastAt = 0, lastTry = 0;
+  const savedRecents = readSetting('recent');
+  let recents = (Array.isArray(savedRecents) ? savedRecents : []).map(savedCity).filter(Boolean).slice(0, 6);
+  let place = savedCity(readSetting('place')) || recents[0] || null;
+  let task = readSetting('task'), forecast, forecastAt = 0, lastTry = 0;
   let dateFormat, weekdayFormat, monthDayFormat, timeFormat, dateKey, selectedDay, taskRecords, taskPending = false, taskError = false;
   let forecastJob, taskJob, taskReadVersions, citySearch = 0, placeVersion = 0, taskVersion = 0, themeVersion = 0;
   let themed = readSetting('theme') === true;
   ui.theme.checked = themed;
   ui.duration.value = ['30', '45', '60', '90'].includes(readSetting('duration')) ? readSetting('duration') : '45';
+
+  function rememberPlace(city) {
+    recents = [city, ...recents.filter(recent => pointKey(recent) !== pointKey(city))].slice(0, 6);
+    saveSetting('place', city);
+    saveSetting('recent', recents);
+  }
+
+  function cityButton(city) {
+    const button = element('button', null, 'weather-button weather-city');
+    button.type = 'button';
+    const active = place && pointKey(place) === pointKey(city);
+    button.setAttribute('aria-pressed', String(!!active));
+    button.append(element('strong', city.name));
+    if (city.detail) button.append(element('span', city.detail));
+    button.addEventListener('click', () => selectPlace(city));
+    return button;
+  }
+
+  function paintCities() {
+    const groups = [];
+    for (const [label, cities] of [['Recently used', recents], ['Defaults', DEFAULT_CITIES]]) {
+      if (!cities.length) continue;
+      const section = element('div', null, 'weather-city-group');
+      const heading = element('h4', label);
+      const list = element('div', null, 'weather-city-list');
+      list.setAttribute('role', 'group');
+      list.setAttribute('aria-label', label);
+      list.append(...cities.map(cityButton));
+      section.append(heading, list);
+      groups.push(section);
+    }
+    $('.weather-saved-cities').replaceChildren(...groups);
+  }
 
   function syncPool() {
     pool?.contentDocument?.documentElement.toggleAttribute('data-weather-backdrop', themed && !!forecast);
@@ -393,10 +446,9 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     if (!force && Date.now() - forecastAt < FORECAST_TTL) return Promise.resolve(true);
     const ticket = placeVersion;
     lastTry = Date.now();
-    if (!forecast) paintStatus('Loading forecast…');
-    forecastJob = getJSON('https://api.open-meteo.com/v1/forecast', {
-      latitude: place.latitude, longitude: place.longitude, timezone: 'auto',
-      forecast_days: 7, timeformat: 'unixtime', ...forecastFields,
+    paintStatus(forecast ? 'Updating forecast…' : 'Loading forecast…');
+    forecastJob = getJSON('/api/weather/forecast', {
+      latitude: place.latitude, longitude: place.longitude,
     }).then(data => {
       if (ticket !== placeVersion) return false;
       acceptForecast(data, Date.now());
@@ -404,13 +456,14 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
       paintStatus();
       paintForecast();
       return true;
-    }).catch(() => {
+    }).catch(error => {
       if (ticket === placeVersion) {
         if (forecast && Date.now() - forecastAt >= CACHE_AGE) {
           forecast = null; applyTheme(); paintForecast();
           trigger.querySelector('[data-weather-temp]').hidden = true;
         }
-        paintStatus(forecast ? 'Showing the last available forecast.' : 'Could not load weather.', true);
+        const message = error.name === 'AbortError' ? 'Weather took too long. Try again.' : error.message;
+        paintStatus((forecast ? 'Showing the last available forecast. ' : '') + message, true);
       }
       return false;
     }).finally(() => { if (ticket === placeVersion) forecastJob = null; });
@@ -429,10 +482,12 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     taskRecords = null; taskJob = null; taskReadVersions = null; selectedDay = null;
     taskPending = false; taskError = false;
     trigger.querySelector('[data-weather-temp]').hidden = true;
-    saveSetting('place', place);
+    rememberPlace(place);
     ui.location.hidden = true;
     $('.weather-results').replaceChildren();
     $('.weather-search-note').textContent = '';
+    $('#weather-city').value = '';
+    paintCities();
     paintForecast();
     refreshWeather();
   }
@@ -445,24 +500,25 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     const status = $('.weather-search-note'), results = $('.weather-results');
     status.textContent = 'Searching…'; results.replaceChildren();
     try {
-      const data = await getJSON('https://geocoding-api.open-meteo.com/v1/search', { name, count: 6, language: 'en' });
+      const data = await getJSON('/api/weather/cities', { name });
       if (ticket !== citySearch) return;
       const cities = (data.results || []).filter(city => Number.isFinite(city.latitude) && Number.isFinite(city.longitude));
       status.textContent = cities.length ? '' : 'No matching cities. Try a nearby city or postal code.';
-      cities.forEach(city => {
-        const button = element('button', null, 'weather-button weather-city');
-        button.type = 'button';
-        button.append(element('strong', city.name), element('span', [city.admin1, city.country].filter(Boolean).join(', ')));
-        button.addEventListener('click', () => selectPlace({ name: city.name, latitude: city.latitude, longitude: city.longitude }));
-        results.append(button);
-      });
-    } catch {
-      if (ticket === citySearch) status.textContent = 'Could not search cities. Try again.';
+      cities.forEach(city => results.append(cityButton({
+        name: city.name, detail: [city.admin1, city.country].filter(Boolean).join(', '),
+        latitude: city.latitude, longitude: city.longitude,
+      })));
+    } catch (error) {
+      if (ticket === citySearch) status.textContent = error.name === 'AbortError' ? 'City search took too long. Try again.' : error.message;
     }
   });
 
   $('.weather-close').addEventListener('click', () => dialog.close());
-  ui.change.addEventListener('click', () => { ui.location.hidden = false; $('#weather-city').focus(); });
+  ui.change.addEventListener('click', () => {
+    ui.location.hidden = !ui.location.hidden;
+    ui.change.setAttribute('aria-expanded', String(!ui.location.hidden));
+    if (!ui.location.hidden) paintCities();
+  });
   ui.retry.addEventListener('click', () => refreshWeather(true));
   ui.theme.addEventListener('change', () => {
     themed = ui.theme.checked;
@@ -485,6 +541,8 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   });
   dialog.addEventListener('close', () => trigger.focus({ preventScroll: true }));
 
+  if (place) rememberPlace(place);
+  paintCities();
   restoreForecast();
   if (themed) refreshForecast();
   window.StellarSync?.subscribe(['records', 'definitions'], observed => refreshTasks(true, observed));

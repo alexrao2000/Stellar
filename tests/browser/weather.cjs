@@ -25,17 +25,15 @@ async function check(engine, mobile) {
     let code = 63;
     let releaseForecast;
     const firstForecast = new Promise(resolve => { releaseForecast = resolve; });
-    await context.route('https://geocoding-api.open-meteo.com/v1/search?*', route => route.fulfill({
-      json: { results: [{ name: 'Los Angeles', admin1: 'California', country: 'United States', latitude: 34.05, longitude: -118.24 }] },
-    }));
-    await context.route('https://api.open-meteo.com/v1/forecast?*', async route => {
-      await firstForecast;
-      await route.fulfill({ json: forecast(code) });
-    });
     await context.route('**/api/**', async route => {
       const url = new URL(route.request().url());
       let data = {};
-      if (url.pathname === '/api/range') {
+      if (url.pathname === '/api/weather/forecast') {
+        await firstForecast;
+        data = forecast(code);
+      } else if (url.pathname === '/api/weather/cities') {
+        data = { results: [{ name: 'Los Angeles', admin1: 'California', country: 'United States', latitude: 34.05, longitude: -118.24 }] };
+      } else if (url.pathname === '/api/range') {
         const days = {};
         const end = new Date(url.searchParams.get('end') + 'T12:00:00Z');
         for (let date = new Date(url.searchParams.get('start') + 'T12:00:00Z'); date <= end; date.setUTCDate(date.getUTCDate() + 1)) {
@@ -60,7 +58,7 @@ async function check(engine, mobile) {
     await dialog.getByRole('searchbox').fill('Los Angeles');
     await dialog.getByRole('button', { name: 'Search', exact: true }).click();
     const taskRead = page.waitForRequest(request => request.url().includes('/api/range?start=2026-11-16&end=2026-11-24'));
-    await dialog.getByRole('button', { name: /Los Angeles/ }).click();
+    await dialog.locator('.weather-results').getByRole('button', { name: /Los Angeles/ }).click();
     await taskRead;
     assert.equal(requests.filter(url => url.includes('.jpg')).length, 0, 'The task read starts before the forecast and artwork are available');
     releaseForecast();
