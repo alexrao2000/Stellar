@@ -477,6 +477,28 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 
   var CACHE = {};
   var pending = {};
+  var CACHE_READY = 'stellar:space-cache-ready';
+  var sessionReady = !BOOT.shell, sessionEnded = false, startupRead, startupVersions, resumePolling;
+  var startupApplied = false, startupSequence, startupDay;
+  window.top.addEventListener('stellar:task-cache-cleared', function () { sessionEnded = true; });
+  function rememberSession() {
+    sessionReady = true;
+    try { localStorage.setItem(CACHE_READY, '1'); } catch (e) {}
+  }
+
+  function acceptRecords(response, startup) {
+    if (sessionEnded) throw new Error('Session ended.');
+    if (response.status === 401 || response.status === 403) {
+      window.top.stellarClearTaskCache?.();
+      window.top.location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+    }
+    if (!response.ok) return;
+    rememberSession();
+    if (startup) {
+      try { startupVersions = JSON.parse(response.headers.get('X-Stellar-Revisions')); }
+      catch (e) { startupVersions = null; }
+    }
+  }
 
   /* The list order, as titles: what the server says, plus any drag made here
      since. Kept locally so a day painted from the cache comes out in the new
@@ -522,6 +544,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 
   function storeRead(day) {
     try {
+      if (!sessionReady && localStorage.getItem(CACHE_READY) !== '1') return null;
       var raw = localStorage.getItem(STORE + day);
       return raw ? JSON.parse(raw) : null;
     } catch (e) { return null; }             // private mode, or disabled
@@ -563,13 +586,14 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     requestAnimationFrame(function () { setTimeout(callback, 0); });
   }
 
-  function fetchDay(day, forceFresh) {
+  function fetchDay(day, forceFresh, startup) {
     var orderAtStart = orderVersion, epochAtStart = writeEpoch;
     var key = day + ':' + epochAtStart;
     if (!forceFresh && pending[key]) return pending[key];
     var version = ++readVersion;
-    var request = fetch('/api/day/' + day + '?fresh=true', { cache: 'no-store' })
+    var request = fetch('/api/day/' + day + '?fresh=true' + (startup ? '&with_revisions=true' : ''), { cache: 'no-store' })
       .then(function (r) {
+        acceptRecords(r, startup);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
@@ -593,6 +617,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 
   function showDay(day, opts) {
     opts = opts || {};
+    if (!opts.startup) resumePolling?.();
     if (DAY !== day) document.querySelector('.wake-editor[open]')?.close();
     DAY = day;
     paintHeader(day);
@@ -625,22 +650,23 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     /* Confirm against the server behind the paint. Not announced: the check
        is for the page's benefit, and a label flashing on every day change is
        noise. A real difference repaints; a failure says so below. */
-    if (known) scheduleRangeWarmup();
-    return fetchDay(day).then(function (rows) {
-      if (DAY !== day || VIEW !== 'day') return;
+    return fetchDay(day, false, opts.startup).then(function (rows) {
+      if (DAY !== day || VIEW !== 'day') return false;
       /* Only repaint on a real difference. Re-rendering identical rows would
          throw away focus and any half-typed measurement to show the same
          thing, which is exactly the flicker this is meant to remove. */
       if (ORDER !== knownOrder || JSON.stringify(rows) !== knownJson) render(rows);
       loading.hidden = true;
       tasks.hidden = false;
-      if (!known) scheduleRangeWarmup();
+      scheduleRangeWarmup();
+      return true;
     }).catch(function (e) {
       /* With a local copy on screen this is a stale-data warning, not a
          failure: say which it is rather than blaming the rows on display. */
       if (DAY !== day || VIEW !== 'day') return;
       loading.hidden = true;
       tasks.hidden = false;
+      recordsDirty = true;
       if (e.message === 'Record changed during read') return;
       say(known ? 'Showing the last known copy: ' + e.message
                 : 'Could not load: ' + e.message, true);
@@ -739,6 +765,13 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   var writesInFlight = 0, writeEpoch = 0;
 
   function post(url, body) {
+    if (sessionEnded) return Promise.reject(new Error('Session ended.'));
+    if (!sessionReady) {
+      return Promise.resolve(startupRead).then(function () {
+        if (!sessionReady) throw new Error('Connect to Stellar before making changes.');
+        return post(url, body);
+      });
+    }
     writesInFlight++; writeEpoch++;
     var settled = function () {
       writesInFlight--; writeEpoch++;
@@ -1426,11 +1459,27 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
       return true;
     }).catch(function () { recordsDirty = true; return false; });
   }
-  window.StellarSync?.subscribe(['records', 'definitions'], function () { recordsDirty = true; return revalidate(true); });
+  var initialVersionsPending = true;
+  window.StellarSync?.subscribe(['records', 'definitions'], function (observed) {
+    if (initialVersionsPending) {
+      initialVersionsPending = false;
+      if (startupApplied && rangeSeq === startupSequence && DAY === startupDay && !recordsDirty && startupVersions && ['records', 'definitions'].every(function (scope) {
+        return startupVersions[scope] === observed[scope];
+      })) return true;
+    }
+    recordsDirty = true;
+    return revalidate(true);
+  });
   function legacyRefresh() { if (!window.StellarSync?.managed) revalidate(); else window.StellarSync.retry(); }
   document.addEventListener('visibilitychange', legacyRefresh);
   window.addEventListener('focus', legacyRefresh);
-  window.addEventListener('storage', function (e) { if (e.key === 'stellar:records-changed') { recordsDirty = true; legacyRefresh(); } });
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'stellar:records-changed') { recordsDirty = true; legacyRefresh(); }
+    if (e.key === CACHE_READY && e.newValue === null) {
+      sessionEnded = true;
+      window.top.location.replace('/login');
+    }
+  });
   setInterval(function () { if (!window.StellarSync?.managed) revalidate(); }, POLL_MS);
 
   /* showDay handles read-only, materialising and the window; the first call
@@ -1477,6 +1526,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     activeReorder?.();
     if (VIEW !== view || DAY !== day) document.querySelector('.wake-editor[open]')?.close();
     opts = opts || {};
+    if (!opts.startup) resumePolling?.();
     rangeSeq++;
     SHOWN = null;
     VIEW = view;
@@ -1503,10 +1553,11 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     document.getElementById('range-end').value = CUSTOM.end;
     if (!opts.pop) {
       history[opts.replace ? 'replaceState' : 'pushState'](
-        { view: view, day: day, start: CUSTOM.start, end: CUSTOM.end }, '', urlFor(view, day));
+        { view: view, day: day, start: CUSTOM.start, end: CUSTOM.end }, '',
+        urlFor(view, day) + (opts.focus ? '&focus=' + opts.focus : ''));
     }
     say('');
-    return showRange(r[0], r[1]);
+    return showRange(r[0], r[1], opts.startup);
   }
 
   /* Range views share Day's cache and reuse a running read when it covers the
@@ -1544,14 +1595,15 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     return changed.length > 0;
   }
 
-  function readRange(start, end, background, forceFresh) {
+  function readRange(start, end, background, forceFresh, startup) {
     var pending = !forceFresh && rangeReads.find(function (read) {
       return read.epoch === writeEpoch && read.start <= start && read.end >= end;
     });
     if (pending) return pending;
     var read = { start: start, end: end, epoch: writeEpoch, version: ++readVersion, order: orderVersion };
-    read.promise = fetch('/api/range?start=' + start + '&end=' + end, { cache: 'no-store', priority: background ? 'low' : 'high' })
+    read.promise = fetch('/api/range?start=' + start + '&end=' + end + (startup ? '&with_revisions=true' : ''), { cache: 'no-store', priority: background ? 'low' : 'high' })
       .then(function (res) {
+        acceptRecords(res, startup);
         return res.json().then(function (j) {
           if (!res.ok) throw new Error(j.detail || ('HTTP ' + res.status));
           return j;
@@ -1563,7 +1615,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     return read;
   }
 
-  function showRange(start, end) {
+  function showRange(start, end, startup) {
     if (VIEW !== 'month') loadRangeAssets().catch(function () {});
     var days = daysIn(start, end);
     restoreDays(days);
@@ -1573,13 +1625,14 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
       board.classList.remove('range-board');
       board.innerHTML = '<div class="stellar-loading" role="status"><span class="stellar-spinner" aria-hidden="true"></span><span>Loading range…</span></div>';
     }
-    return loadRange(days, false).then(function (loaded) {
-      if (loaded) scheduleRangeWarmup();
+    return loadRange(days, false, false, startup).then(function (loaded) {
+      if (loaded && !startup) scheduleRangeWarmup();
+      return loaded;
     });
   }
 
-  function loadRange(days, background, forceFresh) {
-    var seq = rangeSeq, read = readRange(days[0], days.at(-1), background || !!SHOWN, forceFresh);
+  function loadRange(days, background, forceFresh, startup) {
+    var seq = rangeSeq, read = readRange(days[0], days.at(-1), background || !!SHOWN, forceFresh, startup);
     return read.promise
       .then(function (data) {
         if (seq !== rangeSeq) return false;
@@ -1597,7 +1650,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
         recordsDirty = true;
         if (!background || !SHOWN) {
           if (!SHOWN) document.getElementById('board').replaceChildren();
-          say('Could not load: ' + e.message, true);
+          say(SHOWN ? 'Showing cached tasks. Could not refresh.' : 'Could not load: ' + e.message, true);
         }
         return false;
       });
@@ -1917,7 +1970,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     }
     weatherStatus.textContent = 'Loading weather…';
     weatherRetry.hidden = true;
-    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=2')]).then(function (ready) {
+    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=3')]).then(function (ready) {
       return ready[1].mountWeather({
         dialog: weatherDialog, trigger: weatherTrigger, taskTimeZone: BOOT.tz,
         openDay: function (day) { go('day', day); },
@@ -1940,7 +1993,35 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   weatherTrigger.addEventListener('click', openWeather);
   weatherRetry.addEventListener('click', openWeather);
 
-  go(VIEW, DAY, { replace: true });
+  function validLaunchDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return null;
+    var date = new Date(value + 'T00:00:00Z');
+    return Number.isFinite(+date) && date.toISOString().slice(0, 10) === value ? value : null;
+  }
+  var launch = new URL(window.stellarSpaceLocation || location.href, location.origin).searchParams;
+  if (BOOT.shell || window.stellarSpaceLocation) {
+    var savedView = launch.get('view');
+    VIEW = ['3days', 'week', 'month', 'custom'].includes(savedView) ? savedView : 'day';
+    DAY = validLaunchDate(launch.get('day')) || shownToday;
+    if (VIEW === 'custom') {
+      var first = validLaunchDate(launch.get('start')) || shiftDay(DAY, -6);
+      var last = validLaunchDate(launch.get('end')) || DAY;
+      if (first > last) [first, last] = [last, first];
+      if (daysBetween(first, last) >= BOOT.rangeMax) last = shiftDay(first, BOOT.rangeMax - 1);
+      CUSTOM = { start: first, end: last };
+      DAY = last;
+    } else {
+      CUSTOM = { start: shiftDay(DAY, -6), end: DAY };
+    }
+  }
+  if (sessionReady) rememberSession();
+  startupRead = go(VIEW, DAY, { replace: true, startup: true, focus: validLaunchDate(launch.get('focus')) }).then(function (applied) {
+    startupApplied = applied === true;
+    return applied;
+  });
+  startupSequence = rangeSeq;
+  startupDay = DAY;
+  resumePolling = window.StellarSync?.startAfter?.(startupRead, function () { return startupVersions; });
   try {
     if (localStorage.getItem('stellar:weather:theme') === 'true') {
       afterVisiblePaint(function () { loadWeather(); });

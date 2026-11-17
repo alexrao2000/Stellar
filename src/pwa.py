@@ -1,8 +1,11 @@
 """Public installation assets and a shared, standards-mode document shell.
 
-Only the offline page and app artwork are cached on the phone. Authenticated
-pages, API responses, and writes always use the network.
+The public Space shell and its assets are cached on the phone. Authenticated
+documents, API responses, and writes use the network.
 """
+from hashlib import sha256
+import json
+import os
 from pathlib import Path
 import re
 
@@ -49,7 +52,7 @@ LEGACY_ICONS = {
     "icon-512.png": "stellar-512.png",
     "apple-touch-icon.png": "stellar-apple-touch-icon.png",
 }
-PUBLIC_PATHS = {"/manifest.webmanifest", "/sw.js", "/offline"} | {
+PUBLIC_PATHS = {"/manifest.webmanifest", "/sw.js", "/offline", "/space-shell"} | {
     f"/app-assets/{name}" for name in ASSET_TYPES
 }
 router = APIRouter()
@@ -65,10 +68,10 @@ HEAD = """<meta charset="utf-8">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
-<script src="/app-assets/navigation.js?v=4"></script>
+<script src="/app-assets/navigation.js?v=5"></script>
 <script src="/app-assets/sections.js?v=1"></script>
 <link rel="stylesheet" href="/app-assets/sections.css?v=1">
-<script src="/app-assets/sync.js?v=1"></script>
+<script src="/app-assets/sync.js?v=2"></script>
 <script src="/app-assets/reports.js?v=10"></script>
 <link rel="stylesheet" href="/app-assets/reports.css?v=13">
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
@@ -78,6 +81,10 @@ HEAD = """<meta charset="utf-8">
 <link rel="stylesheet" href="/app-assets/space-theme.css?v=1">
 <script src="/app-assets/workspace.js?v=11" defer></script>
 <script src="/app-assets/app.js?v=10" defer></script>"""
+
+RANGE_ASSETS = ("/app-assets/ranges.css?v=9", "/app-assets/ranges.js?v=9")
+SPACE_ASSETS = [*re.findall(r'(?:src|href)="(/app-assets/[^"]+)"', HEAD), *RANGE_ASSETS,
+                "/app-assets/stellar.svg"]
 
 INSTALL_BUTTON = '<button type="button" class="install-button" aria-label="Install app" title="Install app" data-install hidden>Install app</button>'
 INSTALL_DIALOG = """<dialog id="install-dialog" class="install-ui" aria-labelledby="install-title">
@@ -125,9 +132,15 @@ def manifest() -> JSONResponse:
 
 
 @router.get("/sw.js", include_in_schema=False)
-def service_worker() -> FileResponse:
-    return FileResponse(ASSETS / "sw.js", media_type="text/javascript",
-                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+def service_worker() -> Response:
+    template = ASSETS.parent / "templates" / "today.html"
+    commit = os.getenv("VERCEL_GIT_COMMIT_SHA", "")
+    build = sha256(template.read_bytes() + HEAD.encode() + commit.encode()).hexdigest()
+    script = (ASSETS / "sw.js").read_text(encoding="utf-8")
+    script = script.replace('/* SPACE_ASSETS */ []', json.dumps(SPACE_ASSETS))
+    script = script.replace('"__BUILD__"', json.dumps(build[:16]))
+    return Response(script, media_type="text/javascript",
+                    headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
 
 
 @router.get("/offline", include_in_schema=False)

@@ -43,7 +43,6 @@ async function getJSON(base, params) {
 }
 
 function sceneFor(forecast, now) {
-  if (!forecast) return { kind: 'nightcloud', phase: 'night' };
   const { phase } = daylightAt(forecast, now);
   const code = forecast.current.weather_code;
   if (!Number.isFinite(code)) return { kind: phase === 'day' ? 'cloud' : 'nightcloud', phase };
@@ -187,7 +186,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   const appDay = dayKeyFor(taskTimeZone);
   let place = readSetting('place'), task = readSetting('task'), forecast, forecastAt = 0, lastTry = 0;
   let dateFormat, weekdayFormat, monthDayFormat, timeFormat, dateKey, selectedDay, taskRecords, taskPending = false, taskError = false;
-  let forecastJob, taskJob, citySearch = 0, placeVersion = 0, taskVersion = 0, themeVersion = 0;
+  let forecastJob, taskJob, taskReadVersions, citySearch = 0, placeVersion = 0, taskVersion = 0, themeVersion = 0;
   let themed = readSetting('theme') === true;
   ui.theme.checked = themed;
   ui.duration.value = ['30', '45', '60', '90'].includes(readSetting('duration')) ? readSetting('duration') : '45';
@@ -242,7 +241,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     ui.theme.disabled = !forecast && !themed;
     if (!place) ui.location.hidden = false;
     const now = Date.now() / 1000;
-    dialogScene(sceneFor(forecast, now));
+    dialogScene(forecast ? sceneFor(forecast, now) : null);
     if (!forecast) return;
     const { current, days, hours } = forecast;
     const { daylight } = daylightAt(forecast, now);
@@ -360,14 +359,18 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     }
   }
 
-  function refreshTasks(force = false) {
-    if (!dialog.open || !forecast) return Promise.resolve(false);
+  function refreshTasks(force = false, observed) {
+    if (!dialog.open || !place) return Promise.resolve(false);
+    if (observed && taskReadVersions && ['records', 'definitions'].every(scope => observed[scope] === taskReadVersions[scope])) {
+      if (taskJob) return taskJob;
+      if (taskRecords && !taskError) return Promise.resolve(true);
+    }
     if (!force && taskJob) return taskJob;
     const ticket = ++taskVersion;
-    const lastDay = forecast.days.at(-1);
-    const start = appDay(Date.now() / 1000);
-    const end = appDay(Number.isFinite(lastDay.sunset) ? lastDay.sunset : lastDay.time + 86399);
-    if (start > end) return Promise.resolve(false);
+    const now = Date.now() / 1000;
+    const start = appDay(now);
+    const end = appDay(now + 8 * 86400); // Covers seven forecast days even across time zones and a clock change.
+    taskReadVersions = window.StellarSync?.revisions;
     taskPending = true; taskError = false;
     taskJob = loadTaskDays(start, end, force).then(days => {
       if (ticket !== taskVersion) return false;
@@ -414,11 +417,16 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     return forecastJob;
   }
 
+  function refreshWeather(force = false) {
+    refreshTasks(force);
+    return refreshForecast(force);
+  }
+
   function selectPlace(city) {
     place = city;
     placeVersion++; taskVersion++; citySearch++;
     forecast = null; forecastAt = 0; forecastJob = null;
-    taskRecords = null; taskJob = null; selectedDay = null;
+    taskRecords = null; taskJob = null; taskReadVersions = null; selectedDay = null;
     taskPending = false; taskError = false;
     trigger.querySelector('[data-weather-temp]').hidden = true;
     saveSetting('place', place);
@@ -426,7 +434,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     $('.weather-results').replaceChildren();
     $('.weather-search-note').textContent = '';
     paintForecast();
-    refreshForecast().then(() => refreshTasks());
+    refreshWeather();
   }
 
   $('.weather-search').addEventListener('submit', async event => {
@@ -455,7 +463,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
 
   $('.weather-close').addEventListener('click', () => dialog.close());
   ui.change.addEventListener('click', () => { ui.location.hidden = false; $('#weather-city').focus(); });
-  ui.retry.addEventListener('click', () => refreshForecast(true).then(() => refreshTasks()));
+  ui.retry.addEventListener('click', () => refreshWeather(true));
   ui.theme.addEventListener('change', () => {
     themed = ui.theme.checked;
     saveSetting('theme', themed);
@@ -479,13 +487,13 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
 
   restoreForecast();
   if (themed) refreshForecast();
-  window.StellarSync?.subscribe(['records', 'definitions'], () => refreshTasks(true));
+  window.StellarSync?.subscribe(['records', 'definitions'], observed => refreshTasks(true, observed));
   function tick() {
     if (!window.stellarPageActive() || !dialog.open && !themed) return;
     if (dialog.open) paintForecast();
     if (themed && forecast) applyTheme();
     if (Date.now() - lastTry > 60000 && Date.now() - forecastAt >= FORECAST_TTL) {
-      refreshForecast().then(updated => { if (updated) refreshTasks(); });
+      refreshWeather();
     }
   }
   setInterval(tick, 60000);
@@ -496,8 +504,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     open() {
       if (!dialog.open) return;
       paintForecast();
-      if (forecast) refreshTasks();
-      refreshForecast().then(updated => { if (updated && !taskRecords) refreshTasks(); });
+      refreshWeather();
     },
   };
 }

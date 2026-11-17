@@ -36,7 +36,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import load_config
 from .parsers import parse_wake_up
-from .pwa import ASSETS, INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, document, router as pwa_router
+from .pwa import ASSETS, INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, RANGE_ASSETS, document, router as pwa_router
 from .postgrest import PostgrestError
 from .read import read_rows
 from .web_auth import AuthError, AuthSession, web_auth
@@ -630,8 +630,8 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     )
     range_assets = ""
     if template == "today.html" and boot.get("view") in {"3days", "week", "custom"}:
-        range_assets = ('<link rel="preload" as="style" href="/app-assets/ranges.css?v=9">'
-                        '<link rel="preload" as="script" href="/app-assets/ranges.js?v=9">')
+        range_assets = "".join(f'<link rel="preload" as="{kind}" href="{asset}">'
+                               for kind, asset in zip(("style", "script"), RANGE_ASSETS))
     html = html.replace("__RANGE_ASSETS__", range_assets)
     # A page whose data is already in the markup has nothing to wait for, and
     # gating it would be strictly worse than not: the gate lifts on the first
@@ -660,14 +660,28 @@ def _render(template: str, boot: dict, active: str = "") -> str:
 # --------------------------------------------------------------------------- #
 # API
 # --------------------------------------------------------------------------- #
-@app.get("/api/changes")
-def api_changes(request: Request) -> Response:
-    from hashlib import sha256
-
+def _sync_versions() -> dict[str, str]:
     rows = _sb().table("stellar_changes").select("scope,version").order("scope").execute().data or []
     versions = {row["scope"]: str(row["version"]) for row in rows if row["scope"] in {"records", "definitions", "pool"}}
     if set(versions) != {"records", "definitions", "pool"}:
         raise HTTPException(503, "Live sync is not initialized")
+    return versions
+
+
+def _sync_baseline(response: Response) -> None:
+    """Read the revision before the records so a concurrent edit stays detectable."""
+    try:
+        versions = _sync_versions()
+    except (PostgrestError, HTTPException):
+        return
+    response.headers["X-Stellar-Revisions"] = json.dumps(versions, separators=(",", ":"))
+
+
+@app.get("/api/changes")
+def api_changes(request: Request) -> Response:
+    from hashlib import sha256
+
+    versions = _sync_versions()
     body = json.dumps(versions, sort_keys=True, separators=(",", ":"))
     etag = '"' + sha256(body.encode()).hexdigest() + '"'
     headers = {"Cache-Control": "no-store", "ETag": etag, "Vary": "Cookie"}
@@ -1191,7 +1205,7 @@ def _recurring_defs() -> list[dict]:
 
 
 @app.get("/api/day/{day}")
-def api_day(day: str, response: Response, fresh: bool = False) -> list[dict]:
+def api_day(day: str, response: Response, fresh: bool = False, with_revisions: bool = False) -> list[dict]:
     """A day's tasks, ordered as the check-in page shows them.
 
     Background prefetches use the cached history, but the day actually visible
@@ -1202,6 +1216,8 @@ def api_day(day: str, response: Response, fresh: bool = False) -> list[dict]:
     or measurements appear to move backwards after a refresh.
     """
     _check_day(day)
+    if with_revisions:
+        _sync_baseline(response)
     defs = _definitions(fresh=True)
     live = [d for d in defs if _live(d)]
     hidden = _binned_titles(defs)
@@ -1244,7 +1260,7 @@ RANGE_MAX_DAYS = 62
 
 
 @app.get("/api/range")
-def api_range(start: str, end: str, response: Response) -> dict:
+def api_range(start: str, end: str, response: Response, with_revisions: bool = False) -> dict:
     """Every day from start to end inclusive, each as /api/day would return it.
 
     Read the month's worth of rows together, paging only if it exceeds the
@@ -1258,6 +1274,8 @@ def api_range(start: str, end: str, response: Response) -> dict:
     if (d1 - d0).days >= RANGE_MAX_DAYS:
         raise HTTPException(400, f"at most {RANGE_MAX_DAYS} days at a time")
     response.headers["Cache-Control"] = "no-store"
+    if with_revisions:
+        _sync_baseline(response)
 
     defs = _definitions(fresh=True)
     live = [d for d in defs if _live(d)]
@@ -1880,6 +1898,17 @@ def page_today(day: str | None = None, view: str = "day",
     thing done every day -- or a range of days (3 days, a week, a month, custom)
     chosen on the page, which replaced the separate calendar.
     """
+    return _space_document(day, view, start, end, tab_frame)
+
+
+@app.get("/space-shell", response_class=HTMLResponse, include_in_schema=False)
+def page_space_shell() -> HTMLResponse:
+    return HTMLResponse(_space_document(None, "day", None, None, False, shell=True),
+                        headers={"Cache-Control": "no-cache"})
+
+
+def _space_document(day: str | None, view: str, start: str | None, end: str | None,
+                    tab_frame: bool, *, shell: bool = False) -> str:
     if view not in VIEWS:
         view = "day"
     for d in (start, end):
@@ -1911,6 +1940,7 @@ def page_today(day: str | None = None, view: str = "day",
         "end": end,
         "rangeMax": RANGE_MAX_DAYS,
         "tab_frame": tab_frame,
+        "shell": shell,
     }, active="/")
 
 

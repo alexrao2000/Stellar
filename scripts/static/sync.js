@@ -1,7 +1,8 @@
 /* One visible app window polls three tiny database revision counters. Cached
    sections share it and refresh only their changed domains. Drafts and pending
    writes can defer a refresh without acknowledging the revision. Requests never
-   overlap, hidden windows pause, and failures back off without clearing the UI. */
+   overlap, hidden windows pause, and failures back off without clearing the UI.
+   The first visible Space read can finish session renewal before polling. */
 (() => {
   const scopes = ['records', 'definitions', 'pool'];
   let root;
@@ -9,16 +10,19 @@
   if (top !== window) {
     window.StellarSync = {
       get managed() { return root?.managed === true; },
+      get revisions() { return root?.revisions ?? null; },
       subscribe(domains, refresh) { return root?._register(window, domains, refresh) || (() => {}); },
       check() { root?.check(); }, retry() { root?.retry(); },
     };
   } else {
     const entries = new Set();
     let versions = null, etag = '', timer, retryTimer, busy = false, again = false, delay = 10000, stopped = false;
+    let initialRead = null;
     const visible = owner => {
       try { return !owner.document.hidden && owner.stellarPageActive?.() !== false &&
         (owner === window || !owner.frameElement.hidden && owner.frameElement.getClientRects().length > 0); } catch { return false; }
     };
+    const valid = data => scopes.every(scope => /^\d+$/.test(String(data?.[scope])));
     const dirty = entry => versions && entry.domains.some(scope => entry.seen[scope] !== versions[scope]);
     const pump = () => {
       if (document.hidden || stopped || !versions) return;
@@ -26,7 +30,7 @@
         if (entry.busy || !dirty(entry) || !visible(entry.owner)) return;
         const observed = { ...versions };
         entry.busy = true;
-        Promise.resolve().then(entry.refresh).then(applied => {
+        Promise.resolve().then(() => entry.refresh(observed)).then(applied => {
           if (applied === true) entry.domains.forEach(scope => { entry.seen[scope] = observed[scope]; });
           return applied;
         }).catch(() => false).finally(() => { entry.busy = false; });
@@ -35,7 +39,7 @@
     const retry = () => { clearTimeout(retryTimer); retryTimer = setTimeout(pump, 250); };
     const check = async () => {
       clearTimeout(timer);
-      if (stopped || document.hidden || !navigator.onLine) return;
+      if (initialRead || stopped || document.hidden || !navigator.onLine) return;
       if (busy) { again = true; return; }
       busy = true;
       const controller = new AbortController();
@@ -46,7 +50,7 @@
         if (response.status !== 304) {
           if (!response.ok) throw Error('Sync unavailable');
           const data = await response.json();
-          if (!scopes.every(scope => /^\d+$/.test(String(data[scope])))) throw Error('Invalid revisions');
+          if (!valid(data)) throw Error('Invalid revisions');
           versions = Object.fromEntries(scopes.map(scope => [scope, String(data[scope])]));
           etag = response.headers.get('ETag') || '';
         }
@@ -64,7 +68,20 @@
       owner.addEventListener('pagehide', event => { if (!event.persisted) remove(); });
       return remove;
     };
-    window.StellarSync = { get managed() { return versions !== null; }, _register: register,
+    const startAfter = (work, readVersions) => {
+      initialRead = work;
+      const ready = applied => {
+        if (initialRead !== work) return;
+        initialRead = null;
+        const baseline = applied === true ? readVersions() : null;
+        if (!versions && valid(baseline)) versions = baseline;
+        clearTimeout(timer);
+        if (!stopped && !document.hidden) timer = setTimeout(check, versions ? delay : 1200);
+      };
+      Promise.resolve(work).then(ready, ready);
+      return () => ready(false);
+    };
+    window.StellarSync = { get managed() { return versions !== null; }, get revisions() { return versions; }, _register: register, startAfter,
       subscribe(domains, refresh) { return register(window, domains, refresh); }, check, retry };
     const wake = () => { delay = 10000; check(); retry(); };
     window.addEventListener('focus', wake);
@@ -73,6 +90,7 @@
     window.addEventListener('pagehide', () => { stopped = true; clearTimeout(timer); clearTimeout(retryTimer); });
     window.addEventListener('pageshow', event => { stopped = false; if (event.persisted) wake(); });
     const start = () => {
+      if (initialRead || versions) return;
       if (!['/', '/today', '/metrics', '/data', '/tasks', '/pool', '/docs'].includes(location.pathname)) return;
       timer = setTimeout(check, 1200);
     };

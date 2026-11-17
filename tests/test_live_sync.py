@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
@@ -52,6 +52,43 @@ def test_history_change_bypasses_another_workers_cache(monkeypatch):
     monkeypatch.setattr(server, "_task_history", history)
     monkeypatch.setattr(server, "_definitions", lambda fresh=False: [] if fresh else pytest.fail("Cached definitions"))
     assert server.api_task_history(fresh=True) == []
+
+
+def test_startup_revision_is_read_before_tasks(monkeypatch):
+    calls = []
+    revision = {"records": "12", "definitions": "8", "pool": "3"}
+
+    def versions():
+        calls.append("versions")
+        return revision
+
+    def definitions(**kwargs):
+        calls.append("definitions")
+        return []
+
+    class EmptyQuery:
+        def table(self, name):
+            calls.append(name)
+            return self
+
+        def __getattr__(self, name):
+            return lambda *args: self
+
+        def execute(self):
+            return SimpleNamespace(data=[])
+
+    monkeypatch.setattr(server, "_sync_versions", versions)
+    monkeypatch.setattr(server, "_definitions", definitions)
+    monkeypatch.setattr(server, "_sb", EmptyQuery)
+    for read in (
+        lambda response: server.api_day("2026-11-16", response, with_revisions=True),
+        lambda response: server.api_range("2026-11-15", "2026-11-17", response, with_revisions=True),
+    ):
+        calls.clear()
+        response = Response()
+        read(response)
+        assert calls == ["versions", "definitions", "task_history"]
+        assert json.loads(response.headers["X-Stellar-Revisions"]) == revision
 
 
 def test_sync_endpoints_require_a_session(monkeypatch):

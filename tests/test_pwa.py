@@ -58,11 +58,19 @@ def test_public_assets_do_not_open_the_auth_boundary(client):
     assert client.get("/app-assets/credentials.json").status_code != 200
 
 
-def test_service_worker_is_revalidated_and_has_root_scope(client):
+def test_service_worker_is_revalidated_and_has_root_scope(client, monkeypatch):
     response = client.get("/sw.js")
     assert response.headers["cache-control"] == "no-cache"
     assert response.headers["service-worker-allowed"] == "/"
     assert response.headers["content-type"].startswith("text/javascript")
+    assert "/space-shell" in response.text and "/app-assets/ranges.js?v=9" in response.text
+    assert "__BUILD__" not in response.text
+    monkeypatch.setattr(server, "_sb", lambda: pytest.fail("The public shell must never fetch task data"))
+    shell = client.get("/space-shell")
+    assert shell.status_code == 200
+    assert '"shell":true' in shell.text
+    assert client.get("/?view=3days").status_code == 303
+    assert client.get("/api/range?start=2026-11-15&end=2026-11-17&with_revisions=true").status_code == 401
 
 
 class Head(HTMLParser):

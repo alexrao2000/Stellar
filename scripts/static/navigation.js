@@ -6,6 +6,19 @@
   const root = document.documentElement;
   const read = key => { try { return localStorage.getItem(key); } catch { return null; } };
   const write = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
+  window.stellarClearTaskCache = () => {
+    window.dispatchEvent(new Event('stellar:task-cache-cleared'));
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('td:') || ['task-order', 'stellar:space-cache-ready'].includes(key)) localStorage.removeItem(key);
+      }
+    } catch {}
+  };
+  document.addEventListener('submit', event => {
+    if (event.target.matches('form.signout')) window.stellarClearTaskCache();
+  }, true);
+  if (location.pathname === '/login') window.stellarClearTaskCache();
   const allowed = new Set(['/', '/today', '/metrics', '/data', '/pool', '/tasks', '/docs', '/weight', '/wake', '/consistency']);
   const safe = raw => {
     if (!raw || raw.length > 2400) return null;
@@ -19,8 +32,9 @@
   const entry = performance.getEntriesByType('navigation')[0];
   const last = safe(read('stellar:last-location'));
   if (location.pathname === '/' && !location.search && !internal && (!entry || entry.type === 'navigate') && last && last !== '/') {
-    location.replace(last);
-    return;
+    const saved = new URL(last, location.origin);
+    if (saved.pathname === '/' || saved.pathname === '/today') window.stellarSpaceLocation = last;
+    else { location.replace(last); return; }
   }
   const remember = () => {
     const url = safe(location.href);

@@ -23,10 +23,15 @@ async function check(engine, mobile) {
       if (request.url().includes('/app-assets/weather') || request.url().includes('open-meteo.com')) requests.push(request.url());
     });
     let code = 63;
+    let releaseForecast;
+    const firstForecast = new Promise(resolve => { releaseForecast = resolve; });
     await context.route('https://geocoding-api.open-meteo.com/v1/search?*', route => route.fulfill({
       json: { results: [{ name: 'Los Angeles', admin1: 'California', country: 'United States', latitude: 34.05, longitude: -118.24 }] },
     }));
-    await context.route('https://api.open-meteo.com/v1/forecast?*', route => route.fulfill({ json: forecast(code) }));
+    await context.route('https://api.open-meteo.com/v1/forecast?*', async route => {
+      await firstForecast;
+      await route.fulfill({ json: forecast(code) });
+    });
     await context.route('**/api/**', async route => {
       const url = new URL(route.request().url());
       let data = {};
@@ -54,9 +59,15 @@ async function check(engine, mobile) {
     const dialog = page.getByRole('dialog', { name: 'Weather' });
     await dialog.getByRole('searchbox').fill('Los Angeles');
     await dialog.getByRole('button', { name: 'Search', exact: true }).click();
+    const taskRead = page.waitForRequest(request => request.url().includes('/api/range?start=2026-11-16&end=2026-11-24'));
     await dialog.getByRole('button', { name: /Los Angeles/ }).click();
+    await taskRead;
+    assert.equal(requests.filter(url => url.includes('.jpg')).length, 0, 'The task read starts before the forecast and artwork are available');
+    releaseForecast();
 
     await dialog.locator('.weather-dialog-sky [data-scene=rain][data-phase=day].is-current').waitFor({ state: 'attached' });
+    assert.deepEqual([...new Set(requests.filter(url => url.includes('.jpg')).map(url => new URL(url).pathname))],
+      ['/app-assets/weather-storm.jpg']);
     await page.waitForFunction(() => document.querySelector('[data-task]')?.value === 'Run');
     assert.match(await dialog.locator('.weather-condition').textContent(), /Rain/);
     assert.match(await dialog.locator('.weather-solar').textContent(), /Sunset 5:00/);
