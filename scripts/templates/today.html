@@ -331,8 +331,9 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 #day-loading .stellar-loading, #board .stellar-loading { min-height: 100px; }
 .space-actions { display: flex; align-items: center; gap: 6px; }
 #weather-open { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-  padding: 6px 10px; min-height: 34px; border: 1px solid #aaa8ce67; border-radius: 10px;
-  color: #f4f2ff; background: linear-gradient(130deg,#26354d,#4b405f); font: 650 12px/1.2 system-ui, sans-serif; }
+  padding: 6px 12px; min-height: 34px; border: 1px solid #a9bbd67a; border-radius: 999px;
+  color: #f4f2ff; background: linear-gradient(145deg,#55627d,#28324c 75%);
+  box-shadow: inset 0 1px 0 #e7f1ff77, 0 3px 8px #1c264630; font: 650 12px/1.2 system-ui, sans-serif; }
 #weather-open [aria-hidden] { color: #ffdfa1; font-size: 16px; }
 #weather-open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .weather-load { width: min(400px, 100%); padding: 20px; text-align: center; }
@@ -1908,7 +1909,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     if (!weatherStyle) {
       weatherStyle = new Promise(function (resolve, reject) {
         var link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=1';
+        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=2';
         link.onload = resolve;
         link.onerror = function () { link.remove(); weatherStyle = null; reject(new Error('Weather styles unavailable')); };
         document.head.append(link);
@@ -1916,7 +1917,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     }
     weatherStatus.textContent = 'Loading weather…';
     weatherRetry.hidden = true;
-    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=1')]).then(function (ready) {
+    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=2')]).then(function (ready) {
       return ready[1].mountWeather({
         dialog: weatherDialog, trigger: weatherTrigger, taskTimeZone: BOOT.tz,
         openDay: function (day) { go('day', day); },

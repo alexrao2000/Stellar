@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { planOutdoorTime, readForecast } from '../scripts/static/weather-model.js';
+import { daylightAt, planOutdoorTime, readForecast } from '../scripts/static/weather-model.js';
 import fixture from './weather_fixture.cjs';
 
 const { forecast, hour, records, today } = fixture;
@@ -43,4 +43,15 @@ test('forecast days remain local while a task uses its own calendar date', () =>
   assert.equal(first.key, today);
   assert.equal(first.windows[0].date, '2026-11-17');
   assert.equal(first.windows[0].start, hour(10));
+});
+
+test('sky phases use the forecast city sunrise and sunset even with a stale daylight flag', () => {
+  const data = readForecast(forecast(63, 1));
+  for (const [time, phase, daylight] of [
+    [hour(6), 'night', false], [hour(6.75), 'dawn', false], [hour(7.25), 'dawn', true],
+    [hour(8), 'day', true], [hour(16.75), 'dusk', true], [hour(17.25), 'dusk', false],
+    [hour(18), 'night', false], [hour(6.75, 1), 'dawn', false],
+  ]) assert.deepEqual(daylightAt(data, time), { phase, daylight });
+  data.days[0].sunrise = null;
+  assert.deepEqual(daylightAt(data, hour(22)), { phase: 'night', daylight: false });
 });

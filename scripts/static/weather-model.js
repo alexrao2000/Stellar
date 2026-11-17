@@ -4,6 +4,7 @@
 
 const HOUR = 3600;
 const QUARTER = 900;
+const TWILIGHT = 1800;
 const LIMITS = { rain: 30, precipitation: 0.1, gust: 40, cold: 2, hot: 30 };
 const unsuitableCodes = new Set([56, 57, 66, 67, 71, 73, 75, 77, 85, 86, 95, 96, 99]);
 
@@ -60,6 +61,22 @@ export function readForecast(data) {
     rain: daily.precipitation_probability_max[i], code: daily.weather_code[i],
   }));
   return { current, hours, intervals, days, timezone };
+}
+
+export function daylightAt(forecast, now) {
+  const day = forecast.days.findLast(day => day.time <= now);
+  const sunrise = day?.sunrise, sunset = day?.sunset;
+  if (!Number.isFinite(sunrise) || !Number.isFinite(sunset) || sunset <= sunrise) {
+    const hour = forecast.hours.findLast(hour => hour.time <= now);
+    const daylight = hour?.daylit ?? (forecast.current.is_day === 1);
+    return { phase: daylight ? 'day' : 'night', daylight };
+  }
+  const edge = Math.min(TWILIGHT, (sunset - sunrise) / 2);
+  const daylight = now >= sunrise && now < sunset;
+  let phase = daylight ? 'day' : 'night';
+  if (now >= sunrise - edge && now < sunrise + edge) phase = 'dawn';
+  else if (now >= sunset - edge && now < sunset + edge) phase = 'dusk';
+  return { phase, daylight };
 }
 
 function usable(hour) {

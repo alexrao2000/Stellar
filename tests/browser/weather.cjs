@@ -56,9 +56,11 @@ async function check(engine, mobile) {
     await dialog.getByRole('button', { name: 'Search', exact: true }).click();
     await dialog.getByRole('button', { name: /Los Angeles/ }).click();
 
-    await dialog.locator('.weather-hero [data-scene=rain].is-current').waitFor({ state: 'attached' });
+    await dialog.locator('.weather-dialog-sky [data-scene=rain][data-phase=day].is-current').waitFor({ state: 'attached' });
     await page.waitForFunction(() => document.querySelector('[data-task]')?.value === 'Run');
     assert.match(await dialog.locator('.weather-condition').textContent(), /Rain/);
+    assert.match(await dialog.locator('.weather-solar').textContent(), /Sunset 5:00/);
+    assert.match(await dialog.locator('.weather-hourly').evaluate(el => getComputedStyle(el).backdropFilter), /blur/);
     assert.match(await dialog.locator('.weather-window-time').textContent(), /10:00.*10:45/);
     assert.match(await dialog.locator('.weather-window').textContent(), /Sunny window.*10% precipitation chance.*peaks at a 90%/s);
     assert.equal(await dialog.locator('.weather-date').count(), 7);
@@ -78,6 +80,8 @@ async function check(engine, mobile) {
     await dialog.getByLabel('Use in Space').check();
     const backdrop = page.locator('body > .space-backdrop > .weather-scene');
     await backdrop.and(page.locator('[data-scene=rain].is-current')).waitFor();
+    const spacePanel = page.locator('.wrap:not(.workspace-open), .workspace-open > .dated-tasks');
+    assert.match(await spacePanel.evaluate(el => getComputedStyle(el).backdropFilter), /blur\(22px\)/);
     if (!mobile) {
       const root = page.frameLocator('#pool-frame').locator('html');
       assert.equal(await root.getAttribute('data-weather-backdrop'), '');
@@ -102,10 +106,24 @@ async function check(engine, mobile) {
     assert.equal(await dialog.count(), 0);
     assert.equal(await page.locator('#pick').inputValue(), today);
     await trigger.click();
+    for (const [time, phase, scene] of [
+      [hour(16.75), 'dusk', 'night'], [hour(18), 'night', 'night'],
+      [hour(19), 'night', 'rain'], [hour(6.75, 1), 'dawn', 'rain'], [hour(8, 1), 'day', 'rain'],
+    ]) {
+      if (time === hour(19)) code = 63;
+      await page.clock.setFixedTime(new Date(time * 1000));
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      const selector = '[data-phase=' + phase + '][data-scene=' + scene + '].is-current';
+      await dialog.locator('.weather-dialog-sky ' + selector).waitFor({ state: 'attached' });
+      await backdrop.and(page.locator(selector)).waitFor({ state: 'attached' });
+      if (time === hour(18)) {
+        await page.screenshot({ path: '/private/tmp/stellar-weather-night-' + engine + '.jpg', type: 'jpeg', quality: 87 });
+      }
+    }
     await dialog.getByLabel('Use in Space').uncheck();
-    await backdrop.waitFor({ state: 'detached' });
+    await backdrop.first().waitFor({ state: 'detached' });
     assert.deepEqual(errors, []);
-    console.log(engine + (mobile ? ' phone' : ' desktop') + ': forecast, run recommendations, backdrop refresh, persistence and reduced motion passed');
+    console.log(engine + (mobile ? ' phone' : ' desktop') + ': forecast, glass, planner, day/night cycles and reduced motion passed');
   } finally { await browser.close(); }
 }
 
