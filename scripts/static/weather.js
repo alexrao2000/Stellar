@@ -566,6 +566,11 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   window.addEventListener('focus', tick);
   window.addEventListener('stellar:visibility', tick);
   document.addEventListener('visibilitychange', tick);
+  window.addEventListener('storage', event => {
+    if (event.key !== PREFIX + 'place') return;
+    const city = savedCity(readSetting('place'));
+    if (city && (!place || pointKey(city) !== pointKey(place))) selectPlace(city);
+  });
   window.addEventListener('pageshow', tick);
   window.addEventListener('pagehide', () => {
     backdrop.dataset.weatherMotion = dialog.dataset.weatherMotion = 'paused';

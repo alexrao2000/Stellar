@@ -19,7 +19,7 @@
     if (event.target.matches('form.signout')) window.stellarClearTaskCache();
   }, true);
   if (location.pathname === '/login') window.stellarClearTaskCache();
-  const allowed = new Set(['/', '/today', '/metrics', '/data', '/pool', '/tasks', '/docs', '/weight', '/wake', '/consistency']);
+  const allowed = new Set(['/', '/today', '/calendar', '/metrics', '/data', '/pool', '/tasks', '/docs', '/weight', '/wake', '/consistency']);
   const safe = raw => {
     if (!raw || raw.length > 2400) return null;
     try { const u = new URL(raw, location.origin); return u.origin === location.origin && allowed.has(u.pathname) && !u.searchParams.has('embedded') ? u.pathname + u.search + u.hash : null; } catch { return null; }

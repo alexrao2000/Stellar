@@ -687,9 +687,10 @@ def test_settings_page_lists_tasks_and_flags_the_migration(db, monkeypatch):
 
 
 # ---- the Tasks tab: viewing never writes ---------------------------------------
-def test_calendar_redirects_into_the_tasks_tab():
-    r = server.page_calendar()
-    assert r.status_code == 308 and r.headers["location"] == "/?view=week"
+def test_calendar_serves_a_separate_timed_schedule():
+    page = server.page_calendar()
+    assert 'id="cal-grid"' in page and '/app-assets/calendar.js?v=1' in page
+    assert '"tz":' in page and '/api/calendar/events' not in page
 
 
 def test_a_day_lists_scheduled_tasks_without_writing(db, monkeypatch):

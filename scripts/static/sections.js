@@ -29,7 +29,7 @@
     const url = new URL(raw, location.origin);
     if (url.origin !== location.origin || url.searchParams.has('embedded')) return null;
     if (['/', '/today'].includes(url.pathname)) return '/';
-    return ['/metrics', '/data', '/tasks', '/pool', '/docs'].includes(url.pathname) ? url.pathname : null;
+    return ['/calendar', '/metrics', '/data', '/tasks', '/pool', '/docs'].includes(url.pathname) ? url.pathname : null;
   };
   if (framed) {
     try { root.classList.toggle('sidebar-collapsed', parent.document.documentElement.classList.contains('sidebar-collapsed')); } catch {}
@@ -137,7 +137,7 @@
     const url = pop ? clean(raw) : entry?.url || clean(raw);
     if (!entry) {
       const frame = document.createElement('iframe');
-      frame.className = 'stellar-section'; frame.title = ({ '/': 'Space', '/data': 'Activity', '/tasks': 'Settings', '/metrics': 'Metrics', '/pool': 'Pool', '/docs': 'API' })[key] + ' · Stellar'; frame.hidden = true;
+      frame.className = 'stellar-section'; frame.title = ({ '/': 'Space', '/calendar': 'Calendar', '/data': 'Activity', '/tasks': 'Settings', '/metrics': 'Metrics', '/pool': 'Pool', '/docs': 'API' })[key] + ' · Stellar'; frame.hidden = true;
       entry = { key, url, frame, state, title: 'Stellar' }; entries.set(key, entry);
       const target = new URL(url, location.origin); target.searchParams.set('tab_frame', 'true');
       frame.addEventListener('load', () => {

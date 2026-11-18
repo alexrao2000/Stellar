@@ -91,7 +91,7 @@
     window.addEventListener('pageshow', event => { stopped = false; if (event.persisted) wake(); });
     const start = () => {
       if (initialRead || versions) return;
-      if (!['/', '/today', '/metrics', '/data', '/tasks', '/pool', '/docs'].includes(location.pathname)) return;
+      if (!['/', '/today', '/calendar', '/metrics', '/data', '/tasks', '/pool', '/docs'].includes(location.pathname)) return;
       timer = setTimeout(check, 1200);
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();

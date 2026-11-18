@@ -1970,7 +1970,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     }
     weatherStatus.textContent = 'Loading weather…';
     weatherRetry.hidden = true;
-    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=7')]).then(function (ready) {
+    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=8')]).then(function (ready) {
       return ready[1].mountWeather({
         dialog: weatherDialog, trigger: weatherTrigger, taskTimeZone: BOOT.tz,
         openDay: function (day) { go('day', day); },

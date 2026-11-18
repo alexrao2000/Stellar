@@ -1,0 +1,43 @@
+<title>Calendar · Stellar</title>
+<link rel="stylesheet" href="/app-assets/calendar.css?v=1">
+<main class="wrap calendar-app">
+  <header class="cal-heading"><div><p class="eyebrow">✦ Stellar</p><h1>Calendar</h1><p class="cal-sub">Make room for a good run.</p></div>
+    <button class="cal-button cal-primary" id="cal-add">＋ Add event</button></header>
+  <section class="cal-weather-strip" aria-label="Running planner">
+    <div class="cal-weather-copy"><span class="cal-orbit" aria-hidden="true">✧</span><div><strong>10 minutes, well timed</strong>
+      <p id="cal-weather-status" role="status">Choose your weather location to find running slots.</p></div></div>
+    <div class="cal-weather-actions"><button class="cal-button" id="cal-location">Choose city</button><button class="cal-button cal-icon-button" id="cal-weather-retry" aria-label="Refresh forecast" title="Refresh forecast">↻</button></div>
+  </section>
+  <div class="cal-toolbar"><div class="cal-date-controls"><button class="cal-button cal-icon-button" id="cal-prev" aria-label="Previous period">←</button>
+    <button class="cal-button" id="cal-today">Today</button><button class="cal-button cal-icon-button" id="cal-next" aria-label="Next period">→</button>
+    <label class="cal-date-label"><span class="cal-sr">Choose date</span><input type="date" id="cal-date"></label></div>
+    <h2 id="cal-period"></h2><div class="cal-view" role="group" aria-label="Calendar view"><button data-cal-view="day">Day</button><button data-cal-view="week">Week</button></div></div>
+  <div class="cal-meta"><span id="cal-timezone"></span><span class="cal-legend"><i></i> Suggested run <span>· Click a slot to reserve it</span></span>
+    <button class="cal-link" id="cal-options">Running hours</button></div>
+  <form id="cal-preferences" class="cal-preferences" hidden>
+    <label>From<input type="time" name="earliest" value="07:00" required></label><label>Until<input type="time" name="latest" value="21:00" required></label>
+    <label>Time around events<select name="buffer"><option value="0">No buffer</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option></select></label>
+    <button class="cal-button" type="submit">Apply</button><p>Suggestions stay within daylight and your task deadline. Up to three alternatives per day, at least an hour apart.</p>
+  </form>
+  <p id="cal-status" class="cal-status" role="status"></p>
+  <section class="cal-board" aria-label="Calendar"><div id="cal-day-heads" class="cal-day-heads"></div><div id="cal-mobile-all-day" class="cal-mobile-all-day"></div><div class="cal-scroll" id="cal-scroll"><div id="cal-grid" class="cal-grid"></div></div></section>
+  <section class="cal-agenda" aria-labelledby="cal-agenda-title"><div><h2 id="cal-agenda-title">Running outlook</h2><p>Dry, mild, low-wind windows that fit your day. Forecasts can change.</p></div><div id="cal-outlook"></div></section>
+  <dialog class="cal-dialog" id="cal-editor" aria-labelledby="cal-editor-title"><form id="cal-event-form">
+    <header><h2 id="cal-editor-title">New event</h2><button type="button" class="cal-button cal-icon-button" data-close="cal-editor" aria-label="Close event">×</button></header>
+    <label>Title<input name="title" maxlength="160" required autocomplete="off"></label>
+    <div class="cal-form-row"><label>Date<input type="date" name="day" required></label><label>Type<select name="kind"><option value="event">Event</option><option value="run">Run</option></select></label></div>
+    <label class="cal-checkbox"><input type="checkbox" name="all_day"> All day</label>
+    <div class="cal-form-row" id="cal-event-time"><label>Start<input type="time" name="time" required></label><label>Minutes<input type="number" name="duration" min="1" max="1440" step="1" value="60" required></label></div>
+    <label>Notes<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
+    <p class="cal-form-help">Times follow <span data-calendar-timezone></span>. Scheduling a run reserves time; task records stay separate.</p>
+    <p class="cal-form-error" role="alert"></p><footer><button type="button" class="cal-link cal-danger" id="cal-delete" hidden>Remove event</button><button type="submit" class="cal-button cal-primary">Save event</button></footer>
+  </form></dialog>
+  <dialog class="cal-dialog cal-run-dialog" id="cal-run" aria-labelledby="cal-run-title"><header><div><p class="eyebrow">✧ A little room to run</p><h2 id="cal-run-title">10-minute run</h2></div><button class="cal-button cal-icon-button" data-close="cal-run" aria-label="Close suggestion">×</button></header>
+    <p id="cal-run-time" class="cal-run-time"></p><p id="cal-run-weather"></p><p class="cal-form-help">Fits between your events, in daylight, before any task deadline. This is a forecast-based suggestion, not a guarantee of dry weather.</p><p class="cal-form-error" role="alert"></p>
+    <footer><button class="cal-button cal-primary" id="cal-book-run">Schedule this run</button></footer></dialog>
+  <dialog class="cal-dialog" id="cal-cities" aria-labelledby="cal-cities-title"><header><h2 id="cal-cities-title">Weather location</h2><button class="cal-button cal-icon-button" data-close="cal-cities" aria-label="Close cities">×</button></header>
+    <div id="cal-saved-cities" class="cal-city-list"></div><form id="cal-city-search"><label>Search cities<input type="search" name="city" placeholder="City or postal code" minlength="2" required></label><button class="cal-button" type="submit">Search</button></form>
+    <p id="cal-city-status" role="status"></p><div id="cal-city-results" class="cal-city-list"></div></dialog>
+</main>
+<script id="calendar-boot" type="application/json">__BOOTSTRAP__</script>
+<script type="module" src="/app-assets/calendar.js?v=1"></script>

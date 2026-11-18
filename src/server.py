@@ -40,7 +40,7 @@ from .pwa import ASSETS, INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, RANGE
 from .postgrest import PostgrestError
 from .read import read_rows
 from .web_auth import AuthError, AuthSession, web_auth
-from . import reminders, weather
+from . import calendar_schedule, reminders, weather
 
 log = logging.getLogger("cal-task-sync")
 
@@ -75,6 +75,7 @@ app = FastAPI(title="Stellar", docs_url=None)
 app.include_router(pwa_router)
 app.include_router(reminders.router)
 app.include_router(weather.router)
+app.include_router(calendar_schedule.router)
 
 
 @app.exception_handler(PostgrestError)
@@ -384,6 +385,7 @@ def favicon() -> Response:
 # which is how /docs ended up linked from the check-in page and nowhere else.
 NAV_ITEMS = (
     ("/", "Space"),
+    ("/calendar", "Calendar"),
     ("/metrics", "Metrics"),
     ("/data", "Activity"),
     ("/pool", "Pool"),
@@ -548,6 +550,7 @@ def _nav_icon(name: str) -> str:
     shapes = {
         "/": '<path d="M11 3c1.2 5 2.5 6.3 7.5 7.5-5 1.2-6.3 2.5-7.5 7.5-1.2-5-2.5-6.3-7.5-7.5C8.5 9.3 9.8 8 11 3Z"/><path d="M20 4v4m-2-2h4M19 18v3m-1.5-1.5h3"/>',
         "/metrics": '<path d="M4 4v16h16M9 15v-4M14 15V6M19 15V9"/>',
+        "/calendar": '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 10h18m-9 2c.7 2.3 1.7 3.3 4 4-2.3.7-3.3 1.7-4 4-.7-2.3-1.7-3.3-4-4 2.3-.7 3.3-1.7 4-4Z"/>',
         "/data": '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
         "/pool": '<path d="M12 3c1.5 6 3 7.5 9 9-6 1.5-7.5 3-9 9-1.5-6-3-7.5-9-9 6-1.5 7.5-3 9-9Z"/>',
         "/tasks": '<path d="M4 6h4m6 0h6M4 12h9m6 0h1M4 18h1m6 0h9"/><circle cx="11" cy="6" r="3"/><circle cx="16" cy="12" r="3"/><circle cx="8" cy="18" r="3"/>',
@@ -1945,10 +1948,14 @@ def _space_document(day: str | None, view: str, start: str | None, end: str | No
     }, active="/")
 
 
-@app.get("/calendar")
-def page_calendar() -> RedirectResponse:
-    """The calendar is a view of the Tasks tab now; old links land on its week view."""
-    return RedirectResponse("/?view=week", status_code=308)
+@app.get("/calendar", response_class=HTMLResponse)
+def page_calendar(day: str | None = None, view: str | None = None, tab_frame: bool = False) -> str:
+    if day:
+        _check_day(day)
+    if view is not None and view not in {"day", "week"}:
+        raise HTTPException(400, "Choose the day or week calendar")
+    return _render("schedule.html", {"day": day, "view": view, "tz": calendar_schedule.calendar_timezone(),
+                                     "mode": "inline", "tab_frame": tab_frame}, active="/calendar")
 
 
 def _calendar_versions() -> dict:

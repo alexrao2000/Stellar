@@ -93,7 +93,7 @@ export function weatherScene(forecast, now) {
   return { kind, phase };
 }
 
-function usable(hour) {
+export function outdoorSuitable(hour) {
   return hour.known && !hour.blocked && hour.rain <= LIMITS.rain &&
     hour.precipitation <= LIMITS.precipitation && hour.gust <= LIMITS.gust &&
     hour.minFeels >= LIMITS.cold && hour.maxFeels <= LIMITS.hot;
@@ -125,7 +125,7 @@ export function planOutdoorTime(forecast, { now, duration, title, records, taskT
       beforeDeadline = true;
       const hours = relevant.filter(hour => hour.end > start && hour.start < end);
       const covered = hours.reduce((sum, hour) => sum + Math.min(end, hour.end) - Math.max(start, hour.start), 0);
-      if (covered !== seconds || !hours.every(usable)) continue;
+      if (covered !== seconds || !hours.every(outdoorSuitable)) continue;
       const sun = hours.reduce((sum, hour) => {
         const overlap = Math.min(end, hour.end) - Math.max(start, hour.start);
         return sum + overlap * (Number.isFinite(hour.sunshine) ? hour.sunshine / HOUR : 0);

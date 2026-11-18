@@ -35,6 +35,9 @@ ASSET_TYPES = {
     "weather-fair.jpg": "image/jpeg",
     "weather-storm.jpg": "image/jpeg",
     "weather-rain.svg": "image/svg+xml",
+    "calendar.js": "text/javascript",
+    "calendar-model.js": "text/javascript",
+    "calendar.css": "text/css",
     "navigation.css": "text/css",
     "metrics.js": "text/javascript",
     "app.js": "text/javascript",
@@ -69,10 +72,10 @@ HEAD = """<meta charset="utf-8">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
-<script src="/app-assets/navigation.js?v=5"></script>
-<script src="/app-assets/sections.js?v=1"></script>
+<script src="/app-assets/navigation.js?v=6"></script>
+<script src="/app-assets/sections.js?v=2"></script>
 <link rel="stylesheet" href="/app-assets/sections.css?v=1">
-<script src="/app-assets/sync.js?v=2"></script>
+<script src="/app-assets/sync.js?v=3"></script>
 <script src="/app-assets/reports.js?v=10"></script>
 <link rel="stylesheet" href="/app-assets/reports.css?v=13">
 <link rel="stylesheet" href="/app-assets/app.css?v=6">
