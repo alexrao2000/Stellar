@@ -79,6 +79,20 @@ export function daylightAt(forecast, now) {
   return { phase, daylight };
 }
 
+export function weatherScene(forecast, now) {
+  const { phase, daylight } = daylightAt(forecast, now);
+  const code = forecast.current.weather_code;
+  let kind = 'unknown';
+  if (code === 0 || code === 1) kind = daylight ? 'sun' : 'night';
+  else if (code === 2) kind = daylight ? 'cloud' : 'nightcloud';
+  else if (code === 3) kind = 'overcast';
+  else if (code === 45 || code === 48) kind = 'fog';
+  else if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) kind = 'rain';
+  else if ([71, 73, 75, 77, 85, 86].includes(code)) kind = 'snow';
+  else if ([95, 96, 99].includes(code)) kind = 'storm';
+  return { kind, phase };
+}
+
 function usable(hour) {
   return hour.known && !hour.blocked && hour.rain <= LIMITS.rain &&
     hour.precipitation <= LIMITS.precipitation && hour.gust <= LIMITS.gust &&

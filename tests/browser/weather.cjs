@@ -64,6 +64,7 @@ async function check(engine, mobile) {
     releaseForecast();
 
     await dialog.locator('.weather-dialog-sky [data-scene=rain][data-phase=day].is-current').waitFor({ state: 'attached' });
+    const originalRain = await dialog.locator('.weather-dialog-sky .is-current').elementHandle();
     assert.deepEqual([...new Set(requests.filter(url => url.includes('.jpg')).map(url => new URL(url).pathname))],
       ['/app-assets/weather-storm.jpg']);
     await page.waitForFunction(() => document.querySelector('[data-task]')?.value === 'Run');
@@ -92,6 +93,7 @@ async function check(engine, mobile) {
     const spacePanel = page.locator('.wrap:not(.workspace-open), .workspace-open > .dated-tasks');
     assert.match(await spacePanel.evaluate(el => getComputedStyle(el).backdropFilter), /blur/);
     assert.equal(await backdrop.first().evaluate(el => getComputedStyle(el, '::before').animationPlayState), 'paused', 'Space pauses behind the weather modal');
+    assert.equal(await backdrop.locator('.weather-rain-depth').evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
     if (!mobile) {
       const root = page.frameLocator('#pool-frame').locator('html');
       assert.equal(await root.getAttribute('data-weather-backdrop'), '');
@@ -117,8 +119,17 @@ async function check(engine, mobile) {
     });
     assert(await backdrop.first().evaluate(el => el.getAnimations({ subtree: true }).find(a => a.animationName === 'weather-drift').currentTime) >= sceneTime.time,
       'Returning to Space resumes the existing animation phase');
-    code = 0;
+    const unchanged = page.waitForResponse(response => response.url().includes('/api/weather/forecast'));
     await page.clock.setFixedTime(new Date((hour(8) + 16 * 60) * 1000));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await unchanged;
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('stellar:weather:forecast'))?.at === Date.now());
+    await trigger.click();
+    assert(await originalRain.evaluate(el => document.querySelector('.weather-dialog-sky .is-current') === el),
+      'Refreshes, planner selections and reopening retain the same sky when current conditions are unchanged');
+    await dialog.getByRole('button', { name: 'Close weather' }).click();
+    code = 0;
+    await page.clock.setFixedTime(new Date((hour(8) + 32 * 60) * 1000));
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     const sunnyScene = backdrop.and(page.locator('[data-scene=sun].is-current'));
     await sunnyScene.waitFor();
@@ -136,7 +147,7 @@ async function check(engine, mobile) {
     assert.equal(await page.locator('#pick').inputValue(), today);
     await trigger.click();
     for (const [time, phase, scene] of [
-      [hour(16.75), 'dusk', 'night'], [hour(18), 'night', 'night'],
+      [hour(16.75), 'dusk', 'sun'], [hour(18), 'night', 'night'],
       [hour(19), 'night', 'rain'], [hour(6.75, 1), 'dawn', 'rain'], [hour(8, 1), 'day', 'rain'],
     ]) {
       if (time === hour(19)) code = 63;

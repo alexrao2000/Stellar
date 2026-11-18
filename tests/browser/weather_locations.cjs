@@ -16,7 +16,8 @@ async function check(engine) {
     const page = await context.newPage();
     page.setDefaultTimeout(8000);
     await page.clock.setFixedTime(new Date('2026-11-16T16:00:00Z'));
-    let fail = true, searches = 0;
+    let fail = true, searches = 0, releaseCity;
+    const pendingCity = new Promise(resolve => { releaseCity = resolve; });
     const forecasts = [], external = [], errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => {
@@ -28,7 +29,8 @@ async function check(engine) {
       if (url.pathname === '/api/weather/forecast') {
         forecasts.push(url.searchParams.get('latitude'));
         if (fail) return route.fulfill({ status: 503, json: { detail: 'Weather is temporarily unavailable. Try again.' } });
-        data = forecast(2);
+        if (url.searchParams.get('latitude') === '10') await pendingCity;
+        data = forecast(url.searchParams.get('latitude') === '10' ? 63 : 2);
       } else if (url.pathname === '/api/weather/cities') {
         searches++;
         data = { results: [{ name: 'Sample City', admin1: 'Example Region', country: 'Example Country', latitude: 10, longitude: 20 }] };
@@ -51,12 +53,23 @@ async function check(engine) {
     await dialog.locator('[data-temp]').waitFor();
     assert.equal(await dialog.locator('[data-place]').textContent(), 'Fremont');
     assert.equal(searches, 0, 'Defaults open directly without city search');
+    await dialog.getByLabel('Use in Space').check();
+    await page.locator('body > .space-backdrop .weather-scene[data-scene=cloud].is-current').waitFor();
+    await dialog.getByRole('button', { name: 'Cities', exact: true }).tap();
+    const reads = forecasts.length;
+    await defaults.getByRole('button', { name: /^Fremont/ }).tap();
+    assert.equal(forecasts.length, reads, 'Selecting the current city keeps its cached forecast and sky');
     await dialog.getByRole('button', { name: 'Cities', exact: true }).tap();
     await dialog.getByRole('group', { name: 'Recently used' }).getByRole('button', { name: /^Fremont/ }).waitFor();
     await dialog.getByRole('searchbox').fill('Sample City');
     await dialog.getByRole('button', { name: 'Search', exact: true }).tap();
     await dialog.locator('.weather-results').getByRole('button', { name: /Sample City/ }).tap();
+    await page.locator('body > .space-backdrop .weather-scene').waitFor({ state: 'detached' });
+    assert.equal(await dialog.locator('.weather-dialog-sky .is-current').count(), 0,
+      'The old city sky clears while the new city forecast is pending');
+    releaseCity();
     await page.waitForFunction(() => document.querySelector('[data-place]')?.textContent === 'Sample City');
+    await page.locator('body > .space-backdrop .weather-scene[data-scene=rain].is-current').waitFor();
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('#weather-open').tap();
     await page.waitForFunction(() => document.querySelector('[data-place]')?.textContent === 'Sample City');

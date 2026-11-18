@@ -2,7 +2,7 @@
    with the planner closed, and location requests contain no task data.
    Hidden or occluded scenes pause in place to resume without a phase reset. */
 
-import { dayKeyFor, daylightAt, describeWeather, planOutdoorTime, readForecast } from './weather-model.js?v=2';
+import { dayKeyFor, daylightAt, describeWeather, planOutdoorTime, readForecast, weatherScene } from './weather-model.js?v=3';
 
 const PREFIX = 'stellar:weather:';
 const FORECAST_TTL = 15 * 60000;
@@ -12,8 +12,8 @@ const DEFAULT_CITIES = [
   { name: 'Los Angeles', detail: 'California, United States', latitude: 34.05223, longitude: -118.24368 },
 ];
 const SCENE_IMAGES = {
-  sun: 'fair', cloud: 'fair', night: 'sky', nightcloud: 'sky',
-  rain: 'storm', storm: 'storm', snow: 'storm', fog: 'storm',
+  sun: 'fair', cloud: 'fair', overcast: 'fair', night: 'sky', nightcloud: 'sky',
+  rain: 'storm', storm: 'storm', snow: 'fair', fog: 'fair',
 };
 const images = new Map();
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -59,21 +59,6 @@ async function getJSON(base, params) {
   } finally { clearTimeout(timeout); }
 }
 
-function sceneFor(forecast, now) {
-  const { phase } = daylightAt(forecast, now);
-  const code = forecast.current.weather_code;
-  if (!Number.isFinite(code)) return { kind: phase === 'day' ? 'cloud' : 'nightcloud', phase };
-  const [, , condition] = describeWeather(code, phase === 'day');
-  let kind;
-  if (code >= 95) kind = 'storm';
-  else if (condition === 'rain') kind = 'rain';
-  else if (code === 45 || code === 48) kind = 'fog';
-  else if ([71, 73, 75, 77, 85, 86].includes(code)) kind = 'snow';
-  else if (phase === 'day') kind = code <= 1 ? 'sun' : 'cloud';
-  else kind = code <= 1 ? 'night' : 'nightcloud';
-  return { kind, phase };
-}
-
 function changeScene(host) {
   let current, requested, sequence = 0;
   return async scene => {
@@ -83,18 +68,22 @@ function changeScene(host) {
     const ticket = ++sequence;
     let incoming;
     if (scene) {
-      const url = '/app-assets/weather-' + SCENE_IMAGES[scene.kind] + '.jpg?v=1';
-      if (!images.has(url)) {
-        const img = new Image();
-        img.src = url;
-        images.set(url, img.decode().catch(() => images.delete(url)));
+      const imageName = SCENE_IMAGES[scene.kind];
+      const url = imageName ? '/app-assets/weather-' + imageName + '.jpg?v=1' : null;
+      if (url) {
+        if (!images.has(url)) {
+          const img = new Image();
+          img.src = url;
+          images.set(url, img.decode().catch(() => images.delete(url)));
+        }
+        await images.get(url);
       }
-      await images.get(url);
       if (ticket !== sequence) return;
       incoming = element('div', null, 'weather-scene');
       incoming.dataset.scene = scene.kind;
       incoming.dataset.phase = scene.phase;
-      incoming.style.setProperty('--weather-image', 'url("' + url + '")');
+      if (url) incoming.style.setProperty('--weather-image', 'url("' + url + '")');
+      if (scene.kind === 'rain' || scene.kind === 'storm') incoming.append(element('div', null, 'weather-rain-depth'));
       host.append(incoming);
     }
     const outgoing = current;
@@ -260,7 +249,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     const ticket = ++themeVersion;
     const active = themed && forecast;
     if (active) syncPool();
-    await spaceScene(active ? sceneFor(forecast, Date.now() / 1000) : null);
+    await spaceScene(active ? weatherScene(forecast, Date.now() / 1000) : null);
     if (!active) setTimeout(() => { if (ticket === themeVersion) syncPool(); }, reduceMotion.matches ? 0 : 850);
   }
   pool?.addEventListener('load', syncPool);
@@ -303,7 +292,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     ui.theme.disabled = !forecast && !themed;
     if (!place) ui.location.hidden = false;
     const now = Date.now() / 1000;
-    dialogScene(forecast ? sceneFor(forecast, now) : null);
+    dialogScene(forecast ? weatherScene(forecast, now) : null);
     if (!forecast) return;
     const { current, days, hours } = forecast;
     const { daylight } = daylightAt(forecast, now);
@@ -485,9 +474,18 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   }
 
   function selectPlace(city) {
+    if (forecast && place && pointKey(place) === pointKey(city)) {
+      place = city;
+      rememberPlace(place);
+      ui.location.hidden = true;
+      paintCities(); paintForecast(); refreshWeather();
+      return;
+    }
     place = city;
     placeVersion++; taskVersion++; citySearch++;
     forecast = null; forecastAt = 0; forecastJob = null;
+    saveSetting('forecast', null);
+    applyTheme();
     taskRecords = null; taskJob = null; taskReadVersions = null; selectedDay = null;
     taskPending = false; taskError = false;
     trigger.querySelector('[data-weather-temp]').hidden = true;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { daylightAt, planOutdoorTime, readForecast } from '../scripts/static/weather-model.js';
+import { daylightAt, planOutdoorTime, readForecast, weatherScene } from '../scripts/static/weather-model.js';
 import fixture from './weather_fixture.cjs';
 
 const { forecast, hour, records, today } = fixture;
@@ -54,4 +54,24 @@ test('sky phases use the forecast city sunrise and sunset even with a stale dayl
   ]) assert.deepEqual(daylightAt(data, time), { phase, daylight });
   data.days[0].sunrise = null;
   assert.deepEqual(daylightAt(data, hour(22)), { phase: 'night', daylight: false });
+});
+
+test('current conditions choose a stable scene independently of the selected forecast day', () => {
+  for (const [code, kind] of [[0, 'sun'], [1, 'sun'], [2, 'cloud'], [3, 'overcast'], [45, 'fog'],
+    [53, 'rain'], [63, 'rain'], [81, 'rain'], [73, 'snow'], [95, 'storm'], [null, 'unknown'], [100, 'unknown']]) {
+    const data = readForecast(forecast(code));
+    assert.deepEqual(weatherScene(data, hour(8)), { kind, phase: 'day' });
+    data.days.forEach(day => { day.code = 95; });
+    data.hours.forEach(hour => { hour.code = 95; });
+    assert.deepEqual(weatherScene(data, hour(8)), { kind, phase: 'day' });
+  }
+});
+
+test('twilight colors do not select a moon before sunset or after sunrise', () => {
+  const data = readForecast(forecast(0));
+  assert.deepEqual(weatherScene(data, hour(16.75)), { kind: 'sun', phase: 'dusk' });
+  assert.deepEqual(weatherScene(data, hour(17.25)), { kind: 'night', phase: 'dusk' });
+  assert.deepEqual(weatherScene(data, hour(6.75)), { kind: 'night', phase: 'dawn' });
+  assert.deepEqual(weatherScene(data, hour(7.25)), { kind: 'sun', phase: 'dawn' });
+  assert.deepEqual(weatherScene(readForecast(forecast(3)), hour(18)), { kind: 'overcast', phase: 'night' });
 });

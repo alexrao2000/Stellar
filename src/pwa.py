@@ -34,6 +34,7 @@ ASSET_TYPES = {
     "weather-sky.jpg": "image/jpeg",
     "weather-fair.jpg": "image/jpeg",
     "weather-storm.jpg": "image/jpeg",
+    "weather-rain.svg": "image/svg+xml",
     "navigation.css": "text/css",
     "metrics.js": "text/javascript",
     "app.js": "text/javascript",

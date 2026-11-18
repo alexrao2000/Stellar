@@ -1,5 +1,6 @@
 /* Compare rendered frames around each precipitation loop boundary. Keep the
-   cloud image still so a passing result cannot hide a precipitation reset. */
+   cloud image still so a passing result cannot hide a precipitation reset.
+   A row-energy check catches horizontal bands even when the loop is seamless. */
 const assert = require('node:assert/strict');
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
@@ -44,7 +45,13 @@ async function check(engine) {
       const image = new Image(); image.src = '/app-assets/weather-storm.jpg'; await image.decode();
     });
     for (const kind of ['rain', 'storm', 'snow']) {
-      await page.locator('.weather-scene').evaluate((el, kind) => { el.dataset.scene = kind; }, kind);
+      await page.locator('.weather-scene').evaluate((el, kind) => {
+        el.dataset.scene = kind;
+        el.replaceChildren();
+        if (kind !== 'snow') {
+          const far = document.createElement('div'); far.className = 'weather-rain-depth'; el.append(far);
+        }
+      }, kind);
       const shots = [];
       for (const fraction of [0, .999999, .5]) {
         await page.locator('.weather-scene').evaluate((el, fraction) => {
@@ -62,6 +69,26 @@ async function check(engine) {
       assert(motion > .02, `${engine} ${kind}: precipitation must visibly move, delta=${motion}`);
       console.log(`${engine} ${kind}: loop delta ${seam.toFixed(5)}, moving frame delta ${motion.toFixed(3)}`);
     }
+    await page.locator('.weather-scene').evaluate(el => { el.dataset.scene = 'rain'; });
+    await page.addStyleTag({ content: '.weather-scene { background: #000; } .weather-scene::before { visibility: hidden; }' });
+    await page.locator('.weather-scene').evaluate(el => {
+      for (const a of el.getAnimations({ subtree: true })) { a.pause(); a.currentTime = 0; }
+    });
+    const rain = (await page.screenshot()).toString('base64');
+    const bands = await page.evaluate(async src => {
+      const image = new Image(); image.src = 'data:image/png;base64,' + src; await image.decode();
+      const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const rows = Array.from({ length: canvas.height }, (_, y) => {
+        let sum = 0;
+        for (let x = 0; x < canvas.width; x++) sum += pixels[(y * canvas.width + x) * 4];
+        return sum;
+      }).sort((a, b) => b - a);
+      return rows.slice(0, Math.ceil(rows.length / 5)).reduce((a, b) => a + b, 0) / rows.reduce((a, b) => a + b, 0);
+    }, rain);
+    assert(bands < .55, `${engine}: rain should be scattered across the scene, brightest 20% of rows carry ${bands} of its light`);
+    console.log(`${engine}: brightest 20% of rain rows carry ${(bands * 100).toFixed(1)}% of its light`);
     await page.locator('.weather-scene').evaluate(el => { el.dataset.scene = 'cloud'; });
     const before = await page.locator('.weather-scene').evaluate(el => {
       const animation = el.getAnimations({ subtree: true }).find(a => a.animationName === 'weather-drift');
