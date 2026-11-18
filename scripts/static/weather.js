@@ -1,6 +1,7 @@
 /* Weather is loaded on demand. Only the optional Space backdrop refreshes
    with the planner closed, and location requests contain no task data.
-   Hidden or occluded scenes pause in place to resume without a phase reset. */
+   Hidden or occluded scenes pause in place to resume without a phase reset.
+   Failed refreshes retain the last known sky and label the forecast as stale. */
 
 import { dayKeyFor, daylightAt, describeWeather, planOutdoorTime, readForecast, weatherScene } from './weather-model.js?v=3';
 
@@ -456,10 +457,6 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
       return true;
     }).catch(error => {
       if (ticket === placeVersion) {
-        if (forecast && Date.now() - forecastAt >= CACHE_AGE) {
-          forecast = null; applyTheme(); paintForecast();
-          trigger.querySelector('[data-weather-temp]').hidden = true;
-        }
         const message = error.name === 'AbortError' ? 'Weather took too long. Try again.' : error.message;
         paintStatus((forecast ? 'Showing the last available forecast. ' : '') + message, true);
       }
