@@ -5,8 +5,7 @@
 
 html body .weather-dialog {
   width: min(960px, calc(100% - 48px)); max-width: none; max-height: calc(100dvh - 48px);
-  padding: 0; border: 1px solid #b2beda75; border-top-color: #f1f4ffd1; border-radius: 30px; overflow: auto;
-  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #666980 #202238;
+  padding: 0; border: 1px solid #b2beda75; border-top-color: #f1f4ffd1; border-radius: 30px; overflow: hidden;
   color-scheme: dark; color: #f7f6ff;
   background: #10182be8;
   box-shadow: 0 28px 95px #02030cbc; font: 15px/1.4 system-ui, sans-serif;
@@ -14,12 +13,14 @@ html body .weather-dialog {
   --glass-rim: inset 0 1px 0 #f6f8ff63, inset 0 -1px 0 #080e1940;
   --glass-control: linear-gradient(155deg, #deeaff36, #b3c5f211 60%), #111b3070;
 }
+.weather-dialog[open] { display: flex; flex-direction: column; }
 .weather-dialog::backdrop { background: #03050d9e; }
 .weather-dialog [hidden] { display: none !important; }
 .weather-dialog :is(h2, h3, p) { margin: 0; }
 .weather-dialog a { color: #e0dfff; text-underline-offset: .18em; }
 .weather-dialog :is(button, input, select, summary):focus-visible { outline: 2px solid #e6ceff; outline-offset: 3px; }
-.weather-shell { position: relative; isolation: isolate; }
+.weather-shell { position: relative; isolation: isolate; min-height: 0; overflow: auto;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #666980 #202238; }
 .weather-dialog-sky { position: absolute; inset: 0; height: 100%; max-height: 100dvh; overflow: hidden; z-index: -2; }
 .weather-shell::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(90deg, #0d192e58, transparent 85%),
@@ -100,6 +101,7 @@ html body[data-page=today]:has(> .space-backdrop .weather-scene.is-current)
 [data-weather-motion=paused] .weather-rain-depth { animation-play-state: paused; will-change: auto; }
 
 .weather-top, .weather-actions, .weather-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.weather-top { min-height: 40px; padding-right: 52px; }
 .weather-top h2 { font-size: .88rem; font-weight: 650; }
 .weather-current { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end;
   gap: 12px; text-shadow: 0 1px 16px #0a1327a6; padding: 24px 0 7px; }
@@ -115,7 +117,8 @@ html body[data-page=today]:has(> .space-backdrop .weather-scene.is-current)
 .weather-dialog .weather-button { padding: 7px 13px; min-height: 38px; border: 1px solid #e3e8ff3a;
   color: inherit; border-radius: 999px; font: inherit; font-size: .8rem; font-weight: 650; cursor: pointer; }
 .weather-dialog .weather-button:hover { background: linear-gradient(150deg, #dbe8ff52, #c8c8f925), #121b327d; }
-.weather-dialog .weather-close { display: grid; place-content: center; width: 40px; padding: 0; font-size: 1.55rem; line-height: 1; font-weight: 400; }
+.weather-dialog .weather-close { position: absolute; top: 22px; right: 29px; z-index: 2;
+  display: grid; place-content: center; width: 40px; height: 40px; padding: 0; font-size: 1.55rem; line-height: 1; font-weight: 400; }
 .weather-location { width: min(490px, 100%); padding: 23px 0 7px; }
 .weather-location h3 { font-size: 1.6rem; margin-bottom: 14px; }
 .weather-saved-cities { display: grid; gap: 13px; margin-bottom: 16px; }
@@ -206,6 +209,7 @@ html body .weather-dialog select { appearance: none; height: 44px; padding-right
   html body .weather-dialog { width: calc(100% - 14px); max-height: calc(100dvh - 14px); border-radius: 23px; }
   .weather-dialog-sky .weather-scene::before { background-position: 76% top; }
   .weather-hero { padding: max(12px, env(safe-area-inset-top)) 15px 18px; }
+  .weather-dialog .weather-close { top: max(12px, env(safe-area-inset-top)); right: 15px; }
   .weather-current { padding-top: 17px; gap: 5px; }
   .weather-content { padding: 0 9px; gap: 9px; }
   .weather-card { padding: 12px 9px 10px; border-radius: 19px; }

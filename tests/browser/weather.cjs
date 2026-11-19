@@ -78,6 +78,23 @@ async function check(engine, mobile) {
       if (mobile) await page.setViewportSize({ width, height: 844 });
       const sizes = await dialog.evaluate(el => [el.scrollWidth, el.clientWidth]);
       assert(sizes[0] <= sizes[1] + 1, `${width}px: only the hour and date strips scroll sideways (${sizes.join('/')})`);
+      await page.setViewportSize({ width, height: 568 });
+      const close = dialog.getByRole('button', { name: 'Close weather' });
+      const before = await close.boundingBox();
+      const scroller = dialog.locator('.weather-shell');
+      await scroller.evaluate(el => { el.scrollTop = el.scrollHeight; });
+      assert(await scroller.evaluate(el => el.scrollTop > 0), 'The forecast actually scrolls');
+      const after = await close.boundingBox();
+      assert(Math.abs(after.y - before.y) < 1, 'Close stays anchored when the forecast scrolls');
+      assert(await close.evaluate(el => {
+        const bounds = el.getBoundingClientRect();
+        return el.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+      }), 'Close overlays the forecast and remains clickable');
+      await close.click();
+      assert.equal(await dialog.count(), 0, 'Close works at the bottom of the forecast');
+      await trigger.click();
+      await scroller.evaluate(el => { el.scrollTop = 0; });
+      await page.setViewportSize({ width, height: mobile ? 844 : 1000 });
     }
     await dialog.locator('.weather-date[data-day="2026-11-17"]').click();
     assert.match(await dialog.locator('.weather-window').textContent(), /Task complete/);
