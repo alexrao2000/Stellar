@@ -122,16 +122,16 @@ function hourlyCode(hour, end) {
 
 export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, openDay }) {
   dialog.innerHTML = `
-    <button type="button" class="weather-button weather-close" aria-label="Close weather" autofocus>×</button>
-    <div class="weather-shell">
     <div class="weather-dialog-sky" aria-hidden="true"></div>
-    <div class="weather-hero">
-      <div class="weather-top">
-        <h2 id="weather-title">Weather</h2>
-        <div class="weather-actions">
-          <button type="button" class="weather-button" data-change hidden>Cities</button>
-        </div>
+    <header class="weather-top">
+      <h2 id="weather-title">Weather</h2>
+      <div class="weather-actions">
+        <button type="button" class="weather-button" data-change hidden>Cities</button>
+        <button type="button" class="weather-button weather-close" aria-label="Close weather" autofocus>×</button>
       </div>
+    </header>
+    <div class="weather-shell">
+    <div class="weather-hero">
       <div class="weather-current" hidden>
         <div class="weather-current-details">
           <p class="weather-place" data-place></p>

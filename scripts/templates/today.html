@@ -337,7 +337,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 #weather-open [aria-hidden] { color: #ffdfa1; font-size: 16px; }
 #weather-open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .weather-load { width: min(400px, 100%); padding: 20px; text-align: center; }
-.weather-load form { display: flex; justify-content: end; }
+.weather-load-close { flex: 0 0 auto; display: flex; justify-content: end; margin: 0; padding: 12px 12px 0; }
 .weather-dialog:not([open]) { display: none; }
 </style>
 
@@ -426,8 +426,8 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
 </div>
 
 <dialog id="weather-dialog" class="weather-dialog" aria-labelledby="weather-title">
+  <form method="dialog" class="weather-load-close"><button class="step" aria-label="Close weather">×</button></form>
   <div class="weather-load">
-    <form method="dialog"><button class="step" aria-label="Close weather">×</button></form>
     <h2 id="weather-title">Weather</h2>
     <p role="status" id="weather-load-status">Loading weather…</p>
     <button class="step wide" type="button" id="weather-load-retry" hidden>Retry</button>
@@ -1962,7 +1962,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     if (!weatherStyle) {
       weatherStyle = new Promise(function (resolve, reject) {
         var link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=6';
+        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=7';
         link.onload = resolve;
         link.onerror = function () { link.remove(); weatherStyle = null; reject(new Error('Weather styles unavailable')); };
         document.head.append(link);
@@ -1970,7 +1970,7 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
     }
     weatherStatus.textContent = 'Loading weather…';
     weatherRetry.hidden = true;
-    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=9')]).then(function (ready) {
+    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=10')]).then(function (ready) {
       return ready[1].mountWeather({
         dialog: weatherDialog, trigger: weatherTrigger, taskTimeZone: BOOT.tz,
         openDay: function (day) { go('day', day); },

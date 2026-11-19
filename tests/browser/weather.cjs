@@ -1,5 +1,6 @@
 /* Test the weather panel with a rainy day that has one sunny pre-deadline
-   window. No requests in this test use a real location or backend record. */
+   window. Close controls must survive forecast/city scrolling and a shrinking
+   viewport. No requests use a real location or backend record. */
 const assert = require('node:assert/strict');
 const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { forecast, hour, records, today } = require('../weather_fixture.cjs');
@@ -78,14 +79,19 @@ async function check(engine, mobile) {
       if (mobile) await page.setViewportSize({ width, height: 844 });
       const sizes = await dialog.evaluate(el => [el.scrollWidth, el.clientWidth]);
       assert(sizes[0] <= sizes[1] + 1, `${width}px: only the hour and date strips scroll sideways (${sizes.join('/')})`);
-      await page.setViewportSize({ width, height: 568 });
+      await page.setViewportSize({ width, height: 320 });
       const close = dialog.getByRole('button', { name: 'Close weather' });
       const before = await close.boundingBox();
       const scroller = dialog.locator('.weather-shell');
       await scroller.evaluate(el => { el.scrollTop = el.scrollHeight; });
       assert(await scroller.evaluate(el => el.scrollTop > 0), 'The forecast actually scrolls');
+      await dialog.locator('.weather-footer a').last().focus();
+      await page.keyboard.press('End');
+      await dialog.evaluate(el => { el.scrollTop = el.scrollHeight; });
+      assert.equal(await dialog.evaluate(el => el.scrollTop), 0, 'The outer modal never scrolls its header');
       const after = await close.boundingBox();
       assert(Math.abs(after.y - before.y) < 1, 'Close stays anchored when the forecast scrolls');
+      assert(after.y >= 0 && after.y + after.height <= 320, 'Close remains within a short viewport');
       assert(await close.evaluate(el => {
         const bounds = el.getBoundingClientRect();
         return el.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
@@ -93,6 +99,14 @@ async function check(engine, mobile) {
       await close.click();
       assert.equal(await dialog.count(), 0, 'Close works at the bottom of the forecast');
       await trigger.click();
+      await dialog.getByRole('button', { name: 'Cities', exact: true }).click();
+      await dialog.getByRole('searchbox').focus();
+      await scroller.evaluate(el => { el.scrollTop = el.scrollHeight; });
+      assert(await scroller.evaluate(el => el.scrollTop > 0), 'The city picker actually scrolls');
+      assert(Math.abs((await close.boundingBox()).y - before.y) < 1, 'The city picker keeps the same close-button position');
+      await close.click();
+      await trigger.click();
+      await dialog.locator('.weather-city-list .weather-city').first().click();
       await scroller.evaluate(el => { el.scrollTop = 0; });
       await page.setViewportSize({ width, height: mobile ? 844 : 1000 });
     }
