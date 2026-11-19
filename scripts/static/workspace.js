@@ -2,8 +2,8 @@
    space beside the panel. Pool stays mounted across range changes so edits
    survive. Range comparisons keep a compact width beside the stars.
    Width changes animate from the current size; Pool controls follow the panel.
-   The observed task subtree includes the Pool toggle, so unchanged labels must
-   not be rewritten and schedule another layout. */
+   Panel geometry depends on the viewport and range, never on arriving records.
+   Reveal it after its first layout and leave unchanged width animations running. */
 (() => {
   const toggle = document.getElementById('pool-toggle');
   if (!toggle) return;
@@ -11,11 +11,10 @@
   const pane = document.getElementById('pool-pane');
   const frame = document.getElementById('pool-frame');
   const tasks = host.querySelector('.dated-tasks');
-  const dayList = host.querySelector('#day-card');
   const fallback = document.getElementById('pool-fallback');
   const desktop = matchMedia('(min-width: 1100px)');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  let widthAnimation = null, initialized = false;
+  let widthAnimation = null, initialized = false, geometry = '';
   let enabled = true;
   try { enabled = localStorage.getItem('stellar:show-pool') !== 'false'; } catch {}
   let open = false;
@@ -30,16 +29,26 @@
       inset }, location.origin);
   };
   const layout = () => {
-    const previousWidth = tasks.getBoundingClientRect().width;
-    const wasOpen = open;
-    widthAnimation?.cancel(); widthAnimation = null;
     const view = document.body.dataset.range || 'day';
     const columns = Math.max(1, Number(document.body.dataset.columns) || 1);
     const minimum = view === 'month' || columns > 3 ? 560 : 380;
     const navWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-w')) || 172;
     const available = Math.min(document.documentElement.clientWidth, innerWidth - 20) - navWidth - 48;
     const fits = desktop.matches && available >= minimum + 420 + 24;
-    open = enabled && fits;
+    const nextOpen = enabled && fits;
+    const maximum = available - 420 - 24;
+    const taskColumns = view === 'day' && maximum >= 520 ? 2 : 1;
+    let width = view === 'day' ? Math.min(maximum, taskColumns === 2 ? 680 : 460) : minimum;
+    if (view === '3days') width = Math.min(maximum, 480);
+    if (view === 'week' || view === 'custom') width = Math.min(maximum, 560);
+    width = Math.max(minimum, width);
+    const nextGeometry = [fits, nextOpen, width, taskColumns].join(':');
+    if (geometry === nextGeometry) return;
+    geometry = nextGeometry;
+    const previousWidth = tasks.getBoundingClientRect().width;
+    const wasOpen = open;
+    widthAnimation?.cancel(); widthAnimation = null;
+    open = nextOpen;
     toggle.hidden = !fits;
     fallback.hidden = !desktop.matches || fits;
     toggle.setAttribute('aria-pressed', String(open));
@@ -47,21 +56,8 @@
     if (toggle.textContent !== label) toggle.textContent = label;
     host.classList.toggle('workspace-open', open);
     document.body.classList.toggle('space-open', open);
-    host.dataset.taskColumns = '1';
-    const maximum = available - 420 - 24;
-    let width = view === 'day' ? Math.min(maximum, 460) : minimum;
-    if (view === '3days') width = Math.min(maximum, 480);
-    if (view === 'week' || view === 'custom') width = Math.min(maximum, 560);
-    host.style.setProperty('--workspace-task-width', Math.max(minimum, width) + 'px');
-    if (open && view === 'day' && dayList.scrollHeight > dayList.clientHeight + 1 && maximum >= 520) {
-      width = Math.min(maximum, 680);
-      host.dataset.taskColumns = '2';
-      host.style.setProperty('--workspace-task-width', width + 'px');
-      if (dayList.scrollHeight > dayList.clientHeight + 1 && maximum >= 740) {
-        host.dataset.taskColumns = '3';
-        host.style.setProperty('--workspace-task-width', Math.min(maximum, 980) + 'px');
-      }
-    }
+    host.dataset.taskColumns = String(taskColumns);
+    host.style.setProperty('--workspace-task-width', width + 'px');
     pane.hidden = !open;
     if (open && !frame.hasAttribute('src')) frame.src = '/pool?embedded=true';
     const targetWidth = tasks.getBoundingClientRect().width;
@@ -71,6 +67,7 @@
       widthAnimation = animation;
       animation.onfinish = () => { if (widthAnimation === animation) { widthAnimation = null; notify(); } };
     }
+    host.style.removeProperty('visibility');
     initialized = true;
     notify();
   };
@@ -96,7 +93,6 @@
     requestAnimationFrame(() => { queued = false; layout(); });
   };
   new MutationObserver(schedule).observe(document.body, { attributes: true, attributeFilter: ['data-range', 'data-columns'] });
-  new MutationObserver(schedule).observe(tasks, { childList: true, subtree: true, characterData: true });
   window.addEventListener('resize', schedule);
   window.addEventListener('stellar:sidebar', layout);
   layout();
