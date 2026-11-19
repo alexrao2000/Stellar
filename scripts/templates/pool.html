@@ -11,7 +11,10 @@
    star, and local positions survive refreshes until the database confirms them.
    Failed saves stay visible and retry on the next refresh. Drops use the release
    coordinates even if move events were skipped; browser interruptions keep the
-   last dragged position. Escape explicitly restores the starting position. */
+   last dragged position. Escape explicitly restores the starting position.
+   New ready stars ignite once per document with a bounded stagger. Only artwork
+   scales; pointer targets and labels stay anchored. Redraws retain the entrance
+   timestamp so a resize cannot restart or cut short the first flare. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -50,15 +53,50 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
 .star:focus-visible .hit { outline: 2px solid var(--line-live); outline-offset: 2px; }
 .star.held { cursor: grabbing; }
-.star:not(.ghost,.ember) > svg {
+.star:not(.ghost,.ember) svg {
   transform-origin: center;
   animation: star-bloom var(--glow-period) ease-in-out var(--glow-phase) infinite;
 }
-.star:is(:hover,:focus-visible,.held) > svg,
-.sky[data-motion-paused=true] .star > svg { animation-play-state: paused; }
+.star:is(:hover,:focus-visible,.held) svg,
+.sky[data-motion-paused=true] .star svg { animation-play-state: paused; }
 @keyframes star-bloom {
   0%, 100% { opacity: var(--star-low); transform: translate(var(--star-offset), var(--star-offset)) scale(.96); }
   50% { opacity: 1; transform: translate(var(--star-offset), var(--star-offset)) scale(var(--star-bloom)); }
+}
+.sky[data-loading=false] :is(.pool-toolbar,.pool-list,.key) {
+  animation: pool-ui-enter 440ms ease-out both;
+}
+.star.igniting { animation: pool-ui-enter 340ms ease-out var(--ignite-delay) both; }
+.star-art { position: absolute; left: 0; top: 0; width: 0; height: 0;
+  transform-origin: 0 0; pointer-events: none; }
+.star.igniting .star-art {
+  animation: star-ignite 760ms cubic-bezier(.2,.7,.2,1) var(--ignite-delay) both;
+}
+.star.igniting::before {
+  content: ''; position: absolute; left: -44px; top: -44px; width: 88px; height: 88px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent, #fff9eecc, transparent) center / 64px 1px no-repeat,
+    linear-gradient(transparent, #fff9eebb, transparent) center / 1px 64px no-repeat,
+    radial-gradient(circle, #fffdf380, #c9d4ff28 24%, transparent 66%);
+  animation: star-first-light 760ms ease-out var(--ignite-delay) both;
+}
+.sky[data-motion-paused=true] .star.igniting,
+.sky[data-motion-paused=true] .star.igniting .star-art,
+.sky[data-motion-paused=true] .star.igniting::before { animation-play-state: paused; }
+.star.held::before { display: none; }
+@keyframes pool-ui-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes star-ignite {
+  0% { transform: scale(.15) rotate(var(--ignite-turn)); }
+  44% { transform: scale(1.16) rotate(4deg); }
+  72% { transform: scale(.97) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+@keyframes star-first-light {
+  0%, 8% { opacity: 0; transform: scale(.18) rotate(var(--ignite-turn)); }
+  34% { opacity: .8; }
+  65% { opacity: .24; }
+  100% { opacity: 0; transform: scale(1.4) rotate(18deg); }
 }
 /* Generous, and deliberately so. Empty sky now creates a star, which only
    works if hitting a star is easy -- the two changes hold each other up. */
@@ -276,7 +314,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star.ghost input::placeholder { color: rgba(150,146,185,.4); letter-spacing: .14em; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
-  .star > svg { animation: none !important; }
+  .star svg, .star.igniting, .star-art,
+  .sky[data-loading=false] :is(.pool-toolbar,.pool-list,.key) { animation: none !important; }
+  .star.igniting::before { display: none; }
 }
 </style>
 
@@ -579,6 +619,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       '<circle cx="13" cy="13" r="2.6" fill="rgba(176,166,214,.30)"/></svg>';
   }
 
+  var starEntrances = new Map();
   function setStarMotion(el, id) {
     var seed = 2166136261;
     String(id).split('').forEach(function (c) { seed = Math.imul(seed ^ c.charCodeAt(0), 16777619) >>> 0; });
@@ -588,6 +629,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     el.style.setProperty('--glow-phase', -((now + rnd() * glow) % glow).toFixed(3) + 's');
     el.style.setProperty('--star-low', (.58 + rnd() * .2).toFixed(3));
     el.style.setProperty('--star-bloom', (1.04 + rnd() * .1).toFixed(3));
+    el.style.setProperty('--ignite-delay', (rnd() * .38).toFixed(3) + 's');
+    el.style.setProperty('--ignite-turn', (-18 - rnd() * 24).toFixed(2) + 'deg');
   }
 
   function paint() {
@@ -596,6 +639,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     reindex();
     Array.prototype.forEach.call(sky.querySelectorAll('.star'), function (n) { n.remove(); });
 
+    var ignitions = 0;
     visible().forEach(function (t) {
       if (t.pending) {
         var ghost = document.createElement('div');
@@ -625,11 +669,24 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
         (t.x > .74 ? ' flip' : '');
       el.dataset.id = t.id;
       setStarMotion(el, t.id);
+      if (!done && !waits.length && sky.dataset.view === 'map') {
+        var key = String(t.id), entrance = starEntrances.get(key);
+        if (!entrance) {
+          entrance = { at: performance.now(), delay: parseFloat(el.style.getPropertyValue('--ignite-delay')) * 1000,
+            animate: motionActive() && ignitions++ < 32 };
+          starEntrances.set(key, entrance);
+        }
+        var elapsed = performance.now() - entrance.at;
+        if (entrance.animate && motionActive() && elapsed < entrance.delay + 760) {
+          el.classList.add('igniting');
+          el.style.setProperty('--ignite-delay', ((entrance.delay - elapsed) / 1000).toFixed(3) + 's');
+        }
+      }
       var point = screenPoint(t);
       el.style.left = point.x + 'px';
       el.style.top = point.y + 'px';
       el.innerHTML =
-        (done ? emberSVG() : (waits.length ? unlitSVG() : starSVG(t.id, magnitude(t)))) +
+        '<span class="star-art">' + (done ? emberSVG() : (waits.length ? unlitSVG() : starSVG(t.id, magnitude(t)))) + '</span>' +
         '<div class="hit"></div>' +
         '<div class="name">' + esc(t.title) + '</div>' +
         (done ? '<div class="resolvedwhen">resolved</div>' : '') +

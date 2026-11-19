@@ -3,7 +3,8 @@
    survive. Range comparisons keep a compact width beside the stars.
    Width changes animate from the current size; Pool controls follow the panel.
    Panel geometry depends on the viewport and range, never on arriving records.
-   Reveal it after its first layout and leave unchanged width animations running. */
+   Reveal it after its first layout and leave unchanged width animations running.
+   The initial UI fade changes opacity only and never repeats on record updates. */
 (() => {
   const toggle = document.getElementById('pool-toggle');
   if (!toggle) return;
@@ -67,6 +68,7 @@
       widthAnimation = animation;
       animation.onfinish = () => { if (widthAnimation === animation) { widthAnimation = null; notify(); } };
     }
+    if (!initialized) host.classList.add('workspace-ready');
     host.style.removeProperty('visibility');
     initialized = true;
     notify();

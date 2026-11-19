@@ -2,8 +2,16 @@
    space around the panel. Range days wrap to fit the task panel. Compact views
    wrap labels and native controls. Space paints a CSS starfield before its
    live canvas and records arrive. Floating panels share a viewport-based height;
-   controls stay fixed while records scroll. Month cells fill the available height. */
+   controls stay fixed while records scroll. Month cells fill the available height.
+   Initial UI fades use opacity so layout and drag coordinates stay fixed. */
 .dated-tasks { min-width: 0; }
+.workspace-ready > .dated-tasks,
+body[data-page=today] > :is(.sidenav,.nav-toggle) { animation: stellar-ui-enter 440ms ease-out both; }
+@keyframes stellar-ui-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .workspace-ready > .dated-tasks,
+  body[data-page=today] > :is(.sidenav,.nav-toggle) { animation: none; }
+}
 .space-backdrop { display: block; position: fixed; inset: 0 0 0 var(--nav-w); pointer-events: none; z-index: 0; }
 html body[data-page=today] { background: #04050a; }
 body[data-page=today] > .wrap { position: relative; z-index: 1; }
