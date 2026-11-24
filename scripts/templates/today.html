@@ -1955,22 +1955,15 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   var weatherDialog = document.getElementById('weather-dialog');
   var weatherStatus = document.getElementById('weather-load-status');
   var weatherRetry = document.getElementById('weather-load-retry');
-  var weatherModule, weatherStyle;
+  var weatherModule;
 
   function loadWeather() {
     if (weatherModule) return weatherModule;
-    if (!weatherStyle) {
-      weatherStyle = new Promise(function (resolve, reject) {
-        var link = document.createElement('link');
-        link.rel = 'stylesheet'; link.href = '/app-assets/weather.css?v=7';
-        link.onload = resolve;
-        link.onerror = function () { link.remove(); weatherStyle = null; reject(new Error('Weather styles unavailable')); };
-        document.head.append(link);
-      });
-    }
     weatherStatus.textContent = 'Loading weather…';
     weatherRetry.hidden = true;
-    weatherModule = Promise.all([weatherStyle, import('/app-assets/weather.js?v=10')]).then(function (ready) {
+    weatherModule = import('/app-assets/weather-background.js?v=1').then(function (background) {
+      return Promise.all([background.loadWeatherStyles(), import('/app-assets/weather.js?v=11')]);
+    }).then(function (ready) {
       return ready[1].mountWeather({
         dialog: weatherDialog, trigger: weatherTrigger, taskTimeZone: BOOT.tz,
         openDay: function (day) { go('day', day); },
@@ -2022,10 +2015,5 @@ html body .wake-editor [role=alert] { margin: 10px 0 0; color: var(--bad); }
   startupSequence = rangeSeq;
   startupDay = DAY;
   resumePolling = window.StellarSync?.startAfter?.(startupRead, function () { return startupVersions; });
-  try {
-    if (localStorage.getItem('stellar:weather:theme') === 'true') {
-      afterVisiblePaint(function () { loadWeather(); });
-    }
-  } catch (e) { /* private mode */ }
 })();
 </script>

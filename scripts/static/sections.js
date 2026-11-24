@@ -10,6 +10,11 @@
   try {
     if (parent !== window) active = framed ? parent.stellarSectionIsActive?.(window) !== false : parent.stellarPageActive?.() !== false;
   } catch {}
+  try {
+    if (parent !== window && parent.document.documentElement.hasAttribute('data-weather-backdrop')) {
+      root.setAttribute('data-weather-backdrop', ''); root.setAttribute('data-weather-shared', '');
+    }
+  } catch {}
   window.stellarPageActive = () => active && !document.hidden;
   window.stellarSetActive = value => {
     const changed = active !== value;
@@ -32,6 +37,7 @@
     return ['/calendar', '/metrics', '/data', '/tasks', '/pool', '/docs'].includes(url.pathname) ? url.pathname : null;
   };
   if (framed) {
+    root.dataset.sectionFrame = 'true';
     try { root.classList.toggle('sidebar-collapsed', parent.document.documentElement.classList.contains('sidebar-collapsed')); } catch {}
     const replace = history.replaceState.bind(history);
     for (const method of ['pushState', 'replaceState']) {
@@ -110,7 +116,7 @@
     const entry = [...entries.values()].find(entry => entry.frame?.contentWindow === source);
     if (entry) route(entry, url, state, method);
   };
-  const primaryNodes = () => [...document.body.children].filter(node => !node.matches('.sidenav, script, style, link, #install-dialog, .stellar-section, .stellar-transition-loader'));
+  const primaryNodes = () => [...document.body.children].filter(node => !node.matches('.sidenav, script, style, link, #install-dialog, .stellar-section, .stellar-transition-loader, .stellar-weather-backdrop'));
   const show = entry => {
     initial.scroll = current === initial ? scrollY : initial.scroll;
     current = entry;
@@ -129,6 +135,7 @@
     }
     document.title = entry.title || 'Stellar';
     remember(entry); syncSidebar();
+    window.dispatchEvent(new Event('stellar:section'));
   };
   const navigate = (raw, pop = false, state = null) => {
     const key = section(raw);

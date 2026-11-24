@@ -4,6 +4,7 @@
    Visibility-aware refreshes retain the page and never replace an open editor.
    Booking uses stable IDs, server versions and database conflict checks.
 */
+import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
 import { eventLayout, interval, localParts, overlaps, runSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=1';
 
@@ -13,7 +14,7 @@ const app = $('.calendar-app'), tz = boot.tz;
 const dateKey = dayKeyFor(tz);
 const today = () => dateKey(Date.now() / 1000);
 const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
-const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} if (key.startsWith('stellar:weather:')) notifyWeather(); };
 const element = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
 const dayFormat = new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric' });
 const shortDay = new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'short' });
@@ -237,10 +238,9 @@ async function loadForecast(force = false) {
   if (!force && Date.now() - forecastAt < 15 * 60000) return;
   const ticket = locationSeq, city = place;
   weatherPending = true; weatherError = ''; status();
-  const promise = request('/api/weather/forecast?' + new URLSearchParams({ latitude: city.latitude, longitude: city.longitude })).then(({ data }) => {
+  const promise = requestWeatherForecast(city, force).then(data => {
     if (ticket !== locationSeq) return;
     forecast = readForecast(data); forecastAt = Date.now();
-    save('stellar:weather:forecast', { key: pointKey(city), at: forecastAt, data });
   }).catch(error => { if (ticket === locationSeq) weatherError = (forecast ? 'Last available forecast. ' : '') + error.message; })
     .finally(() => { if (ticket === locationSeq) { weatherPending = false; forecastJob = null; if (!editing()) render(); else status(); } });
   forecastJob = promise; return promise;

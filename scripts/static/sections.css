@@ -1,5 +1,14 @@
 /* Keep visited sections in memory without changing their responsive viewport.
-   The shared sidebar stays above the section frames. */
+   The shared sidebar stays above the section frames; mobile documents reserve
+   its measured height so headings are never hidden beneath it. */
 .stellar-section { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 2; background: var(--surface, #fff); }
 .stellar-section[hidden], .stellar-primary-hidden { display: none !important; }
 html.stellar-section-open { overflow: hidden; }
+
+html[data-weather-backdrop] .stellar-section { background: transparent; }
+html[data-weather-shared], html[data-weather-shared] body { background: transparent !important; }
+html[data-weather-shared] body > .space-backdrop { display: none; }
+html[data-weather-backdrop] .stellar-transition-loader[data-space=true] { background: #04050a55; }
+@media (max-width: 760px) {
+  html[data-section-frame=true] body { padding-top: var(--mobile-nav-height); }
+}

@@ -1,5 +1,5 @@
 /* Scene layers crossfade independently of the forecast UI. The same layers
-   sit behind Space and Pool when the user enables the weather backdrop.
+   sit behind all app tabs when the user enables the weather backdrop.
    Fixed-size textures avoid scale/filter raster work. Scattered rain has two
    depths with independent speeds; each travels one complete tile per lap.
    The header is a separate, non-shrinking row; only the forecast shell scrolls.
@@ -238,3 +238,6 @@ html body .weather-dialog select { appearance: none; height: 44px; padding-right
     background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none;
   }
 }
+
+html[data-weather-backdrop] body[data-space-theme=true] > .space-backdrop::before,
+html[data-weather-backdrop] body[data-space-theme=true] > .space-backdrop::after { animation: none; opacity: 0; }

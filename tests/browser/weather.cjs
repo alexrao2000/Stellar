@@ -118,7 +118,7 @@ async function check(engine, mobile) {
     await dialog.getByRole('combobox', { name: 'Duration' }).selectOption('45');
     await page.screenshot({ path: '/private/tmp/stellar-weather-' + (mobile ? 'mobile' : 'desktop') + '-' + engine + '.jpg', type: 'jpeg', quality: 87 });
 
-    await dialog.getByLabel('Use in Space').check();
+    await dialog.getByLabel('Use across Stellar').check();
     const backdrop = page.locator('body > .space-backdrop > .weather-scene');
     await backdrop.and(page.locator('[data-scene=rain].is-current')).waitFor();
     const spacePanel = page.locator('.wrap:not(.workspace-open), .workspace-open > .dated-tasks');
@@ -191,7 +191,7 @@ async function check(engine, mobile) {
         await page.screenshot({ path: '/private/tmp/stellar-weather-night-' + engine + '.jpg', type: 'jpeg', quality: 87 });
       }
     }
-    await dialog.getByLabel('Use in Space').uncheck();
+    await dialog.getByLabel('Use across Stellar').uncheck();
     await backdrop.first().waitFor({ state: 'detached' });
     assert.deepEqual(errors, []);
     console.log(engine + (mobile ? ' phone' : ' desktop') + ': forecast, glass, planner, day/night cycles and reduced motion passed');

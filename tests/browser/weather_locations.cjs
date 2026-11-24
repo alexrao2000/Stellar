@@ -53,7 +53,7 @@ async function check(engine) {
     await dialog.locator('[data-temp]').waitFor();
     assert.equal(await dialog.locator('[data-place]').textContent(), 'Fremont');
     assert.equal(searches, 0, 'Defaults open directly without city search');
-    await dialog.getByLabel('Use in Space').check();
+    await dialog.getByLabel('Use across Stellar').check();
     await page.locator('body > .space-backdrop .weather-scene[data-scene=cloud].is-current').waitFor();
     await dialog.getByRole('button', { name: 'Cities', exact: true }).tap();
     const reads = forecasts.length;

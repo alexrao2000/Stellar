@@ -53,7 +53,7 @@ async function check(engine) {
       window.dispatchEvent(new Event('focus'));
     });
     await failed;
-    await page.waitForFunction(() => document.querySelector('[data-retry]')?.hidden === false);
+    await page.waitForFunction(() => window.stellarWeatherRequests?.failures.size === 1);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert(await original.evaluate(el => el.isConnected && el.classList.contains('is-current')),
       'A failed resume refresh must retain the last known weather sky instead of exposing the starfield');

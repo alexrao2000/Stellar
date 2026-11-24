@@ -1,7 +1,9 @@
-/* Weather is loaded on demand. Only the optional Space backdrop refreshes
+/* Weather is loaded on demand. The shared app backdrop refreshes
    with the planner closed, and location requests contain no task data.
    Hidden or occluded scenes pause in place to resume without a phase reset.
    Failed refreshes retain the last known sky and label the forecast as stale. */
+
+import { changeScene, notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 
 import { dayKeyFor, daylightAt, describeWeather, planOutdoorTime, readForecast, weatherScene } from './weather-model.js?v=3';
 
@@ -12,13 +14,6 @@ const DEFAULT_CITIES = [
   { name: 'Fremont', detail: 'California, United States', latitude: 37.54827, longitude: -121.98857 },
   { name: 'Los Angeles', detail: 'California, United States', latitude: 34.05223, longitude: -118.24368 },
 ];
-const SCENE_IMAGES = {
-  sun: 'fair', cloud: 'fair', overcast: 'fair', night: 'sky', nightcloud: 'sky',
-  rain: 'storm', storm: 'storm', snow: 'fair', fog: 'fair',
-};
-const images = new Map();
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-
 function readSetting(name) {
   try { return JSON.parse(localStorage.getItem(PREFIX + name)); }
   catch { return null; }
@@ -27,6 +22,7 @@ function readSetting(name) {
 function saveSetting(name, value) {
   try { localStorage.setItem(PREFIX + name, JSON.stringify(value)); }
   catch {}
+  if (['place', 'forecast', 'theme'].includes(name)) notifyWeather();
 }
 
 function savedCity(value) {
@@ -58,46 +54,6 @@ async function getJSON(base, params) {
     }
     return await response.json();
   } finally { clearTimeout(timeout); }
-}
-
-function changeScene(host) {
-  let current, requested, sequence = 0;
-  return async scene => {
-    const key = scene ? scene.kind + ':' + scene.phase : '';
-    if (key === requested) return;
-    requested = key;
-    const ticket = ++sequence;
-    let incoming;
-    if (scene) {
-      const imageName = SCENE_IMAGES[scene.kind];
-      const url = imageName ? '/app-assets/weather-' + imageName + '.jpg?v=1' : null;
-      if (url) {
-        if (!images.has(url)) {
-          const img = new Image();
-          img.src = url;
-          images.set(url, img.decode().catch(() => images.delete(url)));
-        }
-        await images.get(url);
-      }
-      if (ticket !== sequence) return;
-      incoming = element('div', null, 'weather-scene');
-      incoming.dataset.scene = scene.kind;
-      incoming.dataset.phase = scene.phase;
-      if (url) incoming.style.setProperty('--weather-image', 'url("' + url + '")');
-      if (scene.kind === 'rain' || scene.kind === 'storm') incoming.append(element('div', null, 'weather-rain-depth'));
-      host.append(incoming);
-    }
-    const outgoing = current;
-    current = incoming;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (incoming && incoming === current) incoming.classList.add('is-current');
-      if (outgoing) {
-        outgoing.classList.remove('is-current');
-        if (reduceMotion.matches) outgoing.remove();
-        else setTimeout(() => outgoing.remove(), 850);
-      }
-    }));
-  };
 }
 
 function weatherIcon(code, daylit) {
@@ -140,7 +96,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
           <p class="weather-highlow" data-highlow></p>
           <p class="weather-solar" data-solar></p>
         </div>
-        <label class="weather-theme"><input type="checkbox" data-theme role="switch"><span class="weather-switch-track" aria-hidden="true"></span><span>Use in Space</span></label>
+        <label class="weather-theme"><input type="checkbox" data-theme role="switch"><span class="weather-switch-track" aria-hidden="true"></span><span>Use across Stellar</span></label>
       </div>
       <section class="weather-location" aria-label="Weather location" hidden>
         <h3>Weather where you are</h3>
@@ -187,17 +143,14 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     status: $('[data-forecast-status]'), retry: $('[data-retry]'), change: $('[data-change]'),
     task: $('[data-task]'), duration: $('[data-duration]'), theme: $('[data-theme]'),
   };
-  const backdrop = document.querySelector('body > .space-backdrop');
-  const pool = document.getElementById('pool-frame');
   const dialogScene = changeScene($('.weather-dialog-sky'));
-  const spaceScene = changeScene(backdrop);
   const appDay = dayKeyFor(taskTimeZone);
   const savedRecents = readSetting('recent');
   let recents = (Array.isArray(savedRecents) ? savedRecents : []).map(savedCity).filter(Boolean).slice(0, 6);
   let place = savedCity(readSetting('place')) || recents[0] || null;
   let task = readSetting('task'), forecast, forecastAt = 0, lastTry = 0;
   let dateFormat, weekdayFormat, monthDayFormat, timeFormat, dateKey, selectedDay, taskRecords, taskPending = false, taskError = false;
-  let forecastJob, taskJob, taskReadVersions, citySearch = 0, placeVersion = 0, taskVersion = 0, themeVersion = 0;
+  let forecastJob, taskJob, taskReadVersions, citySearch = 0, placeVersion = 0, taskVersion = 0;
   let themed = readSetting('theme') === true;
   ui.theme.checked = themed;
   ui.duration.value = ['30', '45', '60', '90'].includes(readSetting('duration')) ? readSetting('duration') : '45';
@@ -235,25 +188,13 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     $('.weather-saved-cities').replaceChildren(...groups);
   }
 
-  function syncPool() {
-    pool?.contentDocument?.documentElement.toggleAttribute('data-weather-backdrop', themed && !!forecast);
-  }
-
   function syncMotion() {
     const visible = !document.hidden && window.stellarPageActive();
-    backdrop.dataset.weatherMotion = visible && themed && !dialog.open ? 'running' : 'paused';
     dialog.dataset.weatherMotion = visible && dialog.open ? 'running' : 'paused';
+    notifyWeather();
   }
 
-  async function applyTheme() {
-    syncMotion();
-    const ticket = ++themeVersion;
-    const active = themed && forecast;
-    if (active) syncPool();
-    await spaceScene(active ? weatherScene(forecast, Date.now() / 1000) : null);
-    if (!active) setTimeout(() => { if (ticket === themeVersion) syncPool(); }, reduceMotion.matches ? 0 : 850);
-  }
-  pool?.addEventListener('load', syncPool);
+  function applyTheme() { notifyWeather(); }
 
   function acceptForecast(data, saved) {
     forecast = readForecast(data);
@@ -272,7 +213,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
 
   function restoreForecast() {
     const saved = readSetting('forecast');
-    if (place && saved?.key === pointKey(place) && Date.now() - saved.at < CACHE_AGE) {
+    if (place && saved?.key === pointKey(place) && (Date.now() - saved.at < CACHE_AGE || top.stellarWeatherBackground?.hasForecast(saved.key))) {
       try { acceptForecast(saved.data, saved.at); }
       catch {}
     }
@@ -446,12 +387,9 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     const ticket = placeVersion;
     lastTry = Date.now();
     paintStatus(forecast ? 'Updating forecast…' : 'Loading forecast…');
-    forecastJob = getJSON('/api/weather/forecast', {
-      latitude: place.latitude, longitude: place.longitude,
-    }).then(data => {
+    forecastJob = requestWeatherForecast(place, force).then(data => {
       if (ticket !== placeVersion) return false;
       acceptForecast(data, Date.now());
-      saveSetting('forecast', { key: pointKey(place), at: forecastAt, data });
       paintStatus();
       paintForecast();
       return true;
@@ -470,7 +408,7 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     return refreshForecast(force);
   }
 
-  function selectPlace(city) {
+  function selectPlace(city, remote = false) {
     if (forecast && place && pointKey(place) === pointKey(city)) {
       place = city;
       rememberPlace(place);
@@ -481,12 +419,13 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
     place = city;
     placeVersion++; taskVersion++; citySearch++;
     forecast = null; forecastAt = 0; forecastJob = null;
-    saveSetting('forecast', null);
+    if (!remote) saveSetting('forecast', null);
     applyTheme();
     taskRecords = null; taskJob = null; taskReadVersions = null; selectedDay = null;
     taskPending = false; taskError = false;
     trigger.querySelector('[data-weather-temp]').hidden = true;
-    rememberPlace(place);
+    if (!remote) rememberPlace(place);
+    restoreForecast();
     ui.location.hidden = true;
     $('.weather-results').replaceChildren();
     $('.weather-search-note').textContent = '';
@@ -567,13 +506,21 @@ export function mountWeather({ dialog, trigger, taskTimeZone, loadTaskDays, open
   window.addEventListener('stellar:visibility', tick);
   document.addEventListener('visibilitychange', tick);
   window.addEventListener('storage', event => {
-    if (event.key !== PREFIX + 'place') return;
-    const city = savedCity(readSetting('place'));
-    if (city && (!place || pointKey(city) !== pointKey(place))) selectPlace(city);
+    if (event.key === PREFIX + 'place') {
+      const city = savedCity(readSetting('place'));
+      if (city && (!place || pointKey(city) !== pointKey(place))) selectPlace(city, true);
+    }
+    if (event.key === PREFIX + 'theme') {
+      themed = readSetting('theme') === true;
+      ui.theme.checked = themed;
+      syncMotion();
+    }
+    if (event.key === PREFIX + 'forecast') restoreForecast();
+    if (dialog.open) paintForecast();
   });
   window.addEventListener('pageshow', tick);
   window.addEventListener('pagehide', () => {
-    backdrop.dataset.weatherMotion = dialog.dataset.weatherMotion = 'paused';
+    dialog.dataset.weatherMotion = 'paused';
   });
   return {
     open() {

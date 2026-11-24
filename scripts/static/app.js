@@ -10,6 +10,22 @@
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
   new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   syncTheme();
+  let weatherBackground;
+  window.stellarLoadWeatherBackground = () => {
+    if (window !== top) return top.stellarLoadWeatherBackground?.();
+    if (!weatherBackground) weatherBackground = import('/app-assets/weather-background.js?v=1')
+      .then(module => module.mountWeatherBackground()).catch(() => { weatherBackground = null; });
+    return weatherBackground;
+  };
+  function syncWeatherBackground() {
+    if (window !== top) return;
+    let enabled = false;
+    try { enabled = localStorage.getItem('stellar:weather:theme') === 'true'; } catch {}
+    if (enabled || weatherBackground) window.stellarLoadWeatherBackground().then(background => background?.sync());
+  }
+  window.addEventListener('stellar:weather-change', syncWeatherBackground);
+  window.addEventListener('storage', event => { if (event.key?.startsWith('stellar:weather:')) syncWeatherBackground(); });
+  syncWeatherBackground();
   const standalone = matchMedia('(display-mode: standalone)');
   const dialog = document.getElementById('install-dialog');
   const buttons = document.querySelectorAll('[data-install]');

@@ -158,7 +158,7 @@ def test_cached_sections_share_only_the_outer_sidebar(client, monkeypatch):
         page = client.get(path + "?tab_frame=true")
         assert page.status_code == 200
         assert '<nav class="sidenav"' not in page.text
-        assert '/app-assets/sections.js?v=2' in page.text
+        assert '/app-assets/sections.js?v=3' in page.text
         assert 'data-embedded="true"' not in page.text
         assert '<nav class="sidenav"' in client.get(path).text
 

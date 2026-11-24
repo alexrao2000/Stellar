@@ -28,6 +28,7 @@ ASSET_TYPES = {
     "sync.js": "text/javascript",
     "ranges.js": "text/javascript",
     "ranges.css": "text/css",
+    "weather-background.js": "text/javascript",
     "weather.js": "text/javascript",
     "weather-model.js": "text/javascript",
     "weather.css": "text/css",
@@ -73,8 +74,8 @@ HEAD = """<meta charset="utf-8">
 <link rel="icon" href="/favicon.svg?v=stellar-1" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/app-assets/stellar-apple-touch-icon.png?v=2">
 <script src="/app-assets/navigation.js?v=6"></script>
-<script src="/app-assets/sections.js?v=2"></script>
-<link rel="stylesheet" href="/app-assets/sections.css?v=1">
+<script src="/app-assets/sections.js?v=3"></script>
+<link rel="stylesheet" href="/app-assets/sections.css?v=2">
 <script src="/app-assets/sync.js?v=3"></script>
 <script src="/app-assets/reports.js?v=10"></script>
 <link rel="stylesheet" href="/app-assets/reports.css?v=13">
@@ -84,7 +85,7 @@ HEAD = """<meta charset="utf-8">
 <link rel="stylesheet" href="/app-assets/navigation.css?v=8">
 <link rel="stylesheet" href="/app-assets/space-theme.css?v=2">
 <script src="/app-assets/workspace.js?v=13" defer></script>
-<script src="/app-assets/app.js?v=10" defer></script>"""
+<script src="/app-assets/app.js?v=11" defer></script>"""
 
 RANGE_ASSETS = ("/app-assets/ranges.css?v=9", "/app-assets/ranges.js?v=9")
 SPACE_ASSETS = [*re.findall(r'(?:src|href)="(/app-assets/[^"]+)"', HEAD), *RANGE_ASSETS,
