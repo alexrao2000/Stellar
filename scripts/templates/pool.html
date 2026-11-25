@@ -6,8 +6,8 @@
    frame rate. Task stars animate their outer SVG layers without changing the
    internal SVG geometry. Map resizing does not rebuild an unchanged sky.
    Motion pauses offscreen and respects the system's reduced-motion setting.
-   Dragging only moves stars; right-click opens the prerequisite picker in task
-   details. Redraws wait for a held star. Position writes run in order for each
+   Dragging only moves stars; right-click starts a dependency on the map.
+   Redraws wait for a held star. Position writes run in order for each
    star, and local positions survive refreshes until the database confirms them.
    Failed saves stay visible and retry on the next refresh. Drops use the release
    coordinates even if move events were skipped; browser interruptions keep the
@@ -189,6 +189,14 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .new button { min-height: 44px; padding: 8px 14px; border: 1px solid rgba(150,146,200,.3);
   border-radius: 8px; background: #29203f; color: #efeaff; font: inherit; cursor: pointer; }
 .pool-map { position: absolute; inset: 0; overflow: hidden; }
+.pool-map[data-linking] { cursor: crosshair; }
+.pool-map[data-linking] .star { cursor: crosshair; }
+.star.link-source .hit::after { content: ''; position: absolute; inset: 18px; border-radius: 50%; border: 1px solid #c9b8fb; box-shadow: 0 0 12px #9c80e66b; }
+.star.link-source .name { color: #e9ddff; }
+#pool-link-preview { width: 100%; height: 100%; }
+#pool-link-hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 2;
+  width: max-content; max-width: calc(100% - 24px); padding: 8px 12px; border: 1px solid var(--line-live);
+  border-radius: 8px; background: #141225; color: #efeaff; font-size: 12px; text-align: center; pointer-events: none; }
 .pool-view, .pool-list { display: none; }
 .key summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer;
   padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; color: #c4c0d6;
@@ -360,7 +368,12 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     <button type="button" id="pool-retry" hidden>Retry</button>
   </div>
   <div class="pool-map" id="pool-map">
-  <svg id="lines"></svg>
+    <svg id="lines" aria-hidden="true"></svg>
+    <svg id="pool-link-preview" aria-hidden="true">
+      <defs><marker id="pool-preview-arrow" viewBox="0 0 6 6" refX="6" refY="3" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 6 3 0 6Z" fill="#c9b8fb"/></marker></defs>
+      <path id="pool-link-guide" fill="none" stroke="#c9b8fb" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#pool-preview-arrow)"/>
+    </svg>
+    <div id="pool-link-hint" role="status" hidden></div>
   </div>
   <div class="pool-toolbar">
   <div class="hud" id="hud">Pool</div>
@@ -380,9 +393,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   <div id="veil"><div class="box" role="alertdialog" aria-modal="true"
        aria-labelledby="veilh"></div></div>
   <details class="key"><summary>How to use the pool</summary>
-    <p>Select a star to edit it, or drag to move it. Right-click a star or choose
-    Add prerequisite in task details to make it wait on another task. Select empty
-    sky to add a task there. Press Escape to cancel a drag or close task details.</p>
+    <p>Select a star to edit it, or drag to move it. To add a dependency,
+    right-click a star, then select the star that must finish first. Press Escape
+    to cancel. Select empty sky to add a task there.</p>
   </details>
 </div>
 
@@ -398,6 +411,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   var mapField = document.getElementById('pool-map');
   var poolList = document.getElementById('pool-list');
   var svg = document.getElementById('lines');
+  var linkGuide = document.getElementById('pool-link-guide');
+  var linkHint = document.getElementById('pool-link-hint');
+  var linkSource = null, linkSaving = false;
   var noteEl = document.getElementById('note');
   var panelEl = document.getElementById('panel');
   var veil = document.getElementById('veil');
@@ -423,7 +439,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
           !event.data || event.data.type !== 'stellar:pool-visibility') return;
       var wasVisible = embeddedVisible;
       embeddedVisible = event.data.visible === true;
-      if (!embeddedVisible) finishDrag(false);
+      if (!embeddedVisible) { finishDrag(false); cancelMapLink(); }
       var inset = Math.max(0, Math.min(Number(event.data.inset) || 0, innerWidth - 300));
       document.body.dataset.workspaceOverlay = String(inset > 0);
       sky.style.setProperty('--workspace-inset', inset + 'px');
@@ -552,6 +568,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   var dayMs = 86400000, collapseAfter = 90, priorityAfter = 120, ageTimer;
   var PENDING = null;                 // a star being named, not yet saved
   function isOpen(t) { return t && !t.resolved_at; }
+  function canAddPrerequisite(before, after) {
+    return isOpen(before) && !before.pending && before.id !== after.id && !EDGES.some(function (edge) {
+      return edge.before_id === before.id && edge.after_id === after.id;
+    });
+  }
   function visible() {
     return SHOW_RESOLVED ? TASKS : TASKS.filter(isOpen);
   }
@@ -735,6 +756,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (drag) { paintPending = true; return; }
     paintPending = false;
     reindex();
+    if (linkSource !== null && !isOpen(byId[linkSource])) cancelMapLink();
     var now = Date.now();
     refreshAge(now);
     Array.prototype.forEach.call(sky.querySelectorAll('.star'), function (n) { n.remove(); });
@@ -769,6 +791,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       el.className = 'star' + (done ? ' ember' : (waits.length ? ' dim' : '')) +
         (t.x > .74 ? ' flip' : '') + (holeAge ? ' black-hole' : '');
       el.dataset.id = t.id;
+      el.classList.toggle('link-source', t.id === linkSource);
       setStarMotion(el, t.id);
       if (!done && !holeAge && !waits.length && sky.dataset.view === 'map') {
         var key = String(t.id), entrance = starEntrances.get(key);
@@ -800,7 +823,10 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       el.setAttribute('role', 'button');
       el.setAttribute('aria-label', t.title + (done ? ', resolved' : holeAge ? ', black hole' : ''));
       el.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(t); }
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (linkSource === null) openPanel(t); else selectMapPrerequisite(t);
+        }
       });
       mapField.appendChild(el);
       fitLabel(el);
@@ -838,13 +864,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (PANEL_ID && !byId[PANEL_ID]) closePanel();
   }
 
-  /* Thin, solid, stopping short of both stars. Dashes and mid-line arrowheads
-     are graph-diagram furniture; a chart just joins the stars, and direction
-     is carried by which end is lit. */
   function drawLines() {
     if (!W || !H) { svg.innerHTML = ''; return; }
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    var out = '';
+    var out = '<defs><marker id="pool-edge-arrow" viewBox="0 0 6 6" refX="6" refY="3" markerWidth="6" markerHeight="6" ' +
+      'markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 6 3 0 6Z" fill="#a99cc9b0"/></marker></defs>';
     var shown = {};
     var now = Date.now(), lenses = [];
     visible().forEach(function (t) {
@@ -870,7 +894,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       var ap = screenPoint(a), bp = screenPoint(b);
       var ax = ap.x, ay = ap.y, bx = bp.x, by = bp.y;
       var dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1;
-      var ux = dx / L, uy = dy / L, pad = Math.min(L / 2, 13);
+      var ux = dx / L, uy = dy / L, pad = Math.min(L / 2, blackHoleAge(a, now) || blackHoleAge(b, now) ? 22 : 13);
       var bend = 0, center = 0, extent = 0;
       lenses.forEach(function (lens) {
         if (lens.id === a.id || lens.id === b.id) return;
@@ -889,7 +913,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
           ' ' + (ax + ux * (center + extent)) + ' ' + (ay + uy * (center + extent));
       }
       path += ' L' + (bx - ux * pad) + ' ' + (by - uy * pad);
-      out += '<path d="' + path + '" fill="none" stroke="var(--line)" stroke-width="0.7"/>';
+      out += '<path d="' + path + '" fill="none" stroke="var(--line)" stroke-width="0.7" marker-end="url(#pool-edge-arrow)"/>';
     });
     svg.innerHTML = out;
   }
@@ -898,6 +922,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var r = mapField.getBoundingClientRect();
     if (W === r.width && H === r.height) return;
     W = r.width; H = r.height;
+    linkGuide.removeAttribute('d');
     drawDust();
     paint();
   }
@@ -945,8 +970,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
 
   sky.addEventListener('pointerdown', function (e) {
-    if (!isPrimaryPress(e)) return;
-    if (drag) return;
+    if (!isPrimaryPress(e) || drag || linkSource !== null) return;
     var el = e.target.closest ? e.target.closest('.star') : null;
     if (!el || el.classList.contains('ghost')) return;
     var t = byId[el.dataset.id];
@@ -1030,11 +1054,67 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var task = trigger && byId[trigger.dataset.id || trigger.dataset.openTask];
     if (!isOpen(task) || task.pending) return;
     e.preventDefault();
+    if (trigger.matches('.star')) {
+      if (linkSaving || PENDING) return;
+      cancelMapLink();
+      closePanel();
+      linkSource = task.id;
+      mapField.dataset.linking = '';
+      trigger.classList.add('link-source');
+      trigger.focus({ preventScroll: true });
+      linkHint.hidden = false;
+      linkHint.textContent = 'Click the star that must finish first · Esc to cancel';
+      return;
+    }
     if (PANEL_ID !== task.id) openPanel(task);
     var picker = document.getElementById('pool-link-picker');
     if (!picker) return;
     picker.open = true;
     document.getElementById('pool-prerequisite').focus();
+  });
+
+  function cancelMapLink() {
+    if (linkSource === null) return false;
+    linkSource = null;
+    mapField.removeAttribute('data-linking');
+    mapField.querySelector('.link-source')?.classList.remove('link-source');
+    linkGuide.removeAttribute('d');
+    linkHint.hidden = true;
+    return true;
+  }
+
+  function selectMapPrerequisite(before) {
+    var after = byId[linkSource];
+    if (!isOpen(after)) { cancelMapLink(); return; }
+    if (!canAddPrerequisite(before, after)) {
+      linkHint.textContent = 'Choose a different open star · Esc to cancel';
+      return;
+    }
+    cancelMapLink();
+    linkSaving = true;
+    savePrerequisite(before, after).catch(function (err) { note(err.message, true); })
+      .finally(function () { linkSaving = false; });
+  }
+
+  mapField.addEventListener('pointermove', function (e) {
+    if (linkSource === null) return;
+    var after = byId[linkSource], center = screenPoint(after);
+    var target = e.target.closest('.star[data-id]');
+    var before = target && byId[target.dataset.id];
+    var bounds = mapField.getBoundingClientRect();
+    var snapped = canAddPrerequisite(before, after);
+    var point = snapped ? screenPoint(before) : { x: e.clientX - bounds.left, y: e.clientY - bounds.top };
+    var dx = center.x - point.x, dy = center.y - point.y, distance = Math.hypot(dx, dy);
+    var startPad = snapped ? 13 : 0, endPad = blackHoleAge(after, Date.now()) ? 22 : 13;
+    if (distance <= startPad + endPad) { linkGuide.removeAttribute('d'); return; }
+    linkGuide.setAttribute('d', 'M' + (point.x + dx * startPad / distance) + ' ' + (point.y + dy * startPad / distance) +
+      ' L' + (center.x - dx * endPad / distance) + ' ' + (center.y - dy * endPad / distance));
+  });
+
+  mapField.addEventListener('click', function (e) {
+    if (linkSource === null || e.button !== 0) return;
+    var target = e.target.closest('.star[data-id]');
+    if (target) selectMapPrerequisite(byId[target.dataset.id]); else cancelMapLink();
   });
 
   veil.addEventListener('pointerdown', function (e) {
@@ -1053,7 +1133,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
      request to make one where you clicked. */
   var bgPress = null;
   mapField.addEventListener('pointerdown', function (e) {
-    if (!isPrimaryPress(e) || !e.target.closest) return;
+    if (!isPrimaryPress(e) || linkSource !== null || !e.target.closest) return;
     if (e.target.closest('.star, .new, .key, .hud, #note') || e.target.closest('#panel') ||
         e.target.closest('#veil')) return;
     var dismissing = panelEl.classList.contains('open') ||
@@ -1080,6 +1160,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   document.addEventListener('keydown', function (e) {
     if (!window.stellarPageActive()) return;
     if (e.key !== 'Escape') return;
+    if (cancelMapLink()) { e.preventDefault(); return; }
     if (cancelDrag()) { e.preventDefault(); return; }
     if (veil.classList.contains('open')) { closeVeil(); return; }
     var linkPicker = document.getElementById('pool-link-picker');
@@ -1092,6 +1173,15 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 
   /* ---- the panel ------------------------------------------------------- */
   var PANEL_ID = null;
+
+  function savePrerequisite(before, after) {
+    return post('/api/pool/link?before_id=' + encodeURIComponent(before.id) + '&after_id=' + encodeURIComponent(after.id))
+      .then(function () {
+        if (canAddPrerequisite(before, after)) EDGES.push({ before_id: before.id, after_id: after.id });
+        note(after.title + ' now waits on ' + before.title);
+        paint();
+      });
+  }
 
   function closePanel() {
     PANEL_ID = null;
@@ -1141,10 +1231,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       }).join('') + '</div>';
     }
 
-    var linkable = TASKS.filter(function (other) {
-      return other.id !== t.id && isOpen(other) && !other.pending &&
-        !EDGES.some(function (edge) { return edge.before_id === other.id && edge.after_id === t.id; });
-    }).sort(function (a, b) { return a.title.localeCompare(b.title); });
+    var linkable = TASKS.filter(function (other) { return canAddPrerequisite(other, t); })
+      .sort(function (a, b) { return a.title.localeCompare(b.title); });
     if (!done && linkable.length) {
       html += '<details class="link-picker" id="pool-link-picker"><summary>Add prerequisite</summary>' +
         '<form id="pool-link-form"><label for="pool-prerequisite">Task that must finish first</label>' +
@@ -1218,12 +1306,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
         if (!before) return;
         var controls = Array.prototype.slice.call(this.querySelectorAll('button,select'));
         controls.forEach(function (control) { control.disabled = true; });
-        post('/api/pool/link?before_id=' + encodeURIComponent(before.id) + '&after_id=' + encodeURIComponent(t.id))
-          .then(function (result) {
-            if (!result.already) EDGES.push({ before_id: before.id, after_id: t.id });
-            note(t.title + ' now waits on ' + before.title);
-            paint(); openPanel(t);
-          })
+        savePrerequisite(before, t)
+          .then(function () { if (PANEL_ID === t.id) openPanel(t); })
           .catch(function (err) {
             note(err.message, true);
             controls.forEach(function (control) { control.disabled = false; });
@@ -1469,6 +1553,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   document.querySelector('.pool-view').addEventListener('click', function (e) {
     var button = e.target.closest('[data-pool-view]');
     if (!button) return;
+    cancelMapLink();
     closePanel();
     sky.dataset.view = button.dataset.poolView;
     try { localStorage.setItem(viewKey, sky.dataset.view); } catch (err) {}

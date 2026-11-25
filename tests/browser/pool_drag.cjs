@@ -183,28 +183,38 @@ async function check(engine) {
     await page.locator('.star[data-id="2"] .hit').waitFor();
     assert.equal(await page.locator('.held').count(), 0);
 
+    const secondStar = page.locator('.star[data-id="2"] .hit');
+    const linking = page.locator('#pool-map[data-linking]');
+    const guide = page.locator('#pool-link-guide');
     await star.locator('.hit').click({ button: 'right' });
-    const prerequisite = page.getByLabel('Task that must finish first');
-    await prerequisite.waitFor();
-    assert(await prerequisite.evaluate(el => el === document.activeElement));
-    assert.deepEqual(state.edges, [], 'Right-click opens the picker without saving a dependency');
+    await linking.waitFor();
+    await secondStar.hover();
+    assert.match(await guide.getAttribute('d'), /^M.+ L/);
+    assert.deepEqual(state.edges, [], 'Only selecting a prerequisite saves the dependency');
     await page.keyboard.press('Escape');
-    assert(!(await prerequisite.isVisible()), 'Escape collapses the picker');
+    assert.equal(await linking.count(), 0, 'Escape cancels linking');
+    assert.equal(await guide.getAttribute('d'), null);
+    assert.deepEqual(state.edges, []);
+
+    const positionWrites = writes;
     await star.locator('.hit').click({ button: 'right' });
-    await prerequisite.selectOption('2');
-    await page.getByRole('button', { name: 'Link task', exact: true }).click();
+    await star.locator('.hit').click();
+    assert.match(await page.locator('#pool-link-hint').textContent(), /different open star/);
+    await secondStar.click();
     await star.locator('.waiting').waitFor();
     assert.deepEqual(state.edges, [{ before_id: 2, after_id: 1 }]);
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    assert.equal(await linking.count(), 0);
+    assert.equal(writes, positionWrites, 'Selecting a prerequisite does not move either star');
+    assert.equal(await page.locator('#lines > path').getAttribute('marker-end'), 'url(#pool-edge-arrow)');
     await page.mouse.click(550, 640, { button: 'right' });
     assert.equal(await page.locator('.star.ghost').count(), 0, 'Right-clicking empty sky does not start a new task');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: 'List', exact: true }).click();
     await page.locator('[data-open-task="2"]').click({ button: 'right' });
-    await prerequisite.waitFor();
+    await page.getByLabel('Task that must finish first').waitFor();
     assert.equal(await page.locator('#pool-title').textContent(), 'Added during drag');
     assert.deepEqual(errors, []);
-    console.log(engine + ': drag persistence, ordered writes, redraws, and the right-click dependency picker passed');
+    console.log(engine + ': drag persistence, direct map linking, cancellation, and the list picker passed');
   } finally { await browser.close(); }
 }
 (async () => { for (const engine of ['chromium', 'webkit']) await check(engine); })().catch(error => { console.error(error); process.exitCode = 1; });
