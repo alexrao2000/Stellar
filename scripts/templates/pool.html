@@ -6,7 +6,8 @@
    frame rate. Task stars animate their outer SVG layers without changing the
    internal SVG geometry. Map resizing does not rebuild an unchanged sky.
    Motion pauses offscreen and respects the system's reduced-motion setting.
-   Dragging only moves stars; right-click starts a dependency on the map.
+   Dragging only moves stars. Right-click a star to link it, or empty sky to
+   name a new one. Left-clicking empty sky cancels the current map action.
    Redraws wait for a held star. Position writes run in order for each
    star, and local positions survive refreshes until the database confirms them.
    Failed saves stay visible and retry on the next refresh. Drops use the release
@@ -393,9 +394,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   <div id="veil"><div class="box" role="alertdialog" aria-modal="true"
        aria-labelledby="veilh"></div></div>
   <details class="key"><summary>How to use the pool</summary>
-    <p>Select a star to edit it, or drag to move it. To add a dependency,
-    right-click a star, then select the star that must finish first. Press Escape
-    to cancel. Select empty sky to add a task there.</p>
+    <p>Select a star to edit it, or drag to move it. Right-click a star, then
+    select the star that must finish first. Right-click empty sky to add a star
+    and press Enter to save it. Click empty sky or press Escape to cancel.</p>
   </details>
 </div>
 
@@ -598,10 +599,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (Number.isFinite(next)) ageTimer = setTimeout(paint, Math.min(next + 1, 2147483647));
   }
 
-  /* ---- naming a new star ------------------------------------------------
-     It appears where you clicked and takes a name in place. Nothing reaches
-     the database until it has one, so a stray click on empty sky costs a
-     keystroke rather than a row to clean up. */
+  /* ---- naming a new star ------------------------------------------------ */
   function beginNewStar(fx, fy) {
     if (PENDING) return;
     PENDING = { id: '__new__', title: '', notes: null, x: fx, y: fy,
@@ -626,7 +624,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (!p) return;
     title = (title || '').trim();
     if (!title) { dropNewStar(); return; }
-    PENDING = null;                   // stop a second commit from the blur
+    PENDING = null;
     post('/api/pool/task?title=' + encodeURIComponent(title) +
          '&x=' + p.x.toFixed(4) + '&y=' + p.y.toFixed(4))
       .then(function (row) {
@@ -780,8 +778,6 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
           else if (e.key === 'Escape') { e.preventDefault(); dropNewStar(); }
           e.stopPropagation();          // Escape here is not "close the panel"
         });
-        /* Clicking away keeps what you typed rather than throwing it out. */
-        box.addEventListener('blur', function () { commitNewStar(box.value); });
         return;
       }
       var done = !isOpen(t);
@@ -950,7 +946,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 
   function cancelDrag() {
     if (!drag) return false;
-    var d = drag; drag = null; bgPress = null;
+    var d = drag; drag = null;
     d.t.x = d.sx; d.t.y = d.sy;
     d.el.classList.remove('held');
     if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
@@ -964,9 +960,12 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     return true;
   }
 
+  function isMacContextClick(e) {
+    return e.ctrlKey && navigator.platform.startsWith('Mac');
+  }
+
   function isPrimaryPress(e) {
-    var macContextClick = e.ctrlKey && e.pointerType === 'mouse' && navigator.platform.startsWith('Mac');
-    return e.button === 0 && e.isPrimary !== false && !macContextClick;
+    return e.button === 0 && e.isPrimary !== false && !isMacContextClick(e);
   }
 
   sky.addEventListener('pointerdown', function (e) {
@@ -1050,6 +1049,16 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   });
   sky.addEventListener('contextmenu', function (e) {
     if (drag || e.pointerType === 'touch') return;
+    if (mapField.contains(e.target) && !e.target.closest('.star')) {
+      e.preventDefault();
+      cancelMapLink();
+      var bounds = mapField.getBoundingClientRect();
+      beginNewStar(
+        Math.min(Math.max((e.clientX - bounds.left) / W, 0.03), 0.97),
+        Math.min(Math.max((e.clientY - bounds.top) / H, 0.05), 0.95)
+      );
+      return;
+    }
     var trigger = e.target.closest('.star[data-id], [data-open-task]');
     var task = trigger && byId[trigger.dataset.id || trigger.dataset.openTask];
     if (!isOpen(task) || task.pending) return;
@@ -1112,9 +1121,15 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   });
 
   mapField.addEventListener('click', function (e) {
-    if (linkSource === null || e.button !== 0) return;
-    var target = e.target.closest('.star[data-id]');
-    if (target) selectMapPrerequisite(byId[target.dataset.id]); else cancelMapLink();
+    if (e.button !== 0 || isMacContextClick(e)) return;
+    var target = e.target.closest('.star');
+    if (target) {
+      if (linkSource !== null) selectMapPrerequisite(byId[target.dataset.id]);
+      return;
+    }
+    cancelMapLink();
+    dropNewStar();
+    closePanel();
   });
 
   veil.addEventListener('pointerdown', function (e) {
@@ -1128,35 +1143,6 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
 
-  /* Empty sky. A press that dismisses something open is only a dismissal --
-     you were closing the panel, not asking for a star. Anything else is a
-     request to make one where you clicked. */
-  var bgPress = null;
-  mapField.addEventListener('pointerdown', function (e) {
-    if (!isPrimaryPress(e) || linkSource !== null || !e.target.closest) return;
-    if (e.target.closest('.star, .new, .key, .hud, #note') || e.target.closest('#panel') ||
-        e.target.closest('#veil')) return;
-    var dismissing = panelEl.classList.contains('open') ||
-                     veil.classList.contains('open') || !!PENDING;
-    closePanel();
-    bgPress = dismissing ? null : { x: e.clientX, y: e.clientY };
-  });
-
-  mapField.addEventListener('pointerup', function (e) {
-    if (e.button !== 0 || e.isPrimary === false) return;
-    var press = bgPress;
-    bgPress = null;
-    if (!press || PENDING) return;
-    if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) return;   // a drag
-    if (e.target.closest &&
-        (e.target.closest('.star, .new, .key, .hud, #note') || e.target.closest('#panel') ||
-         e.target.closest('#veil'))) return;
-    var r = mapField.getBoundingClientRect();
-    beginNewStar(
-      Math.min(Math.max((e.clientX - r.left) / W, 0.03), 0.97),
-      Math.min(Math.max((e.clientY - r.top) / H, 0.05), 0.95)
-    );
-  });
   document.addEventListener('keydown', function (e) {
     if (!window.stellarPageActive()) return;
     if (e.key !== 'Escape') return;

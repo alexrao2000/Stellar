@@ -32,7 +32,9 @@ async function check(engine) {
         return route.fulfill({ contentType: 'application/json', body: stale ? original : JSON.stringify(state) });
       }
       if (url.pathname === '/api/pool/task') {
-        const task = { id: 2, title: 'Added during drag', x: .7, y: .7, resolved_at: null };
+        const task = { id: state.tasks.length + 1, title: url.searchParams.get('title'),
+          x: Number(url.searchParams.get('x')), y: Number(url.searchParams.get('y')), resolved_at: null };
+        if (task.id === 2) Object.assign(task, { x: .7, y: .7 });
         state.tasks.push(task);
         return route.fulfill({ contentType: 'application/json', body: JSON.stringify(task) });
       }
@@ -196,6 +198,13 @@ async function check(engine) {
     assert.equal(await guide.getAttribute('d'), null);
     assert.deepEqual(state.edges, []);
 
+    await star.locator('.hit').click({ button: 'right' });
+    await linking.waitFor();
+    const blank = { x: 550, y: 640 };
+    await page.mouse.click(blank.x, blank.y);
+    assert.equal(await linking.count(), 0, 'Left-clicking empty sky cancels linking');
+    assert.equal(await page.locator('.star.ghost').count(), 0);
+
     const positionWrites = writes;
     await star.locator('.hit').click({ button: 'right' });
     await star.locator('.hit').click();
@@ -206,15 +215,29 @@ async function check(engine) {
     assert.equal(await linking.count(), 0);
     assert.equal(writes, positionWrites, 'Selecting a prerequisite does not move either star');
     assert.equal(await page.locator('#lines > path').getAttribute('marker-end'), 'url(#pool-edge-arrow)');
-    await page.mouse.click(550, 640, { button: 'right' });
-    assert.equal(await page.locator('.star.ghost').count(), 0, 'Right-clicking empty sky does not start a new task');
+    await page.mouse.click(blank.x, blank.y);
+    assert.equal(await page.locator('.star.ghost').count(), 0, 'A left click on idle sky does not start a draft');
+    await page.mouse.click(blank.x, blank.y, { button: 'right' });
+    const draft = page.getByRole('textbox', { name: 'Name this star' });
+    await draft.fill('Discard this draft');
+    await page.mouse.click(blank.x + 200, blank.y);
+    assert.equal(await draft.count(), 0, 'Left-clicking sky dismisses the draft');
+    assert.equal(state.tasks.length, 2, 'Dismissing a named draft does not save it');
+    const map = await page.locator('#pool-map').boundingBox();
+    await page.mouse.click(blank.x, blank.y, { button: 'right' });
+    await draft.fill('Placed in the sky');
+    await draft.press('Enter');
+    await page.locator('.star[data-id="3"] .hit').waitFor();
+    assert.equal(state.tasks[2].title, 'Placed in the sky');
+    assert(Math.abs(state.tasks[2].x - (blank.x - map.x) / map.width) < .0001);
+    assert(Math.abs(state.tasks[2].y - (blank.y - map.y) / map.height) < .0001);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: 'List', exact: true }).click();
     await page.locator('[data-open-task="2"]').click({ button: 'right' });
     await page.getByLabel('Task that must finish first').waitFor();
     assert.equal(await page.locator('#pool-title').textContent(), 'Added during drag');
     assert.deepEqual(errors, []);
-    console.log(engine + ': drag persistence, direct map linking, cancellation, and the list picker passed');
+    console.log(engine + ': drag persistence, map linking, star creation and cancellation, and the list picker passed');
   } finally { await browser.close(); }
 }
 (async () => { for (const engine of ['chromium', 'webkit']) await check(engine); })().catch(error => { console.error(error); process.exitCode = 1; });
