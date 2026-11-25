@@ -2,8 +2,8 @@
    sit behind all app tabs when the user enables the weather backdrop.
    Fixed-size textures avoid scale/filter raster work. Scattered rain has two
    depths with independent speeds; each travels one complete tile per lap.
-   The header is a separate, non-shrinking row; only the forecast shell scrolls.
-   Clipping the outer dialog also prevents focus from scrolling its controls. */
+   The toolbar floats above the forecast scroll area. Content passes behind it
+   with a soft fade at the dialog edge; the controls stay outside the scroller. */
 
 html body .weather-dialog {
   width: min(960px, calc(100% - 48px)); max-width: none; max-height: calc(100dvh - 48px);
@@ -22,6 +22,8 @@ html body .weather-dialog {
 .weather-dialog a { color: #e0dfff; text-underline-offset: .18em; }
 .weather-dialog :is(button, input, select, summary):focus-visible { outline: 2px solid #e6ceff; outline-offset: 3px; }
 .weather-shell { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto;
+  padding-top: 72px; scroll-padding-top: 80px;
+  mask-image: linear-gradient(to bottom, transparent, #000 64px);
   overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #666980 #202238; }
 .weather-dialog-sky { position: absolute; inset: 0; height: 100%; max-height: 100dvh; overflow: hidden; z-index: -2; }
 .weather-dialog::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
@@ -103,9 +105,10 @@ html body[data-page=today]:has(> .space-backdrop .weather-scene.is-current)
 [data-weather-motion=paused] .weather-rain-depth { animation-play-state: paused; will-change: auto; }
 
 .weather-top, .weather-actions, .weather-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.weather-dialog > .weather-top { position: relative; z-index: 2; flex: 0 0 auto; min-height: 72px;
+.weather-dialog > .weather-top { position: absolute; inset: 0 0 auto; z-index: 2; min-height: 72px;
   box-sizing: border-box; width: 100%; max-width: none; margin: 0;
-  padding: 16px 29px 12px; background: transparent; border: 0; }
+  padding: 16px 29px 12px; background: transparent; border: 0; pointer-events: none; }
+.weather-top .weather-actions { pointer-events: auto; }
 .weather-top h2 { font-size: .88rem; font-weight: 650; }
 .weather-current { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end;
   gap: 12px; text-shadow: 0 1px 16px #0a1327a6; padding: 24px 0 7px; }
@@ -213,6 +216,7 @@ html body .weather-dialog select { appearance: none; height: 44px; padding-right
   html body .weather-dialog { width: calc(100% - 14px); max-height: calc(100dvh - 14px); border-radius: 23px; }
   .weather-dialog-sky .weather-scene::before { background-position: 76% top; }
   .weather-dialog > .weather-top { padding: max(10px, env(safe-area-inset-top)) 15px 10px; min-height: 64px; }
+  .weather-shell { padding-top: calc(max(10px, env(safe-area-inset-top)) + 54px); }
   .weather-hero { padding: 6px 15px 18px; }
   .weather-current { padding-top: 17px; gap: 5px; }
   .weather-content { padding: 0 9px; gap: 9px; }

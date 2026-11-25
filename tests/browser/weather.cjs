@@ -87,6 +87,12 @@ async function check(engine, mobile) {
       assert(Math.abs(header.width - sizes[1]) < 1 && Math.abs(header.left - 1) < 1, 'Weather header fills the modal');
       assert.equal(header.background, 'rgba(0, 0, 0, 0)');
       assert.equal(header.image, 'none');
+      const scrollArea = await dialog.locator('.weather-shell').evaluate(el => ({
+        top: el.getBoundingClientRect().top - el.parentElement.getBoundingClientRect().top,
+        fade: getComputedStyle(el).maskImage,
+      }));
+      assert(Math.abs(scrollArea.top - 1) < 1, 'Forecast scrolls to the modal edge behind the toolbar');
+      assert.match(scrollArea.fade, /linear-gradient/);
       await page.setViewportSize({ width, height: 320 });
       const close = dialog.getByRole('button', { name: 'Close weather' });
       const before = await close.boundingBox();
