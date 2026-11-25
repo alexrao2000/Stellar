@@ -26,6 +26,7 @@ async function check(engine) {
     await context.route('**/api/**', async route => {
       const request = route.request(), url = new URL(request.url());
       if (url.pathname === '/api/changes') return route.fulfill({ status: 503, body: '{}' });
+      if (url.pathname === '/api/notifications/config') return route.fulfill({ json: { enabled: false } });
       assert(url.pathname.startsWith('/api/pool'));
       if (request.method() === 'GET') {
         return route.fulfill({ contentType: 'application/json', body: stale ? original : JSON.stringify(state) });
@@ -34,6 +35,10 @@ async function check(engine) {
         const task = { id: 2, title: 'Added during drag', x: .7, y: .7, resolved_at: null };
         state.tasks.push(task);
         return route.fulfill({ contentType: 'application/json', body: JSON.stringify(task) });
+      }
+      if (url.pathname === '/api/pool/link') {
+        state.edges.push({ before_id: Number(url.searchParams.get('before_id')), after_id: Number(url.searchParams.get('after_id')) });
+        return route.fulfill({ json: { already: false } });
       }
       assert(url.pathname.endsWith('/move'));
       writes++;
@@ -177,8 +182,29 @@ async function check(engine) {
     await page.mouse.up();
     await page.locator('.star[data-id="2"] .hit').waitFor();
     assert.equal(await page.locator('.held').count(), 0);
+
+    await star.locator('.hit').click({ button: 'right' });
+    const prerequisite = page.getByLabel('Task that must finish first');
+    await prerequisite.waitFor();
+    assert(await prerequisite.evaluate(el => el === document.activeElement));
+    assert.deepEqual(state.edges, [], 'Right-click opens the picker without saving a dependency');
+    await page.keyboard.press('Escape');
+    assert(!(await prerequisite.isVisible()), 'Escape collapses the picker');
+    await star.locator('.hit').click({ button: 'right' });
+    await prerequisite.selectOption('2');
+    await page.getByRole('button', { name: 'Link task', exact: true }).click();
+    await star.locator('.waiting').waitFor();
+    assert.deepEqual(state.edges, [{ before_id: 2, after_id: 1 }]);
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.mouse.click(550, 640, { button: 'right' });
+    assert.equal(await page.locator('.star.ghost').count(), 0, 'Right-clicking empty sky does not start a new task');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await page.locator('[data-open-task="2"]').click({ button: 'right' });
+    await prerequisite.waitFor();
+    assert.equal(await page.locator('#pool-title').textContent(), 'Added during drag');
     assert.deepEqual(errors, []);
-    console.log(engine + ': fast releases, capture loss, Escape, stale reads, ordered writes, retries and redraws passed');
+    console.log(engine + ': drag persistence, ordered writes, redraws, and the right-click dependency picker passed');
   } finally { await browser.close(); }
 }
 (async () => { for (const engine of ['chromium', 'webkit']) await check(engine); })().catch(error => { console.error(error); process.exitCode = 1; });

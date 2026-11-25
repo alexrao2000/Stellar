@@ -6,7 +6,7 @@
    frame rate. Task stars animate their outer SVG layers without changing the
    internal SVG geometry. Map resizing does not rebuild an unchanged sky.
    Motion pauses offscreen and respects the system's reduced-motion setting.
-   Dragging only moves stars; prerequisites are chosen explicitly in task
+   Dragging only moves stars; right-click opens the prerequisite picker in task
    details. Redraws wait for a held star. Position writes run in order for each
    star, and local positions survive refreshes until the database confirms them.
    Failed saves stay visible and retry on the next refresh. Drops use the release
@@ -380,9 +380,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   <div id="veil"><div class="box" role="alertdialog" aria-modal="true"
        aria-labelledby="veilh"></div></div>
   <details class="key"><summary>How to use the pool</summary>
-    <p>Select a star to edit it, or drag to move it. In task details, choose Add
-    prerequisite to make it wait on another task. Select empty sky to add a task
-    there. Press Escape to cancel a drag or close task details.</p>
+    <p>Select a star to edit it, or drag to move it. Right-click a star or choose
+    Add prerequisite in task details to make it wait on another task. Select empty
+    sky to add a task there. Press Escape to cancel a drag or close task details.</p>
   </details>
 </div>
 
@@ -939,8 +939,13 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     return true;
   }
 
+  function isPrimaryPress(e) {
+    var macContextClick = e.ctrlKey && e.pointerType === 'mouse' && navigator.platform.startsWith('Mac');
+    return e.button === 0 && e.isPrimary !== false && !macContextClick;
+  }
+
   sky.addEventListener('pointerdown', function (e) {
-    if (e.button !== 0 || e.isPrimary === false) return;
+    if (!isPrimaryPress(e)) return;
     if (drag) return;
     var el = e.target.closest ? e.target.closest('.star') : null;
     if (!el || el.classList.contains('ghost')) return;
@@ -1019,6 +1024,18 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   sky.addEventListener('dragstart', function (e) {
     if (e.target.closest && e.target.closest('.star')) e.preventDefault();
   });
+  sky.addEventListener('contextmenu', function (e) {
+    if (drag || e.pointerType === 'touch') return;
+    var trigger = e.target.closest('.star[data-id], [data-open-task]');
+    var task = trigger && byId[trigger.dataset.id || trigger.dataset.openTask];
+    if (!isOpen(task) || task.pending) return;
+    e.preventDefault();
+    if (PANEL_ID !== task.id) openPanel(task);
+    var picker = document.getElementById('pool-link-picker');
+    if (!picker) return;
+    picker.open = true;
+    document.getElementById('pool-prerequisite').focus();
+  });
 
   veil.addEventListener('pointerdown', function (e) {
     if (e.target === veil) closeVeil();          // backdrop only
@@ -1036,7 +1053,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
      request to make one where you clicked. */
   var bgPress = null;
   mapField.addEventListener('pointerdown', function (e) {
-    if (!e.target.closest) return;
+    if (!isPrimaryPress(e) || !e.target.closest) return;
     if (e.target.closest('.star, .new, .key, .hud, #note') || e.target.closest('#panel') ||
         e.target.closest('#veil')) return;
     var dismissing = panelEl.classList.contains('open') ||
@@ -1046,6 +1063,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   });
 
   mapField.addEventListener('pointerup', function (e) {
+    if (e.button !== 0 || e.isPrimary === false) return;
     var press = bgPress;
     bgPress = null;
     if (!press || PENDING) return;
