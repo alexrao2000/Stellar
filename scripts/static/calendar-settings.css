@@ -64,3 +64,18 @@ body[data-space-theme=true] .settings-card-header > h2 { padding: 0; border: 0; 
 .planning-time input[data-empty]:not(:focus)::-webkit-datetime-edit { color: transparent; }
 .planning-time input:not([data-empty]) + .planning-time-example,
 .planning-time input:focus + .planning-time-example { display: none; }
+
+.cal-icon-picker { padding: 0 8px; border: 1px solid #ced8ee29; border-radius: 10px; }
+.cal-icon-picker summary { display: flex; align-items: center; min-height: 44px; gap: 8px; cursor: pointer; }
+.cal-icon-picker summary::-webkit-details-marker { display: none; }
+.cal-icon-picker summary::after { content: ''; width: 6px; height: 6px; margin-inline: 2px; border: solid #acbad3; border-width: 0 1px 1px 0; rotate: 45deg; }
+.cal-icon-picker[open] summary::after { rotate: 225deg; }
+.cal-icon-preview { display: flex; align-items: center; gap: 4px; margin-inline-start: auto; color: #c3d0ea; font-size: 12px; }
+.cal-icon-options { display: grid; gap: 4px; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); padding-bottom: 8px; }
+.cal-icon-option { position: relative; margin: 0; cursor: pointer; }
+.cal-icon-option.is-automatic { grid-column: span 2; }
+.cal-icon-option input[type=radio] { position: absolute; inset: 0; opacity: 0; margin: 0; height: 100%; cursor: pointer; }
+.cal-icon-option > span { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; box-sizing: border-box; border: 1px solid #ced8ee29; border-radius: 8px; font-size: 12px; pointer-events: none; }
+.cal-icon-option:hover > span { background: #c5d3f11a; }
+.cal-icon-option input:checked + span { background: #b5a6f434; border-color: #d7caff; }
+.cal-icon-option input:focus-visible + span { outline: 2px solid #dacbff; outline-offset: 1px; }

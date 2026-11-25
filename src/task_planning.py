@@ -29,6 +29,7 @@ class PlanningRule(BaseModel):
     max_rain_percent: int = Field(default=30, ge=0, le=100)
     max_wind_kph: int = Field(default=40, ge=0, le=120)
     buffer_minutes: int = Field(default=0, ge=0, le=120)
+    icon: str | None = Field(default=None, pattern=r'^[a-z][a-z-]{1,23}$')
 
     @model_validator(mode='after')
     def valid_window(self):
@@ -68,11 +69,13 @@ def save_planning(series_id: int, body: PlanningRule, request: Request):
     if series_id not in server._series(server._definitions(fresh=True)):
         raise HTTPException(404, 'Task not found')
     user = owner(request)
-    existing = _db().table('task_planning_rules').select('series_id').eq('owner_id', user).eq('series_id', series_id).execute().data or []
+    existing = _db().table('task_planning_rules').select('rule').eq('owner_id', user).eq('series_id', series_id).execute().data or []
     values = {'rule': body.model_dump()}
+    if existing and 'icon' not in body.model_fields_set:
+        values['rule']['icon'] = existing[0]['rule'].get('icon')
     query = _db().table('task_planning_rules')
     if existing:
         rows = query.update(values).eq('owner_id', user).eq('series_id', series_id).execute().data or []
     else:
         rows = query.insert({'owner_id': user, 'series_id': series_id, **values}).execute().data or []
-    return {'series_id': series_id, 'rule': body.model_dump(), 'updated_at': rows[0]['updated_at']}
+    return {'series_id': series_id, 'rule': values['rule'], 'updated_at': rows[0]['updated_at']}

@@ -186,9 +186,13 @@ body[data-page=calendar] #cal-plan-task {
 }
 .cal-event.is-callout {
   position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
   min-width: 0;
   min-height: 0;
-  padding: 3px 7px;
+  padding: 0;
+  overflow: visible;
   border: 1px solid #dbcaff5c;
   border-top-color: #eee4ff7a;
   border-radius: 8px;
@@ -201,7 +205,37 @@ body[data-page=calendar] #cal-plan-task {
 .cal-event.is-callout.is-suggestion { border-style: dashed; border-color: #becdff70; background: #a4b5f226; color: #e7eeff; }
 .cal-event.is-callout.is-conflicted { border-color: #f3bda68c; background: #da9a872b; }
 .cal-event.is-callout:is(:hover,:focus-visible) { background: #a99ee04c; }
-.cal-callout:focus-within { z-index: 4; }
+.cal-callout:is(:hover,:focus-within) { z-index: 4; }
+.cal-callout-name {
+  display: none;
+  position: absolute;
+  inset-inline-end: 100%;
+  top: 50%;
+  translate: 0 -50%;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(200px, 55vw);
+  padding: 6px 8px;
+  border: 1px solid #dbcaff5c;
+  border-radius: 8px;
+  background: #202943ca;
+  color: #f5efff;
+  font-weight: 550;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.cal-event.is-callout:focus-visible:not([data-label-dismissed]) .cal-callout-name { display: block; }
+@media (hover: hover) {
+  .cal-event.is-callout:hover:not([data-label-dismissed]) .cal-callout-name { display: block; }
+}
+@media (min-width: 761px) {
+  .calendar-app[data-view=week] .cal-day-column:nth-child(-n+4) .cal-callout-name { inset-inline: 100% auto; }
+}
 .cal-callout-leader { position: absolute; inset-inline-end: 0; width: var(--cal-leader-width); overflow: visible; }
 .cal-callout-leader path { fill: none; stroke: currentColor; stroke-opacity: .48; stroke-width: 1.4; stroke-dasharray: .1 4; stroke-linecap: round; }
 .cal-callout-leader circle { fill: currentColor; fill-opacity: .62; }
+
+.task-icon { display: inline-grid; position: relative; place-items: center; width: 20px; height: 20px; flex: none; color: #e2d8ff; }
+.task-icon svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.task-icon .task-icon-glint { fill: #fff0c3; stroke: none; }
+.task-icon sup { position: absolute; inset: -3px -4px auto auto; padding: 0 2px; border-radius: 3px; font: 700 7px/9px system-ui; background: #242741; }

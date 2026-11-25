@@ -4,10 +4,11 @@
    Visibility-aware refreshes retain the page and never replace an open editor.
    Booking uses stable IDs, server versions and database conflict checks.
 */
-import { mountConnections } from './calendar-settings.js?v=5';
+import { mountConnections } from './calendar-settings.js?v=6';
 import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
 import { durationLabel, eventLayout, interval, localParts, overlaps, taskDurationSeconds, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=5';
+import { assignTaskIcons, taskIcon } from './task-icons.js?v=1';
 
 const boot = JSON.parse(document.getElementById('calendar-boot').textContent);
 const $ = selector => document.querySelector(selector);
@@ -49,7 +50,7 @@ let events = [], records = {}, forecast = null, forecastAt = 0, plans = [], even
 let eventsError = '', recordsError = '', weatherError = '', weatherPending = false, mutating = false;
 let eventSeq = 0, recordSeq = 0, eventJob, recordJob, forecastJob, citySeq = 0, locationSeq = 0, eventTag = '', eventKey = '';
 let editingEvent = null, booking = null, creatorId = null, lastPlanTime = 0;
-let localEvents = [], externalEvents = [], externalReady = false, planningReady = false, plannedTasks = [], connections = [];
+let localEvents = [], externalEvents = [], externalReady = false, planningReady = false, allTasks = [], plannedTasks = [], connections = [];
 let externalError = '', planningError = '', externalJob, planningJob, externalSeq = 0, externalChecked = 0, externalKey = '', planningChecked = 0;
 let selectedTaskId = read('stellar:calendar:planned-task') || '';
 const plannedTask = () => plannedTasks.find(task => String(task.series_id) === String(selectedTaskId));
@@ -127,11 +128,18 @@ function eventButton(event) {
   return button;
 }
 
-function taskCallout(button, item) {
+function taskCallout(button, item, icon) {
   const bubble = element('div', null, 'cal-callout');
   bubble.style.top = `${item.top}px`;
   bubble.style.height = `${item.height}px`;
   button.classList.add('is-callout');
+  button.removeAttribute('title');
+  const name = element('span', item.slot?.taskTitle || item.title, 'cal-callout-name');
+  name.setAttribute('aria-hidden', 'true');
+  button.replaceChildren(taskIcon(icon), name);
+  const reset = () => button.removeAttribute('data-label-dismissed');
+  button.addEventListener('pointerleave', reset);
+  button.addEventListener('blur', reset);
 
   const offset = item.anchor - item.top;
   const port = item.height / 2 + 2;
@@ -158,6 +166,11 @@ function taskCallout(button, item) {
 
 function render() {
   calculate(); status();
+  const titleToSeries = new Map(allTasks.flatMap(task => task.titles.map(title => [title, task.series_id])));
+  const seriesFor = item => item.slot?.taskSeriesId ?? item.task_series_id ?? titleToSeries.get(item.task_title || item.title) ?? `event:${item.task_title || item.title}`;
+  const known = new Set(allTasks.map(task => String(task.series_id)));
+  const otherSeries = new Set(events.filter(item => item.kind === 'task' || item.kind === 'run').map(seriesFor).map(String).filter(id => !known.has(id)));
+  const icons = assignTaskIcons([...allTasks, ...[...otherSeries].map(id => ({ series_id: `legacy:${id}` }))]);
   const days = span(), heads = $('#cal-day-heads'), grid = $('#cal-grid'), outlook = $('#cal-outlook');
   app.dataset.view = view; app.style.setProperty('--cal-days', days.length);
   $('#cal-date').value = selectedDay;
@@ -204,7 +217,8 @@ function render() {
         button.addEventListener('click', () => openRun(item.slot));
       } else button = eventButton(item);
       if (item.anchor != null) {
-        column.append(taskCallout(button, item));
+        const series = String(seriesFor(item));
+        column.append(taskCallout(button, item, icons.get(known.has(series) ? series : `legacy:${series}`)));
         continue;
       }
       button.style.top = item.top + 'px'; button.style.height = item.height + 'px';
@@ -521,7 +535,8 @@ async function loadPlanning(force = false) {
   if (planningJob) return planningJob;
   planningJob = request('/api/calendar/task-planning', { priority: 'low' }).then(({ data }) => {
     if (!Array.isArray(data.tasks)) throw new Error('Task planning settings could not load.');
-    plannedTasks = data.tasks.filter(task => task.rule.enabled);
+    allTasks = data.tasks;
+    plannedTasks = allTasks.filter(task => task.rule.enabled);
     if (!plannedTask()) {
       const first = plannedTasks.find(task => task.updated_at && task.rule.weather !== 'any')
         || plannedTasks.find(task => task.updated_at) || plannedTasks[0];
@@ -534,6 +549,10 @@ async function loadPlanning(force = false) {
   return planningJob;
 }
 $('#cal-plan-task').addEventListener('change', event => { selectedTaskId = event.target.value; save('stellar:calendar:planned-task', selectedTaskId); render(); });
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || editing()) return;
+  document.querySelectorAll('.is-callout:is(:hover,:focus-visible)').forEach(button => button.setAttribute('data-label-dismissed', ''));
+});
 for (const select of [$('#cal-event-destination'), $('#cal-run-destination')]) select.addEventListener('change', () => save('stellar:calendar:destination', select.value));
 $('#cal-event-form').duration_unit.addEventListener('change', event => updateDurationLimit(event.target.form));
 $('#cal-event-task').addEventListener('change', event => {

@@ -118,19 +118,25 @@ async function check(engine, mobile) {
     const after = await close.boundingBox(); assert(Math.abs(after.y - before.y) < 1 && after.y >= 0 && after.y + after.height <= 400, 'Connection close stays visible');
     await close.click();
 
-    await page.setViewportSize({ width: mobile ? 390 : 1440, height: mobile ? 844 : 1000 });
+    await page.setViewportSize({ width: mobile ? 320 : 1440, height: mobile ? 844 : 1000 });
     await page.getByRole('button', { name: 'Plan ' + tasks[0].title, exact: true }).click();
     await planning.getByLabel('Duration unit', { exact: true }).selectOption('seconds');
     await planning.getByLabel('Duration', { exact: true }).fill('1');
     await planning.getByLabel('Weather', { exact: true }).selectOption('any');
+    await planning.getByText('Calendar icon', { exact: true }).click();
+    await planning.getByRole('radio', { name: 'Capsule', exact: true }).check();
+    assert(await planning.locator('.cal-icon-picker').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+    await page.screenshot({ path: `/private/tmp/stellar-task-icon-picker-${engine}.png` });
     await planning.getByRole('button', { name: 'Save planning settings' }).click();
     await planning.getByText('Planning settings saved.', { exact: true }).waitFor();
     assert.equal(tasks[0].rule.duration_seconds, 1);
+    assert.equal(tasks[0].rule.icon, 'capsule');
     assert.equal(local.length, 1, 'Saving the rule creates no calendar reservations');
 
     await page.goto(base + '/calendar?day=' + today + '&view=day');
     const suggestion = page.getByRole('button', { name: /suggested .*1 second/ }).first();
     assert(await suggestion.evaluate(el => el.classList.contains('is-callout')));
+    assert.equal(await suggestion.locator('.task-icon').getAttribute('data-icon'), 'capsule');
     await suggestion.click();
     const booking = page.getByRole('dialog', { name: tasks[0].title, exact: true });
     await booking.getByLabel('Calendar', { exact: true }).selectOption('local');
@@ -138,6 +144,7 @@ async function check(engine, mobile) {
     await booking.waitFor({ state: 'hidden' });
     const booked = local.at(-1);
     assert.equal(Date.parse(booked.ends_at) - Date.parse(booked.starts_at), 1000);
+    assert.equal(await page.locator('[data-event="' + booked.id + '"] .task-icon').getAttribute('data-icon'), 'capsule');
     await page.locator('[data-event="' + booked.id + '"]').click();
     const edit = page.getByRole('dialog', { name: 'Edit event' });
     assert.equal(await edit.getByLabel('Duration', { exact: true }).inputValue(), '1');
@@ -147,8 +154,9 @@ async function check(engine, mobile) {
     assert.equal(Date.parse(local.at(-1).ends_at) - Date.parse(local.at(-1).starts_at), 1000);
 
     const shortStart = hour(12.5) + 17;
+    const shortName = 'Quick log before the afternoon check-in with the project team';
     local.push(event('overlap-demo', 'Project review', hour(12), hour(13)),
-      event('short-one', 'Quick log', shortStart, shortStart + 1, { kind: 'task' }),
+      event('short-one', shortName, shortStart, shortStart + 1, { kind: 'task' }),
       event('short-two', 'File receipt', shortStart + 20, shortStart + 21, { kind: 'task' }));
     if (mobile) await page.setViewportSize({ width: 320, height: 844 });
     await page.reload();
@@ -160,7 +168,7 @@ async function check(engine, mobile) {
       const bounds = await short.evaluate(el => {
         const column = el.closest('.cal-day-column'), bubble = el.closest('.cal-callout');
         const neighbor = column.querySelector('[data-event="overlap-demo"]');
-        const leader = bubble.querySelector('path');
+        const leader = bubble.querySelector('.cal-callout-leader path');
         const pt = leader.getPointAtLength(leader.getTotalLength());
         const tip = new DOMPoint(pt.x, pt.y).matrixTransform(leader.getScreenCTM());
         const label = el.getBoundingClientRect(), day = column.getBoundingClientRect();
@@ -180,7 +188,21 @@ async function check(engine, mobile) {
       assert(bounds.above && bounds.sideways >= 24, `${view}: labels float above and to the side of the start time`);
       assert(bounds.dash !== 'none' && bounds.opacity > 0 && bounds.opacity < 1, `${view}: leader is dotted and translucent`);
       assert(bounds.labelBottom <= bounds.nextTop, `${view}: nearby labels remain separate ${JSON.stringify(bounds)}`);
-      await page.locator('.cal-board').screenshot({ path: `/private/tmp/stellar-calendar-floating-${engine}-${view}.png` });
+      const second = page.locator('[data-event="short-two"] .task-icon');
+      assert.notEqual(await short.locator('.task-icon').getAttribute('data-icon'), await second.getAttribute('data-icon'));
+      assert((await short.boundingBox()).width <= 30, `${view}: resting label stays icon-sized`);
+      const fullName = short.locator('.cal-callout-name');
+      assert(!(await fullName.isVisible()));
+      await page.locator('.cal-board').screenshot({ path: `/private/tmp/stellar-calendar-icons-${engine}-${view}.png` });
+      if (!mobile) await short.hover();
+      else { await page.keyboard.press('Tab'); await short.focus(); }
+      await fullName.waitFor({ state: 'visible' });
+      assert.equal(await fullName.textContent(), shortName);
+      const [nameBox, boardBox] = await Promise.all([fullName.boundingBox(), page.locator('.cal-board').boundingBox()]);
+      assert(nameBox.x >= boardBox.x && nameBox.x + nameBox.width <= boardBox.x + boardBox.width, 'Expanded name fits in the calendar');
+      await page.locator('.cal-board').screenshot({ path: `/private/tmp/stellar-calendar-icons-expanded-${engine}-${view}.png` });
+      await page.keyboard.press('Escape');
+      assert(!(await fullName.isVisible()), 'Escape dismisses the expanded name');
     }
     assert.deepEqual(errors, []);
     console.log(`${engine}: explicit OAuth intent, read-only enforcement, external destination, task settings and mobile bounds passed`);

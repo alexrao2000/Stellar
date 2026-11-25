@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readForecast } from '../scripts/static/weather-model.js';
 import { eventLayout, interval, overlaps, runSuggestions, zonedTime } from '../scripts/static/calendar-model.js';
+import { assignTaskIcons, taskIconChoices } from '../scripts/static/task-icons.js';
 import fixture from './weather_fixture.cjs';
 
 const { forecast, hour, records, today } = fixture;
@@ -93,6 +94,15 @@ test('short task bubbles stay stacked inside the timeline near midnight', () => 
   assert(result[0].top + result[0].height <= result[1].top);
   assert(result[1].top + result[1].height <= result[2].top);
   assert(result[2].anchor > result[1].anchor);
+});
+
+test('automatic task icons avoid chosen symbols and remain distinct after the palette fills', () => {
+  const tasks = Array.from({ length: taskIconChoices.size + 3 }, (_, i) => ({ series_id: i + 1, rule: {} }));
+  tasks.at(-1).rule.icon = 'comet';
+  const icons = assignTaskIcons(tasks);
+  assert.deepEqual(icons.get(String(tasks.length)), { key: 'comet' });
+  assert.equal(icons.size, new Set([...icons.values()].map(icon => JSON.stringify(icon))).size);
+  assert.deepEqual(icons, assignTaskIcons([...tasks].reverse()));
 });
 
 test('indoor task planning works without weather and ignores free calendar events', async () => {

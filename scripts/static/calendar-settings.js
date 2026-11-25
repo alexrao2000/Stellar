@@ -2,6 +2,7 @@
    default; upgrading requires a new authorization. Task planning is enabled by default and
    saved by task series, independently from historic completion settings. */
 import { taskDurationSeconds } from './calendar-model.js?v=5';
+import { assignTaskIcons, taskIcon, taskIconChoices } from './task-icons.js?v=1';
 
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
 async function api(path, method = 'GET', body) {
@@ -21,6 +22,39 @@ function input(type, value, name) { const el = node('input'); el.type = type; el
 function choice(label, checked, name, help) {
   const wrapper = node('label', null, 'cal-setting-choice'), control = input('checkbox', '', name); control.checked = checked;
   const copy = node('span'); copy.append(node('strong', label)); if (help) copy.append(node('small', help)); wrapper.append(control, copy); return wrapper;
+}
+
+function iconPicker(task, tasks) {
+  const picker = node('details', null, 'cal-icon-picker');
+  const summary = node('summary');
+  const preview = node('span', null, 'cal-icon-preview');
+  summary.append(node('span', 'Calendar icon'), preview);
+  picker.append(summary);
+  const options = node('div', null, 'cal-icon-options');
+  options.setAttribute('role', 'radiogroup');
+  options.setAttribute('aria-label', 'Calendar icon');
+  const selected = taskIconChoices.has(task.rule.icon) ? task.rule.icon : '';
+  const automatic = assignTaskIcons(tasks.map(row => row === task ? { ...task, rule: { ...task.rule, icon: null } } : row)).get(String(task.series_id));
+  function updatePreview(key) {
+    const label = key ? taskIconChoices.get(key)[0] : 'Automatic';
+    preview.replaceChildren(taskIcon(key ? { key } : automatic), node('span', label));
+  }
+  for (const [key, [label]] of [['', ['Automatic']], ...taskIconChoices]) {
+    const option = node('label', null, key ? 'cal-icon-option' : 'cal-icon-option is-automatic');
+    option.title = label;
+    const radio = input('radio', key, 'icon');
+    radio.setAttribute('aria-label', label);
+    radio.checked = key === selected;
+    radio.onchange = () => updatePreview(key);
+    const face = node('span');
+    face.append(taskIcon(key ? { key } : automatic));
+    if (!key) face.append(node('span', label));
+    option.append(radio, face);
+    options.append(option);
+  }
+  updatePreview(selected);
+  picker.append(options);
+  return picker;
 }
 
 export function mountConnections(button, changed = () => {}) {
@@ -131,11 +165,11 @@ function mountPlanningEditor(host) {
   dialog.append(header, content);
   document.body.append(dialog);
 
-  function showForm(task, defaults) {
+  function showForm(task, defaults, tasks) {
     const rule = task.rule;
     const saved = Boolean(task.updated_at);
     const form = node('form', null, 'task-planning-form');
-    form.append(choice('Suggest times for this task', rule.enabled, 'enabled'));
+    form.append(iconPicker(task, tasks), choice('Suggest times for this task', rule.enabled, 'enabled'));
     const fields = node('div', null, 'cal-form-row');
     function number(label, name, min, max, display = value => value) {
       const control = input('number', saved ? display(rule[name]) : '', name);
@@ -213,6 +247,7 @@ function mountPlanningEditor(host) {
       const celsius = value => (Number(value) - 32) * 5 / 9;
       const body = {
         enabled: controls.enabled.checked,
+        icon: controls.icon.value || null,
         duration_minutes: unit.value === 'minutes' ? Number(durationInput.value || durationInput.placeholder) : defaults.duration_minutes,
         duration_seconds: unit.value === 'seconds' ? Number(durationInput.value || durationInput.placeholder) : null,
         earliest: get('earliest', minutes),
@@ -252,7 +287,7 @@ function mountPlanningEditor(host) {
       const task = data.tasks.find(item => String(item.series_id) === trigger.dataset.planTask);
       if (!task) throw new Error('This task is no longer available.');
       const defaults = data.defaults || task.rule;
-      if (dialog.open && request === latestRequest) showForm(task, defaults);
+      if (dialog.open && request === latestRequest) showForm(task, defaults, data.tasks);
     } catch (error) {
       if (request === latestRequest) content.textContent = error.message;
     }

@@ -40,6 +40,7 @@ ASSET_TYPES = {
     "calendar-settings.css": "text/css",
     "calendar.js": "text/javascript",
     "calendar-model.js": "text/javascript",
+    "task-icons.js": "text/javascript",
     "calendar.css": "text/css",
     "navigation.css": "text/css",
     "metrics.js": "text/javascript",

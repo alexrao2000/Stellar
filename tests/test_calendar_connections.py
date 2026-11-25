@@ -171,9 +171,13 @@ def test_subscription_instances_respect_cancellations_and_free_events():
 def test_planning_rules_validate_overnight_windows_and_persist_by_series(setup, monkeypatch):
     client, db = setup
     monkeypatch.setattr(server, '_definitions', lambda **kwargs: [{'id': 7, 'series_id': 7, 'title': 'Read', 'active': True}])
-    result = client.put('/api/calendar/task-planning/7', json={'enabled': True, 'duration_minutes': 60, 'earliest': 1320, 'latest': 60})
+    result = client.put('/api/calendar/task-planning/7', json={'enabled': True, 'duration_minutes': 60, 'earliest': 1320, 'latest': 60, 'icon': 'capsule'})
     assert result.status_code == 200 and db.rows['task_planning_rules'][0]['series_id'] == 7
     assert db.rows['task_planning_rules'][0]['owner_id'] == 'local'
+    assert result.json()['rule']['icon'] == 'capsule'
+    previous_client = client.put('/api/calendar/task-planning/7', json={'duration_minutes': 20})
+    assert previous_client.json()['rule']['icon'] == 'capsule'
+    assert client.put('/api/calendar/task-planning/7', json={'icon': None}).json()['rule']['icon'] is None
     assert client.put('/api/calendar/task-planning/8', json={}).status_code == 404
     assert client.put('/api/calendar/task-planning/7', json={'duration_minutes': 100, 'earliest': 540, 'latest': 570}).status_code == 422
 
