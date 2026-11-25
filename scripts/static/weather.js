@@ -3,7 +3,7 @@
    Hidden or occluded scenes pause in place to resume without a phase reset.
    Failed refreshes retain the last known sky and label the forecast as stale. */
 
-import { changeScene, notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
+import { changeScene, notifyWeather, requestWeatherForecast } from './weather-background.js?v=2';
 
 import { dayKeyFor, daylightAt, describeWeather, planOutdoorTime, readForecast, weatherScene } from './weather-model.js?v=3';
 

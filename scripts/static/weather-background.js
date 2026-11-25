@@ -29,7 +29,7 @@ export function loadWeatherStyles() {
   if (link?.sheet) return Promise.resolve();
   if (!link) {
     link = document.createElement('link'); link.rel = 'stylesheet';
-    link.href = '/app-assets/weather.css?v=8'; link.dataset.weatherStyles = '';
+    link.href = '/app-assets/weather.css?v=9'; link.dataset.weatherStyles = '';
     document.head.append(link);
   }
   return new Promise((resolve, reject) => {

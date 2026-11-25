@@ -13,7 +13,7 @@
   let weatherBackground;
   window.stellarLoadWeatherBackground = () => {
     if (window !== top) return top.stellarLoadWeatherBackground?.();
-    if (!weatherBackground) weatherBackground = import('/app-assets/weather-background.js?v=1')
+    if (!weatherBackground) weatherBackground = import('/app-assets/weather-background.js?v=2')
       .then(module => module.mountWeatherBackground()).catch(() => { weatherBackground = null; });
     return weatherBackground;
   };

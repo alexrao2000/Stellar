@@ -79,6 +79,14 @@ async function check(engine, mobile) {
       if (mobile) await page.setViewportSize({ width, height: 844 });
       const sizes = await dialog.evaluate(el => [el.scrollWidth, el.clientWidth]);
       assert(sizes[0] <= sizes[1] + 1, `${width}px: only the hour and date strips scroll sideways (${sizes.join('/')})`);
+      const header = await dialog.locator('.weather-top').evaluate(el => {
+        const style = getComputedStyle(el), bounds = el.getBoundingClientRect();
+        return { width: bounds.width, left: bounds.left - el.parentElement.getBoundingClientRect().left,
+          background: style.backgroundColor, image: style.backgroundImage };
+      });
+      assert(Math.abs(header.width - sizes[1]) < 1 && Math.abs(header.left - 1) < 1, 'Weather header fills the modal');
+      assert.equal(header.background, 'rgba(0, 0, 0, 0)');
+      assert.equal(header.image, 'none');
       await page.setViewportSize({ width, height: 320 });
       const close = dialog.getByRole('button', { name: 'Close weather' });
       const before = await close.boundingBox();

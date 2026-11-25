@@ -5,7 +5,7 @@
    Booking uses stable IDs, server versions and database conflict checks.
 */
 import { mountConnections } from './calendar-settings.js?v=6';
-import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
+import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=2';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
 import { durationLabel, eventLayout, interval, localParts, overlaps, taskDurationSeconds, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=5';
 import { assignTaskIcons, taskIcon } from './task-icons.js?v=1';

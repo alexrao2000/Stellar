@@ -103,9 +103,9 @@ html body[data-page=today]:has(> .space-backdrop .weather-scene.is-current)
 [data-weather-motion=paused] .weather-rain-depth { animation-play-state: paused; will-change: auto; }
 
 .weather-top, .weather-actions, .weather-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.weather-top { position: relative; z-index: 2; flex: 0 0 auto; min-height: 72px;
-  padding: 16px 29px 12px; background: linear-gradient(180deg, #10182be6, #10182b92);
-  border-bottom: 1px solid #dce5ff20; }
+.weather-dialog > .weather-top { position: relative; z-index: 2; flex: 0 0 auto; min-height: 72px;
+  box-sizing: border-box; width: 100%; max-width: none; margin: 0;
+  padding: 16px 29px 12px; background: transparent; border: 0; }
 .weather-top h2 { font-size: .88rem; font-weight: 650; }
 .weather-current { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end;
   gap: 12px; text-shadow: 0 1px 16px #0a1327a6; padding: 24px 0 7px; }
@@ -212,7 +212,7 @@ html body .weather-dialog select { appearance: none; height: 44px; padding-right
 @media (max-width: 600px) {
   html body .weather-dialog { width: calc(100% - 14px); max-height: calc(100dvh - 14px); border-radius: 23px; }
   .weather-dialog-sky .weather-scene::before { background-position: 76% top; }
-  .weather-top { padding: max(10px, env(safe-area-inset-top)) 15px 10px; min-height: 64px; }
+  .weather-dialog > .weather-top { padding: max(10px, env(safe-area-inset-top)) 15px 10px; min-height: 64px; }
   .weather-hero { padding: 6px 15px 18px; }
   .weather-current { padding-top: 17px; gap: 5px; }
   .weather-content { padding: 0 9px; gap: 9px; }

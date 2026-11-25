@@ -88,7 +88,7 @@ HEAD = """<meta charset="utf-8">
 <link rel="stylesheet" href="/app-assets/navigation.css?v=8">
 <link rel="stylesheet" href="/app-assets/space-theme.css?v=2">
 <script src="/app-assets/workspace.js?v=13" defer></script>
-<script src="/app-assets/app.js?v=11" defer></script>"""
+<script src="/app-assets/app.js?v=12" defer></script>"""
 
 RANGE_ASSETS = ("/app-assets/ranges.css?v=9", "/app-assets/ranges.js?v=9")
 SPACE_ASSETS = [*re.findall(r'(?:src|href)="(/app-assets/[^"]+)"', HEAD), *RANGE_ASSETS,
