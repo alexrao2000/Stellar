@@ -133,10 +133,11 @@ export function eventLayout(items, day, timeZone, hourHeight = 76) {
   const callouts = visible.filter(event => event.anchor != null);
   const endOfDay = 24 * hourHeight;
   const step = Math.min(calloutHeight + 4, (endOfDay - calloutHeight) / Math.max(1, callouts.length - 1));
-  let nextTop = 0;
-  for (const [index, event] of callouts.entries()) {
-    const latest = Math.max(nextTop, endOfDay - calloutHeight - (callouts.length - 1 - index) * step);
-    const preferred = Math.min(latest, Math.max(nextTop, event.anchor - calloutHeight / 2));
+  let latest = endOfDay - calloutHeight;
+  for (let index = callouts.length - 1; index >= 0; index--) {
+    const event = callouts[index];
+    const earliest = index * step;
+    const preferred = Math.max(earliest, Math.min(latest, event.anchor - calloutHeight - 8));
     let above = preferred, below = preferred;
     for (const band of textBands) {
       if (overlaps({ start: below, end: below + calloutHeight }, band)) below = band.end;
@@ -145,9 +146,9 @@ export function eventLayout(items, day, timeZone, hourHeight = 76) {
       const band = textBands[i];
       if (overlaps({ start: above, end: above + calloutHeight }, band)) above = band.start - calloutHeight;
     }
-    const choices = [above, below].filter(top => top >= nextTop && top <= latest && Math.abs(top - preferred) <= 32);
+    const choices = [above, below].filter(top => top >= earliest && top <= latest && Math.abs(top - preferred) <= 32);
     event.top = choices.sort((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred))[0] ?? preferred;
-    nextTop = event.top + step;
+    latest = event.top - step;
   }
   return [...cards, ...callouts];
 }

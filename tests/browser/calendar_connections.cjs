@@ -160,22 +160,27 @@ async function check(engine, mobile) {
       const bounds = await short.evaluate(el => {
         const column = el.closest('.cal-day-column'), bubble = el.closest('.cal-callout');
         const neighbor = column.querySelector('[data-event="overlap-demo"]');
-        const arrow = bubble.querySelector('path');
-        const pt = arrow.getPointAtLength(arrow.getTotalLength() - 5);
-        const arrowTip = new DOMPoint(pt.x, pt.y).matrixTransform(arrow.getScreenCTM());
+        const leader = bubble.querySelector('path');
+        const pt = leader.getPointAtLength(leader.getTotalLength());
+        const tip = new DOMPoint(pt.x, pt.y).matrixTransform(leader.getScreenCTM());
         const label = el.getBoundingClientRect(), day = column.getBoundingClientRect();
         const second = column.querySelector('[data-event="short-two"]').getBoundingClientRect();
         const title = neighbor.querySelector('strong').getBoundingClientRect();
-        return { fits: label.left >= day.left && arrowTip.x <= day.right, anchor: arrowTip.y - day.top,
+        const leaderStyle = getComputedStyle(leader);
+        return { fits: label.left >= day.left && tip.x <= day.right, anchor: tip.y - day.top,
           width: neighbor.offsetWidth - column.clientWidth, titleClear: label.top >= title.bottom || label.bottom <= title.top,
-          background: getComputedStyle(el).backgroundColor, labelBottom: label.bottom, nextTop: second.top };
+          background: getComputedStyle(el).backgroundColor, labelBottom: label.bottom, nextTop: second.top,
+          above: tip.y > second.bottom, sideways: tip.x - label.right, dash: leaderStyle.strokeDasharray,
+          opacity: Number(leaderStyle.strokeOpacity) };
       });
       assert(bounds.fits && bounds.titleClear, `${view}: callout fits in its column and avoids the meeting title ${JSON.stringify(bounds)}`);
       assert(Math.abs(bounds.anchor - (12.5 + 17 / 3600) * 76) < 0.1, `${view}: leader points to the second`);
       assert(bounds.width >= -7, `${view}: meeting remains full width`);
       assert.match(bounds.background, /^rgba\(.*, 0\.\d+\)$/);
+      assert(bounds.above && bounds.sideways >= 24, `${view}: labels float above and to the side of the start time`);
+      assert(bounds.dash !== 'none' && bounds.opacity > 0 && bounds.opacity < 1, `${view}: leader is dotted and translucent`);
       assert(bounds.labelBottom <= bounds.nextTop, `${view}: nearby labels remain separate ${JSON.stringify(bounds)}`);
-      await page.locator('.cal-board').screenshot({ path: `/private/tmp/stellar-calendar-callout-${engine}-${view}.png` });
+      await page.locator('.cal-board').screenshot({ path: `/private/tmp/stellar-calendar-floating-${engine}-${view}.png` });
     }
     assert.deepEqual(errors, []);
     console.log(`${engine}: explicit OAuth intent, read-only enforcement, external destination, task settings and mobile bounds passed`);

@@ -4,10 +4,10 @@
    Visibility-aware refreshes retain the page and never replace an open editor.
    Booking uses stable IDs, server versions and database conflict checks.
 */
-import { mountConnections } from './calendar-settings.js?v=4';
+import { mountConnections } from './calendar-settings.js?v=5';
 import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
-import { durationLabel, eventLayout, interval, localParts, overlaps, taskDurationSeconds, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=4';
+import { durationLabel, eventLayout, interval, localParts, overlaps, taskDurationSeconds, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=5';
 
 const boot = JSON.parse(document.getElementById('calendar-boot').textContent);
 const $ = selector => document.querySelector(selector);
@@ -134,20 +134,24 @@ function taskCallout(button, item) {
   button.classList.add('is-callout');
 
   const offset = item.anchor - item.top;
-  const arrowTop = Math.min(offset, item.height / 2) - 4;
-  const arrowHeight = Math.abs(offset - item.height / 2) + 8;
-  const anchor = offset - arrowTop;
-  const center = item.height / 2 - arrowTop;
+  const port = item.height / 2 + 2;
+  const leaderTop = Math.min(offset, port) - 4;
+  const leaderHeight = Math.abs(offset - port) + 8;
+  const anchor = offset - leaderTop;
   const svgNamespace = 'http://www.w3.org/2000/svg';
   const leader = document.createElementNS(svgNamespace, 'svg');
   leader.setAttribute('class', 'cal-callout-leader');
-  leader.setAttribute('viewBox', `0 0 20 ${arrowHeight}`);
-  leader.setAttribute('height', arrowHeight);
+  leader.setAttribute('viewBox', `0 0 32 ${leaderHeight}`);
+  leader.setAttribute('height', leaderHeight);
   leader.setAttribute('aria-hidden', 'true');
-  leader.style.top = `${arrowTop}px`;
-  const arrow = document.createElementNS(svgNamespace, 'path');
-  arrow.setAttribute('d', `M0 ${center} H5 L13 ${anchor} H18 M14 ${anchor - 3} L18 ${anchor} L14 ${anchor + 3}`);
-  leader.append(arrow);
+  leader.style.top = `${leaderTop}px`;
+  const line = document.createElementNS(svgNamespace, 'path');
+  line.setAttribute('d', `M3 ${port - leaderTop} L28 ${anchor}`);
+  const dot = document.createElementNS(svgNamespace, 'circle');
+  dot.setAttribute('cx', 28);
+  dot.setAttribute('cy', anchor);
+  dot.setAttribute('r', 1.8);
+  leader.append(line, dot);
   bubble.append(button, leader);
   return bubble;
 }

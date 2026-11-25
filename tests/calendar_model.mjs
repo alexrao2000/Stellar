@@ -80,8 +80,9 @@ test('short tasks keep their exact time and leave overlapping event cards full w
   assert.equal(meeting.columns, 1);
   assert.equal(meeting.height, 76);
   assert.equal(first.anchor, (10.5 + 17 / 3600) * 76);
-  assert(first.top >= 10.5 * 76 + 14 || first.top + first.height <= 10.5 * 76 - 14);
+  assert(first.top + first.height <= 10.5 * 76 - 14);
   assert(first.top + first.height < second.top);
+  assert(second.top + second.height < second.anchor);
 });
 
 test('short task bubbles stay stacked inside the timeline near midnight', () => {
