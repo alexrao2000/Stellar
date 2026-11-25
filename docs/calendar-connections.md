@@ -92,7 +92,7 @@ and [calendar permissions](https://learn.microsoft.com/en-us/graph/permissions-r
 
 ## Task scheduling settings
 
-In **Settings → Task planning**, enable suggestions per task and configure:
+Task planning is on by default. In **Settings → Tasks**, open **Plan** beside a task to change its defaults or turn suggestions off. You can configure:
 
 - Duration, earliest start, latest finish, and time free around other events.
 - Any weather, dry conditions, or sunshine with dry conditions.

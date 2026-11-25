@@ -223,9 +223,14 @@ def test_last_moment_conflict_prevents_booking_before_any_write(setup, monkeypat
 def test_task_planning_read_joins_current_series_rules_without_exposing_owner(setup, monkeypatch):
     client, db = setup
     monkeypatch.setattr(server, '_definitions', lambda **kwargs: [{'id': 7, 'series_id': 7, 'title': 'Read', 'active': True, 'sort_order': 1, 'starts_on': '2026-01-01'}])
-    db.rows['task_planning_rules'].append({'owner_id': 'local', 'series_id': 7, 'rule': {'enabled': True, 'duration_minutes': 45}, 'updated_at': '2026-11-24T20:00:00Z'})
+    initial = client.get('/api/calendar/task-planning').json()
+    assert initial['tasks'][0]['rule'] == initial['defaults']
+    assert initial['defaults']['enabled'] is True
+    assert initial['tasks'][0]['updated_at'] is None
+    db.rows['task_planning_rules'].append({'owner_id': 'local', 'series_id': 7, 'rule': {'enabled': False, 'duration_minutes': 45}, 'updated_at': '2026-11-24T20:00:00Z'})
     result = client.get('/api/calendar/task-planning')
     assert result.status_code == 200
     task = result.json()['tasks'][0]
     assert task['series_id'] == 7 and task['rule']['duration_minutes'] == 45 and task['titles'] == ['Read']
+    assert task['rule']['enabled'] is False
     assert 'owner_id' not in result.text

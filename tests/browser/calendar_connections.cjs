@@ -46,6 +46,12 @@ async function check(engine, mobile) {
     assert.equal(await page.locator('.is-suggestion').count(), 0, 'A partial schedule never produces a suggestion');
     releaseExternal();
     await page.locator('.is-suggestion').first().waitFor();
+    const selector = await page.locator('#cal-plan-task').evaluate(el => {
+      const css = getComputedStyle(el);
+      return { appearance: css.appearance, padding: parseFloat(css.paddingRight), width: el.clientWidth };
+    });
+    assert.equal(selector.appearance, 'none');
+    assert(selector.padding >= 32 && selector.width > selector.padding + 24, 'Selector reserves room for the chevron');
     const first = +(await page.locator('.is-suggestion').first().getAttribute('data-slot'));
     assert(first >= hour(11), 'Indoor task fits after both local and connected events without weather');
     await page.getByRole('button', { name: /Read-only work meeting/ }).click();
@@ -75,12 +81,18 @@ async function check(engine, mobile) {
     await page.screenshot({ path: `/private/tmp/stellar-calendar-permissions-${engine}.png` });
     await dialog.getByRole('button', { name: 'Close calendar connections' }).click();
     await page.goto(base + '/tasks');
-    const planning = page.locator('#task-planning-settings details').first(); await planning.locator('summary').click();
-    await planning.getByLabel('Minutes needed', { exact: true }).fill('45');
-    await planning.getByLabel('Weather requirement', { exact: true }).selectOption('dry');
+    await page.getByRole('button', { name: 'Plan ' + tasks[0].title, exact: true }).click();
+    const planning = page.getByRole('dialog', { name: 'Plan ' + tasks[0].title, exact: true });
+    assert(await planning.getByLabel('Suggest times for this task').isChecked());
+    assert.equal(await planning.getByLabel('Duration (minutes)').getAttribute('placeholder'), '30');
+    assert.equal(await planning.getByLabel('Earliest start').inputValue(), '');
+    await planning.getByText('9:00 AM', { exact: true }).waitFor();
+    await planning.getByLabel('Duration (minutes)', { exact: true }).fill('45');
+    await planning.getByLabel('Weather', { exact: true }).selectOption('dry');
+    await planning.getByText('Daylight, weather limits and buffer', { exact: true }).click();
     await planning.getByLabel('Max rain chance %', { exact: true }).fill('20');
-    await planning.getByRole('button', { name: 'Save scheduling settings' }).click();
-    await planning.getByText('Scheduling settings saved.', { exact: true }).waitFor();
+    await planning.getByRole('button', { name: 'Save planning settings' }).click();
+    await planning.getByText('Planning settings saved.', { exact: true }).waitFor();
     assert.equal(tasks[0].rule.duration_minutes, 45); assert.equal(tasks[0].rule.max_rain_percent, 20);
     for (const width of mobile ? [320, 390] : [1440]) {
       await page.setViewportSize({ width, height: mobile ? 844 : 1000 });
@@ -88,7 +100,8 @@ async function check(engine, mobile) {
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}px Settings bounds`);
       await page.screenshot({ path: `/private/tmp/stellar-task-planning-${engine}-${width}.png` });
     }
-    await page.getByRole('button', { name: 'Manage calendars', exact: true }).click();
+    await planning.getByRole('button', { name: 'Close task planning' }).click();
+    await page.getByRole('button', { name: 'Calendars', exact: true }).click();
     await dialog.getByRole('button', { name: '+ Outlook', exact: true }).waitFor();
     await page.setViewportSize({ width: mobile ? 320 : 1440, height: 400 });
     const close = dialog.getByRole('button', { name: 'Close calendar connections' }); const before = await close.boundingBox();

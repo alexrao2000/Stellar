@@ -4,7 +4,7 @@
    Visibility-aware refreshes retain the page and never replace an open editor.
    Booking uses stable IDs, server versions and database conflict checks.
 */
-import { mountConnections } from './calendar-settings.js?v=1';
+import { mountConnections } from './calendar-settings.js?v=2';
 import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
 import { eventLayout, interval, localParts, overlaps, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=2';
@@ -76,7 +76,7 @@ function status() {
   if ($('#cal-location').textContent !== cityLabel) $('#cal-location').textContent = cityLabel;
   $('#cal-weather-retry').disabled = weatherPending || !place;
   const task = plannedTask(), needsWeather = task && (task.rule.weather !== 'any' || task.rule.daylight_only);
-  $('#cal-weather-status').textContent = !planningReady ? 'Loading task planning settings…' : !task ? 'Enable task planning in Settings to see suggestions.' :
+  $('#cal-weather-status').textContent = !planningReady ? 'Loading task planning settings…' : !task ? 'No tasks are available for planning.' :
     !eventsReady || !externalReady || !recordsReady ? 'Checking all calendars and task records…' : needsWeather && (!forecast || weatherError) ?
     weatherError || (!place ? 'Choose a weather location for this task.' : 'Loading the forecast required for this task…') :
     `${plans.reduce((sum, day) => sum + day.slots.length, 0)} slots fit this task and your calendars`;
@@ -89,7 +89,7 @@ function calculate() {
   const weather = forecast && Date.now() - forecastAt < 45 * 60000 ? forecast : null;
   if (task && eventsReady && externalReady && planningReady && recordsReady && (!needsWeather || weather)) {
     plans = taskSuggestions(weather, { task, days, events, records, timeZone: tz, now: Date.now() / 1000 });
-  } else plans = days.map(day => ({ day, slots: [], reason: !planningReady ? 'Task settings unavailable' : !task ? 'Enable task planning in Settings' :
+  } else plans = days.map(day => ({ day, slots: [], reason: !planningReady ? 'Task settings unavailable' : !task ? 'No tasks available for planning' :
     !eventsReady || !externalReady ? 'Waiting for all connected calendars' : !recordsReady ? 'Task records unavailable' : 'Weather forecast required for this task' }));
   lastPlanTime = Date.now();
 }
@@ -460,8 +460,12 @@ async function loadPlanning(force = false) {
   planningJob = request('/api/calendar/task-planning', { priority: 'low' }).then(({ data }) => {
     if (!Array.isArray(data.tasks)) throw new Error('Task planning settings could not load.');
     plannedTasks = data.tasks.filter(task => task.rule.enabled);
-    if (!plannedTask()) selectedTaskId = String(plannedTasks[0]?.series_id || '');
-    const select = $('#cal-plan-task'); select.replaceChildren(...(plannedTasks.length ? plannedTasks.map(task => new Option(task.title, task.series_id)) : [new Option('Choose tasks in Settings', '')]));
+    if (!plannedTask()) {
+      const first = plannedTasks.find(task => task.updated_at && task.rule.weather !== 'any')
+        || plannedTasks.find(task => task.updated_at) || plannedTasks[0];
+      selectedTaskId = String(first?.series_id || '');
+    }
+    const select = $('#cal-plan-task'); select.replaceChildren(...(plannedTasks.length ? plannedTasks.map(task => new Option(task.title, task.series_id)) : [new Option('No tasks to plan', '')]));
     select.value = selectedTaskId; planningReady = true; planningError = ''; planningChecked = Date.now();
     if (!editing()) render(); else status();
   }).catch(error => { planningReady = false; planningError = error.message; if (!editing()) render(); else status(); }).finally(() => { planningJob = null; });

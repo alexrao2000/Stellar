@@ -1,4 +1,4 @@
-"""Opt-in scheduling rules belong to a task series, including after a rename.
+"""Scheduling rules belong to a task series, including after a rename.
 
 These are current planning preferences, separate from historic completion rules.
 Clients receive task identity and version titles so records and booked slots can
@@ -17,8 +17,8 @@ router = APIRouter()
 
 
 class PlanningRule(BaseModel):
-    enabled: bool = False
-    duration_minutes: int = Field(default=30, ge=5, le=480)
+    enabled: bool = True
+    duration_minutes: int = Field(default=15, ge=5, le=480)
     earliest: int = Field(default=420, ge=0, le=1439)
     latest: int = Field(default=1260, ge=0, le=1440)
     weather: Literal['any', 'dry', 'sunny'] = 'any'
@@ -57,7 +57,7 @@ def planning(request: Request, response: Response):
         tasks.append({'series_id': sid, 'title': summary['title'], 'titles': sorted({v['title'] for v in versions}),
                       'starts_on': min((v.get('starts_on') or '0001-01-01') for v in versions), 'ends_on': summary.get('ends_on'),
                       'rule': PlanningRule(**stored.get('rule', {})).model_dump(), 'updated_at': stored.get('updated_at')})
-    return {'tasks': tasks}
+    return {'tasks': tasks, 'defaults': PlanningRule().model_dump()}
 
 
 @router.put('/api/calendar/task-planning/{series_id}')

@@ -1,6 +1,6 @@
 /* Calendar permissions are chosen before OAuth. Read-only is the suggested
-   default; upgrading requires a new authorization. Task planning is opt-in and
-   stored by task series, independently from historic completion settings. */
+   default; upgrading requires a new authorization. Task planning is enabled by default and
+   saved by task series, independently from historic completion settings. */
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
 async function api(path, method = 'GET', body) {
   const response = await fetch(path, { method, cache: 'no-store', priority: 'low', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -115,47 +115,132 @@ export function mountConnections(button, changed = () => {}) {
   return { open, dialog };
 }
 
-export async function mountPlanning(host) {
-  const feedback = node('p', 'Loading task planning…', 'cal-settings-feedback'); feedback.setAttribute('role', 'status'); host.append(feedback);
-  try {
-    const data = await api('/api/calendar/task-planning');
-    host.replaceChildren(node('p', 'Opt in per task. Suggestions must fit its duration, allowed hours, deadline and calendar availability.', 'cal-setting-summary'));
-    for (const task of data.tasks) {
-      const details = node('details', null, 'cal-planning-task'), summary = node('summary');
-      summary.append(node('strong', task.title), node('span', task.rule.enabled ? task.rule.duration_minutes + ' min · planning on' : 'Planning off', 'cal-setting-suggestion')); details.append(summary);
-      const form = node('form'); const rule = task.rule;
-      form.append(choice('Suggest times for this task', rule.enabled, 'enabled'));
-      const duration = input('number', rule.duration_minutes, 'duration_minutes'); duration.min = 5; duration.max = 480; duration.required = true;
-      const earliest = input('time', clock(rule.earliest), 'earliest'); earliest.required = true;
-      const latest = input('time', clock(rule.latest), 'latest'); latest.required = true;
-      const hours = node('div', null, 'cal-form-row'); hours.append(field('Minutes needed', duration), field('Earliest start', earliest), field('Finish by', latest)); form.append(hours);
-      form.append(node('p', 'A finish time before the start means overnight. Task deadlines still apply.', 'cal-setting-summary'));
-      const weather = node('select'); weather.name = 'weather'; weather.append(new Option('Any weather · indoor tasks', 'any'), new Option('Dry conditions', 'dry'), new Option('Sunshine and dry conditions', 'sunny')); weather.value = rule.weather;
-      form.append(field('Weather requirement', weather), choice('Daylight only', rule.daylight_only, 'daylight_only'));
-      const limits = node('div', null, 'cal-weather-limits');
-      const min = input('number', Math.round(rule.min_temperature_c * 9 / 5 + 32), 'min_f'); min.min = -40; min.max = 122;
-      const max = input('number', Math.round(rule.max_temperature_c * 9 / 5 + 32), 'max_f'); max.min = -40; max.max = 122;
-      const rain = input('number', rule.max_rain_percent, 'max_rain_percent'); rain.min = 0; rain.max = 100;
-      const wind = input('number', Math.round(rule.max_wind_kph / 1.609344), 'wind_mph'); wind.min = 0; wind.max = 74;
-      limits.append(field('Minimum feels-like °F', min), field('Maximum feels-like °F', max), field('Max rain chance %', rain), field('Max gusts mph', wind)); form.append(limits);
-      weather.onchange = () => { limits.hidden = weather.value === 'any'; limits.querySelectorAll('input').forEach(el => { el.disabled = limits.hidden; }); }; weather.onchange();
-      const buffer = input('number', rule.buffer_minutes, 'buffer_minutes'); buffer.min = 0; buffer.max = 120;
-      form.append(field('Minutes free before and after', buffer));
-      const submit = node('button', 'Save scheduling settings', 'cal-button'); submit.type = 'submit'; const status = node('p', '', 'cal-settings-feedback'); status.setAttribute('role', 'status'); form.append(submit, status);
-      form.onsubmit = async event => { event.preventDefault(); submit.disabled = true;
-        const body = { ...rule, enabled: form.enabled.checked, duration_minutes: +duration.value, earliest: minutes(earliest.value), latest: minutes(latest.value), weather: weather.value,
-          daylight_only: form.daylight_only.checked, min_temperature_c: (+min.value - 32) * 5 / 9, max_temperature_c: (+max.value - 32) * 5 / 9,
-          max_rain_percent: +rain.value, max_wind_kph: Math.round(+wind.value * 1.609344), buffer_minutes: +buffer.value };
-        try { await api('/api/calendar/task-planning/' + task.series_id, 'PUT', body); announce('planning-changed'); summary.lastChild.textContent = body.enabled ? body.duration_minutes + ' min · planning on' : 'Planning off'; status.textContent = 'Scheduling settings saved.'; }
-        catch (error) { status.textContent = error.message; } finally { submit.disabled = false; }
-      };
-      details.append(form); host.append(details);
+function mountPlanningEditor(host) {
+  const dialog = node('dialog', null, 'cal-dialog calendar-settings-dialog');
+  dialog.setAttribute('aria-labelledby', 'task-planning-title');
+  const header = node('header');
+  const title = node('h2', 'Task planning');
+  title.id = 'task-planning-title';
+  const close = node('button', '×', 'cal-button cal-icon-button');
+  close.setAttribute('aria-label', 'Close task planning');
+  close.onclick = () => dialog.close();
+  header.append(title, close);
+  const content = node('div', null, 'cal-settings-content');
+  dialog.append(header, content);
+  document.body.append(dialog);
+
+  function showForm(task, defaults) {
+    const rule = task.rule;
+    const saved = Boolean(task.updated_at);
+    const form = node('form', null, 'task-planning-form');
+    form.append(choice('Suggest times for this task', rule.enabled, 'enabled'));
+    const fields = node('div', null, 'cal-form-row');
+    function number(label, name, min, max, display = value => value) {
+      const control = input('number', saved ? display(rule[name]) : '', name);
+      control.placeholder = String(display(defaults[name]));
+      control.min = min;
+      control.max = max;
+      return field(label, control);
     }
-    if (!data.tasks.length) host.append(node('p', 'Add a task above to configure its scheduling settings.', 'cal-setting-summary'));
-  } catch (error) { feedback.textContent = error.message; }
+    const duration = number('Duration (minutes)', 'duration_minutes', 5, 480);
+    function timeField(label, name) {
+      const control = input('time', saved ? clock(rule[name]) : '', name);
+      const wrapper = field(label, control);
+      wrapper.classList.add('planning-time');
+      const hour = Math.floor(defaults[name] / 60) % 24;
+      const minute = String(defaults[name] % 60).padStart(2, '0');
+      const hint = node('span', `${hour % 12 || 12}:${minute} ${hour < 12 ? 'AM' : 'PM'}`, 'planning-time-example');
+      hint.id = 'planning-default-' + name;
+      control.setAttribute('aria-describedby', hint.id);
+      const syncPlaceholder = () => { control.toggleAttribute('data-empty', !control.value); };
+      control.addEventListener('input', syncPlaceholder);
+      syncPlaceholder();
+      const entry = node('span', null, 'planning-time-entry');
+      entry.append(control, hint);
+      wrapper.append(entry);
+      return wrapper;
+    }
+    fields.append(duration, timeField('Earliest start', 'earliest'), timeField('Finish by', 'latest'));
+    form.append(fields);
+
+    const weather = node('select');
+    weather.name = 'weather';
+    weather.append(new Option('Any weather', 'any'), new Option('Dry', 'dry'), new Option('Sunny and dry', 'sunny'));
+    weather.value = rule.weather;
+    form.append(field('Weather', weather));
+    const advanced = node('details', null, 'cal-connection-card');
+    advanced.append(node('summary', 'Daylight, weather limits and buffer'));
+    const options = node('div', null, 'planning-options');
+    options.append(choice('Daylight only', rule.daylight_only, 'daylight_only'));
+    const limits = node('div', null, 'cal-weather-limits');
+    const fahrenheit = value => Math.round(value * 9 / 5 + 32);
+    limits.append(number('Minimum feels-like °F', 'min_temperature_c', -40, 122, fahrenheit),
+      number('Maximum feels-like °F', 'max_temperature_c', -40, 122, fahrenheit),
+      number('Max rain chance %', 'max_rain_percent', 0, 100),
+      number('Max gusts mph', 'max_wind_kph', 0, 74, value => Math.round(value / 1.609344)));
+    weather.onchange = () => { limits.hidden = weather.value === 'any'; };
+    weather.onchange();
+    options.append(limits, number('Free time before and after (minutes)', 'buffer_minutes', 0, 120));
+    advanced.append(options);
+    form.append(advanced);
+    const submit = node('button', 'Save planning settings', 'cal-button cal-primary');
+    submit.type = 'submit';
+    const status = node('p', '', 'cal-settings-feedback');
+    status.setAttribute('role', 'status');
+    form.append(submit, status);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const controls = form.elements;
+      const get = (key, parse = Number) => controls[key].value === '' ? defaults[key] : parse(controls[key].value);
+      const celsius = value => (Number(value) - 32) * 5 / 9;
+      const body = {
+        enabled: controls.enabled.checked,
+        duration_minutes: get('duration_minutes'),
+        earliest: get('earliest', minutes),
+        latest: get('latest', minutes),
+        weather: weather.value,
+        daylight_only: controls.daylight_only.checked,
+        min_temperature_c: get('min_temperature_c', celsius),
+        max_temperature_c: get('max_temperature_c', celsius),
+        max_rain_percent: get('max_rain_percent'),
+        max_wind_kph: get('max_wind_kph', value => Math.round(Number(value) * 1.609344)),
+        buffer_minutes: get('buffer_minutes'),
+      };
+      submit.disabled = true;
+      try {
+        await api('/api/calendar/task-planning/' + task.series_id, 'PUT', body);
+        announce('planning-changed');
+        status.textContent = 'Planning settings saved.';
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    };
+    content.replaceChildren(form);
+  }
+
+  let latestRequest = 0;
+  host.addEventListener('click', async event => {
+    const trigger = event.target.closest('[data-plan-task]');
+    if (!trigger) return;
+    const request = ++latestRequest;
+    title.textContent = trigger.getAttribute('aria-label');
+    content.textContent = 'Loading planning settings…';
+    dialog.showModal();
+    try {
+      const data = await api('/api/calendar/task-planning');
+      const task = data.tasks.find(item => String(item.series_id) === trigger.dataset.planTask);
+      if (!task) throw new Error('This task is no longer available.');
+      const defaults = data.defaults || task.rule;
+      if (dialog.open && request === latestRequest) showForm(task, defaults);
+    } catch (error) {
+      if (request === latestRequest) content.textContent = error.message;
+    }
+  });
 }
 
 if (document.body.dataset.page === 'tasks') {
-  mountPlanning(document.getElementById('task-planning-settings'));
+  mountPlanningEditor(document.getElementById('live'));
   mountConnections(document.getElementById('settings-calendar-connections'));
 }

@@ -93,6 +93,7 @@ async function check(engine, mobile) {
     await readable(page.locator('.wrap > h1'));
     assert(await page.locator('.opt:checked').count() > 0);
     assert(await page.locator('.opt:not(:checked)').count() > 0);
+    await page.locator('#live details:has(.title) > summary').first().click();
     for (const width of mobile ? [320, 390] : [1440]) {
       await page.setViewportSize({ width, height: mobile ? 844 : 1000 }); await fits();
       for (const input of await page.locator('.wrap input:not([type=checkbox]), .wrap textarea.title').all()) {
@@ -105,7 +106,7 @@ async function check(engine, mobile) {
       const choices = await page.locator('.wrap input[type=checkbox]').evaluateAll(nodes => nodes.map(node => {
         const r = node.getBoundingClientRect(); return [r.width, r.height];
       }));
-      assert(choices.every(([w, h]) => w === h && w >= 16), 'Choice indicators retain fixed square dimensions');
+      assert(choices.filter(([w]) => w > 0).every(([w, h]) => w === h && w >= 16), 'Choice indicators retain fixed square dimensions');
     }
     await page.screenshot({ path: `/private/tmp/stellar-themed-settings-${engine}-${mobile ? 'mobile' : 'desktop'}.png` });
     await page.goto(base + '/docs'); await page.locator('#swagger-ui .opblock').first().waitFor();

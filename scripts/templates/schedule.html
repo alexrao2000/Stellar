@@ -1,13 +1,13 @@
 <title>Calendar · Stellar</title>
-<link rel="stylesheet" href="/app-assets/calendar.css?v=2">
-<link rel="stylesheet" href="/app-assets/calendar-settings.css?v=1">
+<link rel="stylesheet" href="/app-assets/calendar.css?v=3">
+<link rel="stylesheet" href="/app-assets/calendar-settings.css?v=2">
 <main class="wrap calendar-app">
   <header class="cal-heading"><div><p class="eyebrow">✦ Stellar</p><h1>Calendar</h1><p class="cal-sub">Make room for what matters.</p></div>
     <div class="cal-setting-actions"><button class="cal-button" id="cal-connections">Calendars</button><button class="cal-button cal-primary" id="cal-add">＋ Add event</button></div></header>
   <section class="cal-weather-strip" aria-label="Task planner">
     <div class="cal-weather-copy"><span class="cal-orbit" aria-hidden="true">✧</span><div><strong>A little room, well timed</strong>
       <p id="cal-weather-status" role="status">Choose tasks to plan in Settings.</p></div></div>
-    <div class="cal-weather-actions"><label class="cal-task-picker"><span class="cal-sr">Task to plan</span><select id="cal-plan-task" aria-label="Task to plan"><option value="">No planned tasks</option></select></label><button class="cal-button" id="cal-location">Choose city</button><button class="cal-button cal-icon-button" id="cal-weather-retry" aria-label="Refresh forecast" title="Refresh forecast">↻</button></div>
+    <div class="cal-weather-actions"><label class="cal-task-picker"><span class="cal-sr">Task to plan</span><select id="cal-plan-task" aria-label="Task to plan"><option value="">Loading tasks…</option></select></label><button class="cal-button" id="cal-location">Choose city</button><button class="cal-button cal-icon-button" id="cal-weather-retry" aria-label="Refresh forecast" title="Refresh forecast">↻</button></div>
   </section>
   <div class="cal-toolbar"><div class="cal-date-controls"><button class="cal-button cal-icon-button" id="cal-prev" aria-label="Previous period">←</button>
     <button class="cal-button" id="cal-today">Today</button><button class="cal-button cal-icon-button" id="cal-next" aria-label="Next period">→</button>
@@ -15,7 +15,7 @@
     <h2 id="cal-period"></h2><div class="cal-view" role="group" aria-label="Calendar view"><button data-cal-view="day">Day</button><button data-cal-view="week">Week</button></div></div>
   <div class="cal-meta"><span id="cal-timezone"></span><span class="cal-legend"><i></i> Suggested task <span>· Click a slot to reserve it</span></span>
     <button class="cal-link" id="cal-options">Planner settings</button></div>
-  <div id="cal-preferences" class="cal-preferences" hidden><p>Task duration, allowed hours and weather requirements are configured per task in <a href="/tasks#task-planning-card">Settings → Task planning</a>.</p></div>
+  <div id="cal-preferences" class="cal-preferences" hidden><p>Task duration, allowed hours and weather requirements are configured per task in <a href="/tasks#task-planning-card">Settings → Tasks → Plan</a>.</p></div>
   <p id="cal-status" class="cal-status" role="status"></p>
   <section class="cal-board" aria-label="Calendar"><div id="cal-day-heads" class="cal-day-heads"></div><div id="cal-mobile-all-day" class="cal-mobile-all-day"></div><div class="cal-scroll" id="cal-scroll"><div id="cal-grid" class="cal-grid"></div></div></section>
   <section class="cal-agenda" aria-labelledby="cal-agenda-title"><div><h2 id="cal-agenda-title">Task outlook</h2><p>Available slots that meet the selected task’s settings, weather requirements and calendar availability.</p></div><div id="cal-outlook"></div></section>
@@ -41,4 +41,4 @@
     <p id="cal-city-status" role="status"></p><div id="cal-city-results" class="cal-city-list"></div></dialog>
 </main>
 <script id="calendar-boot" type="application/json">__BOOTSTRAP__</script>
-<script type="module" src="/app-assets/calendar.js?v=3"></script>
+<script type="module" src="/app-assets/calendar.js?v=4"></script>

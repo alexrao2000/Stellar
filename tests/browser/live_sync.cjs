@@ -104,6 +104,7 @@ const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
     assert(calls.some(call => call.path === '/api/metrics' && call.search.includes('fresh=true')));
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     const settings = await readyFrame('/tasks');
+    await settings.locator('#live details:has(.title) > summary').first().click();
     await settings.locator('#live .title').first().waitFor(); await tick();
     await settings.locator('#new-title').fill('New task draft');
     const settingTitle = settings.locator('#live .title').first(), originalTitle = await settingTitle.inputValue();

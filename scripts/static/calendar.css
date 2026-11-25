@@ -158,3 +158,13 @@ html body .cal-dialog { --cal-muted: #a5afc8; width: min(460px,calc(100% - 24px)
 .cal-event[data-kind=task] { border-color: #d5c4f370; background: #b49bd52b; }
 .cal-event[data-source] { border-style: solid; }
 @media(max-width: 760px) { .cal-heading { align-items: flex-start; flex-wrap: wrap; } .cal-setting-actions { justify-content: flex-end; } .cal-weather-actions { width: 100%; } .cal-task-picker { flex: 1; min-width: 0; } .cal-task-picker select { max-width: 100%; } }
+
+.cal-task-picker { display: block; min-width: 0; }
+body[data-page=calendar] #cal-plan-task {
+  appearance: none;
+  padding-inline: 12px 36px;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23c7d2e8' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}

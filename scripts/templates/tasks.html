@@ -73,40 +73,41 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
 #status.ok { color: var(--ok); } #status.bad { color: var(--bad); }
 </style>
 
-<link rel="stylesheet" href="/app-assets/calendar.css?v=2">
-<link rel="stylesheet" href="/app-assets/calendar-settings.css?v=1">
+<link rel="stylesheet" href="/app-assets/calendar.css?v=3">
+<link rel="stylesheet" href="/app-assets/calendar-settings.css?v=2">
 <div class="wrap">
   <p class="eyebrow">Stellar</p>
   <h1>Settings</h1>
-  <p class="sub">Changes apply from the day below onward, so earlier days keep the settings
-    they had. Optional tasks are extra: they do not change the required daily target and stay
-    unreported until you enter an outcome. Their metrics show frequency. Required tasks become incomplete after their deadline.</p>
   <div id="notice"></div>
 
-  <div class="bar">
-    <label class="ctl">Changes apply from <input type="date" id="from"></label>
-    <label class="ctl"><input type="checkbox" id="alldays"> to all days, past included</label>
-    <span class="hint">"All days" rewrites how past days are judged. It doesn't apply to renames:
-      past days keep the name they had.</span>
-  </div>
-
-  <div class="card"><h2>Tasks</h2><div id="live"></div></div>
-
-  <div class="card"><h2>Add a task</h2>
+  <section class="card" id="task-planning-card">
+    <header class="settings-card-header"><h2>Tasks</h2><button type="button" id="settings-calendar-connections" class="btn">Calendars</button></header>
+    <div id="live"></div>
     <div class="add">
       <input type="text" id="new-title" placeholder="Task name" aria-label="New task name" maxlength="200" enterkeyhint="done">
-      <label class="ctl"><input type="checkbox" id="new-optional" title="Extra task: excluded from the required daily target; unreported until you enter an outcome"> Optional</label>
-      <label class="ctl">Deadline <input type="time" id="new-time"></label>
-      <label class="ctl"><input type="checkbox" id="new-next"> next day</label>
-      <label class="ctl">Starts <input type="date" id="new-start"></label>
-      <button type="button" class="btn primary" id="new-add">Add</button>
+      <button type="button" class="btn primary" id="new-add">Add task</button>
+      <details class="settings-options">
+        <summary>New task options</summary>
+        <div class="settings-fields">
+          <label class="ctl"><input type="checkbox" id="new-optional" title="Extra task: excluded from the required daily target; unreported until you enter an outcome"> Optional</label>
+          <label class="ctl">Deadline <input type="time" id="new-time"></label>
+          <label class="ctl"><input type="checkbox" id="new-next"> Next day</label>
+          <label class="ctl">Starts <input type="date" id="new-start"></label>
+        </div>
+      </details>
     </div>
-  </div>
+  </section>
 
-  <div class="card" id="stopped-card" hidden><h2>Stopped</h2><div id="stopped"></div></div>
-  <div class="card" id="bin-card" hidden><h2>Bin</h2><div id="bin"></div></div>
-  <section class="card" id="task-planning-card"><h2>Task planning</h2><div id="task-planning-settings"></div></section>
-  <section class="card"><h2>Connected calendars</h2><div class="add"><p>Choose calendar access and account permissions.</p><button type="button" id="settings-calendar-connections" class="cal-button">Manage calendars</button></div></section>
+  <details class="card settings-disclosure">
+    <summary>Edit dates and archived tasks</summary>
+    <div class="bar">
+      <label class="ctl">Apply changes from <input type="date" id="from"></label>
+      <label class="ctl"><input type="checkbox" id="alldays"> Include past days</label>
+      <span class="hint">Including past days recalculates earlier outcomes. Renames apply from the selected date.</span>
+    </div>
+    <div id="stopped-card" hidden><h2>Stopped</h2><div id="stopped"></div></div>
+    <div id="bin-card" hidden><h2>Bin</h2><div id="bin"></div></div>
+  </details>
   <div id="status"></div>
 </div>
 
@@ -206,6 +207,27 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   function liveRow(t) {
     var row = document.createElement('div');
     row.className = 'row' + (t.optional ? ' optional' : '');
+    var group = document.createElement('div');
+    group.className = 'settings-task';
+    var details = document.createElement('details');
+    var summary = document.createElement('summary');
+    summary.textContent = t.title;
+    if (t.optional) {
+      var badge = document.createElement('span');
+      badge.className = 'meta';
+      badge.textContent = 'Optional';
+      summary.append(' ', badge);
+    }
+    details.dataset.taskId = t.id;
+    details.append(summary, row);
+    group.append(details);
+    var plan = document.createElement('button');
+    plan.type = 'button';
+    plan.className = 'btn task-plan';
+    plan.textContent = 'Plan';
+    plan.dataset.planTask = t.id;
+    plan.setAttribute('aria-label', 'Plan ' + t.title);
+    group.append(plan);
     var s = split(t.deadline_minutes);
     row.innerHTML =
       '<div class="name"><span class="dot"></span>' +
@@ -226,7 +248,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
     if (title) {
       title.value = t.title; title.setAttribute('aria-label', 'Name: ' + t.title);
       var fit = function () { title.style.height = 'auto'; title.style.height = (title.scrollHeight + 2) + 'px'; };
-      requestAnimationFrame(fit);
+      details.addEventListener('toggle', function () { if (details.open) fit(); });
       title.addEventListener('input', fit);
       title._fit = fit;
     }
@@ -281,7 +303,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
       act(row, api('POST', '/api/series/' + t.id + '/bin'),
           function (j) { return j.title + ' moved to the bin'; });
     });
-    return row;
+    return group;
   }
 
   function stoppedRow(t) {
@@ -336,11 +358,13 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
       Array.from(document.querySelectorAll('#live input, #live textarea')).some(function (el) { return baseline.get(el) !== controlValue(el); });
   }
   function renderSettings(tasks) {
+    var expanded = new Set(Array.from(document.querySelectorAll('#live details[open]'), function (item) { return item.dataset.taskId; }));
     ['live', 'stopped', 'bin'].forEach(function (id) { document.getElementById(id).replaceChildren(); });
     live = tasks.filter(function (t) { return !t.binned && !t.stopped; });
     stopped = tasks.filter(function (t) { return !t.binned && t.stopped; });
     binned = tasks.filter(function (t) { return t.binned; });
-    fill('live', live, liveRow, 'No tasks yet. Add one below.');
+    fill('live', live, liveRow, 'No tasks yet.');
+    document.querySelectorAll('#live details').forEach(function (item) { item.open = expanded.has(item.dataset.taskId); });
     document.getElementById('stopped-card').hidden = !stopped.length;
     document.getElementById('bin-card').hidden = !binned.length;
     fill('stopped', stopped, stoppedRow, ''); fill('bin', binned, binRow, '');
@@ -389,4 +413,4 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
 })();
 </script>
 
-<script type="module" src="/app-assets/calendar-settings.js?v=1"></script>
+<script type="module" src="/app-assets/calendar-settings.js?v=2"></script>
