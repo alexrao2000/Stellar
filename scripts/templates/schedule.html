@@ -1,5 +1,5 @@
 <title>Calendar · Stellar</title>
-<link rel="stylesheet" href="/app-assets/calendar.css?v=3">
+<link rel="stylesheet" href="/app-assets/calendar.css?v=4">
 <link rel="stylesheet" href="/app-assets/calendar-settings.css?v=2">
 <main class="wrap calendar-app">
   <header class="cal-heading"><div><p class="eyebrow">✦ Stellar</p><h1>Calendar</h1><p class="cal-sub">Make room for what matters.</p></div>
@@ -27,7 +27,7 @@
     <label>Calendar<select name="destination" id="cal-event-destination" aria-label="Calendar"></select></label>
     <p id="cal-event-source" class="cal-form-help"></p>
     <label class="cal-checkbox"><input type="checkbox" name="all_day"> All day</label>
-    <div class="cal-form-row" id="cal-event-time"><label>Start<input type="time" name="time" required></label><label>Minutes<input type="number" name="duration" min="1" max="1440" step="1" value="60" required></label></div>
+    <div class="cal-form-row" id="cal-event-time"><label>Start<input type="time" name="time" required></label><div class="cal-duration"><label>Duration<input type="number" name="duration" min="1" max="1440" step="1" value="60" required></label><label>Duration unit<select name="duration_unit" aria-label="Duration unit"><option value="minutes">Minutes</option><option value="seconds">Seconds</option></select></label></div></div>
     <label>Notes<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
     <p class="cal-form-help">Times follow <span data-calendar-timezone></span>. Scheduling a task reserves time; task records stay separate.</p>
     <p class="cal-form-error" role="alert"></p><footer><button type="button" class="cal-link cal-danger" id="cal-delete" hidden>Remove event</button><button type="submit" class="cal-button cal-primary">Save event</button></footer>
@@ -41,4 +41,4 @@
     <p id="cal-city-status" role="status"></p><div id="cal-city-results" class="cal-city-list"></div></dialog>
 </main>
 <script id="calendar-boot" type="application/json">__BOOTSTRAP__</script>
-<script type="module" src="/app-assets/calendar.js?v=4"></script>
+<script type="module" src="/app-assets/calendar.js?v=5"></script>

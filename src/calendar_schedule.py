@@ -52,8 +52,8 @@ class CalendarEvent(BaseModel):
             raise ValueError("Enter a title and an end time after the start")
         if self.ends_at - self.starts_at > timedelta(days=31):
             raise ValueError("An event can span at most 31 days")
-        if self.kind in {"run", "task"} and (self.all_day or not timedelta(minutes=1) <= self.ends_at - self.starts_at <= timedelta(hours=8)):
-            raise ValueError("A scheduled task needs a timed slot of 1–480 minutes")
+        if self.kind in {"run", "task"} and (self.all_day or not timedelta(seconds=1) <= self.ends_at - self.starts_at <= timedelta(hours=8)):
+            raise ValueError("A scheduled task needs a timed slot of 1 second to 8 hours")
         return self
 
     def row(self) -> dict:

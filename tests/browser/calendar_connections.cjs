@@ -24,6 +24,7 @@ async function check(engine, mobile) {
     const tasks = [{ series_id: 3, title: 'Read a chapter and write down three things to remember', titles: ['Read a chapter and write down three things to remember'], starts_on: today,
       rule: { enabled: true, duration_minutes: 30, earliest: 540, latest: 1020, weather: 'any', daylight_only: false, min_temperature_c: 2, max_temperature_c: 30, max_rain_percent: 30, max_wind_kph: 40, buffer_minutes: 0 } }];
     const event = (id, title, start, end, more = {}) => ({ id, title, starts_at: new Date(start * 1000).toISOString(), ends_at: new Date(end * 1000).toISOString(), notes: '', kind: 'event', all_day: false, updated_at: '"v1"', ...more });
+    const local = [event('00000000-0000-0000-0000-000000000001', 'Local planning', hour(9), hour(10))];
     let external = [event('external-demo', 'Read-only work meeting', hour(10), hour(11), { source: 'google', read_only: true, connection_id: connections[0].id, calendar_id: 'work', calendar_label: 'Work calendar', blocks_time: true })];
     await context.route('**/api/**', async route => {
       const req = route.request(), url = new URL(req.url());
@@ -35,7 +36,15 @@ async function check(engine, mobile) {
       if (url.pathname.startsWith('/api/calendar/connections/')) { const row = connections.find(c => c.id === url.pathname.split('/').at(-1)); Object.assign(row, req.postDataJSON(), { mode: req.postDataJSON().allow_writes ? 'write' : 'read' }); return route.fulfill({ json: row }); }
       if (url.pathname === '/api/calendar/external-events' && req.method() === 'GET') { await externalWait; return route.fulfill({ json: { events: external, complete, connections, errors: complete ? [] : [{ message: 'Demo failure' }] } }); }
       if (url.pathname === '/api/calendar/external-events' && req.method() === 'POST') { const body = req.postDataJSON(); const saved = { ...body, id: 'external-created', source: 'outlook', read_only: false, calendar_label: 'Personal calendar', updated_at: '"v2"' }; external.push(saved); return route.fulfill({ json: saved }); }
-      if (url.pathname === '/api/calendar/events') return route.fulfill({ json: { events: [event('00000000-0000-0000-0000-000000000001', 'Local planning', hour(9), hour(10))] } });
+      if (url.pathname === '/api/calendar/events' && req.method() === 'GET') return route.fulfill({ json: { events: local } });
+      if (url.pathname.startsWith('/api/calendar/events') && ['POST', 'PUT'].includes(req.method())) {
+        const body = req.postDataJSON();
+        const saved = { ...body, updated_at: '2026-11-16T18:00:00Z' };
+        const index = local.findIndex(row => row.id === saved.id);
+        if (index < 0) local.push(saved);
+        else local[index] = saved;
+        return route.fulfill({ json: saved });
+      }
       if (url.pathname === '/api/range') return route.fulfill({ json: { days: { [today]: [{ title: tasks[0].title, series_id: 3, is_completed: false }] } } });
       if (url.pathname === '/api/task_history') return route.fulfill({ json: [] });
       if (url.pathname === '/api/changes') return route.fulfill({ json: { records: '1', definitions: '1' } });
@@ -84,10 +93,10 @@ async function check(engine, mobile) {
     await page.getByRole('button', { name: 'Plan ' + tasks[0].title, exact: true }).click();
     const planning = page.getByRole('dialog', { name: 'Plan ' + tasks[0].title, exact: true });
     assert(await planning.getByLabel('Suggest times for this task').isChecked());
-    assert.equal(await planning.getByLabel('Duration (minutes)').getAttribute('placeholder'), '30');
+    assert.equal(await planning.getByLabel('Duration', { exact: true }).getAttribute('placeholder'), '30');
     assert.equal(await planning.getByLabel('Earliest start').inputValue(), '');
     await planning.getByText('9:00 AM', { exact: true }).waitFor();
-    await planning.getByLabel('Duration (minutes)', { exact: true }).fill('45');
+    await planning.getByLabel('Duration', { exact: true }).fill('45');
     await planning.getByLabel('Weather', { exact: true }).selectOption('dry');
     await planning.getByText('Daylight, weather limits and buffer', { exact: true }).click();
     await planning.getByLabel('Max rain chance %', { exact: true }).fill('20');
@@ -108,6 +117,32 @@ async function check(engine, mobile) {
     await dialog.locator('.cal-settings-content').evaluate(el => { el.scrollTop = el.scrollHeight; });
     const after = await close.boundingBox(); assert(Math.abs(after.y - before.y) < 1 && after.y >= 0 && after.y + after.height <= 400, 'Connection close stays visible');
     await close.click();
+
+    await page.setViewportSize({ width: mobile ? 390 : 1440, height: mobile ? 844 : 1000 });
+    await page.getByRole('button', { name: 'Plan ' + tasks[0].title, exact: true }).click();
+    await planning.getByLabel('Duration unit', { exact: true }).selectOption('seconds');
+    await planning.getByLabel('Duration', { exact: true }).fill('1');
+    await planning.getByLabel('Weather', { exact: true }).selectOption('any');
+    await planning.getByRole('button', { name: 'Save planning settings' }).click();
+    await planning.getByText('Planning settings saved.', { exact: true }).waitFor();
+    assert.equal(tasks[0].rule.duration_seconds, 1);
+    assert.equal(local.length, 1, 'Saving the rule creates no calendar reservations');
+
+    await page.goto(base + '/calendar?day=' + today + '&view=day');
+    await page.getByRole('button', { name: /suggested .*1 second/ }).first().click();
+    const booking = page.getByRole('dialog', { name: tasks[0].title, exact: true });
+    await booking.getByLabel('Calendar', { exact: true }).selectOption('local');
+    await booking.getByRole('button', { name: 'Schedule ' + tasks[0].title }).click();
+    await booking.waitFor({ state: 'hidden' });
+    const booked = local.at(-1);
+    assert.equal(Date.parse(booked.ends_at) - Date.parse(booked.starts_at), 1000);
+    await page.locator('[data-event="' + booked.id + '"]').click();
+    const edit = page.getByRole('dialog', { name: 'Edit event' });
+    assert.equal(await edit.getByLabel('Duration', { exact: true }).inputValue(), '1');
+    assert.equal(await edit.getByLabel('Duration unit', { exact: true }).inputValue(), 'seconds');
+    await edit.getByRole('button', { name: 'Save event' }).click();
+    await edit.waitFor({ state: 'hidden' });
+    assert.equal(Date.parse(local.at(-1).ends_at) - Date.parse(local.at(-1).starts_at), 1000);
     assert.deepEqual(errors, []);
     console.log(`${engine}: explicit OAuth intent, read-only enforcement, external destination, task settings and mobile bounds passed`);
   } finally { await browser.close(); }

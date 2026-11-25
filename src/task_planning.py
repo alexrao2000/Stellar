@@ -18,7 +18,8 @@ router = APIRouter()
 
 class PlanningRule(BaseModel):
     enabled: bool = True
-    duration_minutes: int = Field(default=15, ge=5, le=480)
+    duration_minutes: int = Field(default=15, ge=1, le=480)
+    duration_seconds: int | None = Field(default=None, ge=1, le=28800)
     earliest: int = Field(default=420, ge=0, le=1439)
     latest: int = Field(default=1260, ge=0, le=1440)
     weather: Literal['any', 'dry', 'sunny'] = 'any'
@@ -34,7 +35,8 @@ class PlanningRule(BaseModel):
         if self.max_temperature_c < self.min_temperature_c:
             raise ValueError('The maximum temperature must be above the minimum')
         duration = (self.latest - self.earliest) % 1440 or 1440
-        if self.duration_minutes > duration:
+        seconds = self.duration_seconds if self.duration_seconds is not None else self.duration_minutes * 60
+        if seconds > duration * 60:
             raise ValueError('The task must fit inside its allowed time window')
         return self
 

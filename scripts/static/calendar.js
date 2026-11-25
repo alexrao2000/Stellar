@@ -4,10 +4,10 @@
    Visibility-aware refreshes retain the page and never replace an open editor.
    Booking uses stable IDs, server versions and database conflict checks.
 */
-import { mountConnections } from './calendar-settings.js?v=2';
+import { mountConnections } from './calendar-settings.js?v=3';
 import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
-import { eventLayout, interval, localParts, overlaps, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=2';
+import { durationLabel, eventLayout, interval, localParts, overlaps, taskDurationSeconds, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=3';
 
 const boot = JSON.parse(document.getElementById('calendar-boot').textContent);
 const $ = selector => document.querySelector(selector);
@@ -21,7 +21,22 @@ const dayFormat = new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'l
 const shortDay = new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'short' });
 const periodFormat = new Intl.DateTimeFormat(undefined, { timeZone: tz, month: 'short', day: 'numeric', year: 'numeric' });
 const timeFormat = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+const timeWithSeconds = new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit', second: '2-digit' });
 const timeLabel = seconds => timeFormat.format(seconds * 1000);
+function timeRange(start, end) {
+  const formatter = start % 60 || end % 60 ? timeWithSeconds : timeFormat;
+  return formatter.format(start * 1000) + ' – ' + formatter.format(end * 1000);
+}
+
+function setEditorDuration(form, seconds) {
+  form.duration_unit.value = seconds % 60 ? 'seconds' : 'minutes';
+  updateDurationLimit(form);
+  form.duration.value = form.duration_unit.value === 'seconds' ? seconds : seconds / 60;
+}
+
+function updateDurationLimit(form) {
+  form.duration.max = form.duration_unit.value === 'seconds' ? 86400 : 1440;
+}
 const dayLabel = day => dayFormat.format(zonedTime(day, 12 * 60, tz) * 1000);
 const validDay = value => { try { return /^\d{4}-\d{2}-\d{2}$/.test(value || '') && new Date(value + 'T12:00:00Z').toISOString().slice(0, 10) === value; } catch { return false; } };
 const minutes = text => { const [hours, mins] = text.split(':').map(Number); return hours * 60 + mins; };
@@ -103,8 +118,8 @@ function eventButton(event) {
   if (isDone(event)) button.classList.add('is-complete');
   if (conflicted(event)) button.classList.add('is-conflicted');
   button.append(element('strong', (['run', 'task'].includes(event.kind) ? '✦ ' : '') + event.title));
-  if (!event.all_day) button.append(element('small', `${timeLabel(interval(event).start)} – ${timeLabel(interval(event).end)}`));
-  button.title = event.title + (event.all_day ? ' · All day' : ` · ${timeLabel(interval(event).start)} – ${timeLabel(interval(event).end)}`) +
+  if (!event.all_day) button.append(element('small', timeRange(interval(event).start, interval(event).end)));
+  button.title = event.title + (event.all_day ? ' · All day' : ` · ${timeRange(interval(event).start, interval(event).end)}`) +
     (conflicted(event) ? ' · Conflicts with another event' : isDone(event) ? ' · Run recorded' : '');
   button.addEventListener('click', () => openEditor(event));
   return button;
@@ -152,7 +167,7 @@ function render() {
       if (item.slot) {
         button = element('button', null, 'cal-event is-suggestion'); button.dataset.slot = item.slot.start;
         button.append(element('strong', `✧ ${timeLabel(item.slot.start)} · ${item.slot.taskTitle}`));
-        button.setAttribute('aria-label', `${dayLabel(day)}, ${timeLabel(item.slot.start)}, suggested ${Math.round((item.slot.end - item.slot.start) / 60)}-minute ${item.slot.taskTitle}${item.slot.rank === 1 ? ', best match' : ''}`);
+        button.setAttribute('aria-label', `${dayLabel(day)}, ${timeLabel(item.slot.start)}, suggested ${item.slot.taskTitle}, ${durationLabel(item.slot.end - item.slot.start)}${item.slot.rank === 1 ? ', best match' : ''}`);
         button.title = slotDescription(item.slot);
         button.addEventListener('click', () => openRun(item.slot));
       } else button = eventButton(item);
@@ -281,7 +296,7 @@ function openEditor(event = null, day = selectedDay, start = null) {
   editingEvent = event; creatorId = event && !event.source ? event.id : crypto.randomUUID(); form.reset();
   const local = event ? localParts(interval(event).start, tz) : { day, minutes: start ?? 9 * 60 };
   form.elements.title.value = event?.title || ''; form.day.value = local.day; form.time.value = clock(local.minutes);
-  form.duration.value = event ? Math.round((interval(event).end - interval(event).start) / 60) : 60;
+  setEditorDuration(form, event ? Math.round(interval(event).end - interval(event).start) : 3600);
   form.notes.value = event?.notes || ''; form.kind.value = event && ['task', 'run'].includes(event.kind) ? 'task' : 'event'; form.all_day.checked = event?.all_day || false;
   form.all_day.disabled = form.kind.value === 'task';
   populateDestinations(form.destination, event); populateTaskChoice(event);
@@ -299,7 +314,7 @@ function openEditor(event = null, day = selectedDay, start = null) {
 function openRun(slot) {
   if (mutating) return;
   booking = slot; creatorId = crypto.randomUUID();
-  $('#cal-run-time').textContent = `${dayLabel(slot.day)} · ${timeLabel(slot.start)}–${timeLabel(slot.end)}`;
+  $('#cal-run-time').textContent = `${dayLabel(slot.day)} · ${timeRange(slot.start, slot.end)}`;
   $('#cal-run h2').textContent = slot.taskTitle;
   $('#cal-book-run').textContent = 'Schedule ' + slot.taskTitle;
   $('#cal-run-weather').textContent = slotDescription(slot);
@@ -333,8 +348,14 @@ async function writeEvent(body, dialog, method = 'POST') {
 $('#cal-event-form').addEventListener('submit', event => {
   event.preventDefault();
   const form = event.currentTarget, day = form.day.value;
-  const start = zonedTime(day, form.all_day.checked ? 0 : minutes(form.time.value), tz);
-  const end = form.all_day.checked ? zonedTime(shiftDay(day, 1), 0, tz) : start + +form.duration.value * 60;
+  let start = zonedTime(day, form.all_day.checked ? 0 : minutes(form.time.value), tz);
+  if (editingEvent && !form.all_day.checked && !editingEvent.all_day) {
+    const originalStart = interval(editingEvent).start;
+    const original = localParts(originalStart, tz);
+    if (day === original.day && form.time.value === clock(original.minutes)) start = originalStart;
+  }
+  const duration = Number(form.duration.value) * (form.duration_unit.value === 'seconds' ? 1 : 60);
+  const end = form.all_day.checked ? zonedTime(shiftDay(day, 1), 0, tz) : start + duration;
   if (start == null || end == null) { $('#cal-editor .cal-form-error').textContent = 'That local time does not exist because the clocks change. Choose another time.'; return; }
   writeEvent({ id: creatorId, title: form.elements.title.value, notes: form.notes.value, starts_at: new Date(start * 1000).toISOString(),
     ends_at: new Date(end * 1000).toISOString(), all_day: form.all_day.checked, kind: form.kind.value,
@@ -346,11 +367,16 @@ $('#cal-event-form').kind.addEventListener('change', event => {
   const form = $('#cal-event-form'), run = event.target.value === 'task';
   $('#cal-event-task-label').hidden = !run;
   form.all_day.disabled = run;
-  if (run) { form.all_day.checked = false; form.duration.value = plannedTasks.find(t => String(t.series_id) === form.planned_task.value)?.rule.duration_minutes || 30; $('#cal-event-time').hidden = false; }
+  if (run) {
+    const task = plannedTasks.find(t => String(t.series_id) === form.planned_task.value);
+    form.all_day.checked = false;
+    setEditorDuration(form, task ? taskDurationSeconds(task.rule) : 1800);
+    $('#cal-event-time').hidden = false;
+  }
 });
 $('#cal-book-run').addEventListener('click', () => {
   if (!booking || Date.now() / 1000 >= booking.start) { $('#cal-run .cal-form-error').textContent = 'This slot has passed. Choose another suggestion.'; return; }
-  if (!eventsReady || !externalReady || !recordsReady || !planningReady || !plans.some(day => day.slots.some(slot => slot.start === booking.start && slot.taskSeriesId === booking.taskSeriesId))) { $('#cal-run .cal-form-error').textContent = 'Refresh the calendars and task settings before reserving this slot.'; return; }
+  if (!eventsReady || !externalReady || !recordsReady || !planningReady || !plans.some(day => day.slots.some(slot => slot.start === booking.start && slot.end === booking.end && slot.taskSeriesId === booking.taskSeriesId))) { $('#cal-run .cal-form-error').textContent = 'Refresh the calendars and task settings before reserving this slot.'; return; }
   if (records[booking.day]?.some(row => row.title === booking.taskTitle && row.is_completed)) { $('#cal-run .cal-form-error').textContent = 'This run is already recorded. No reservation is needed.'; return; }
   writeEvent({ id: creatorId, title: booking.taskTitle, notes: '', starts_at: new Date(booking.start * 1000).toISOString(), ends_at: new Date(booking.end * 1000).toISOString(),
     all_day: false, kind: 'task', task_title: booking.taskTitle, task_series_id: booking.taskSeriesId }, $('#cal-run'));
@@ -415,7 +441,7 @@ restoreForecast(); remember(); render(); loadEvents(); loadPlanning(); loadRecor
 requestAnimationFrame(() => { $('#cal-scroll').scrollTop = (selectedDay === today() ? Math.max(6, localParts(Date.now() / 1000, tz).minutes / 60 - 1) : 7) * 76; });
 
 function slotDescription(slot) {
-  const duration = Math.round((slot.end - slot.start) / 60) + ' minutes';
+  const duration = durationLabel(slot.end - slot.start);
   return slot.rain == null ? duration + ' · within allowed hours · no calendar conflicts' :
     `${duration} · ${slot.rain}% precipitation chance · feels like ${Math.round(slot.feels * 9 / 5 + 32)}°F · gusts ${Math.round(slot.gust / 1.609344)} mph`;
 }
@@ -473,7 +499,11 @@ async function loadPlanning(force = false) {
 }
 $('#cal-plan-task').addEventListener('change', event => { selectedTaskId = event.target.value; save('stellar:calendar:planned-task', selectedTaskId); render(); });
 for (const select of [$('#cal-event-destination'), $('#cal-run-destination')]) select.addEventListener('change', () => save('stellar:calendar:destination', select.value));
-$('#cal-event-task').addEventListener('change', event => { const task = plannedTasks.find(t => String(t.series_id) === event.target.value); if (task) $('#cal-event-form').duration.value = task.rule.duration_minutes; });
+$('#cal-event-form').duration_unit.addEventListener('change', event => updateDurationLimit(event.target.form));
+$('#cal-event-task').addEventListener('change', event => {
+  const task = plannedTasks.find(t => String(t.series_id) === event.target.value);
+  if (task) setEditorDuration($('#cal-event-form'), taskDurationSeconds(task.rule));
+});
 const connectionPanel = mountConnections($('#cal-connections'), () => { externalChecked = 0; loadExternal(true); });
 connectionPanel.dialog.addEventListener('close', () => { if (!mutating) render(); });
 if (connectionResult) { connectionPanel.open(); if (connectionResult !== 'connected') $('#cal-status').textContent = 'Calendar authorization was cancelled or could not finish. Try connecting again.'; }

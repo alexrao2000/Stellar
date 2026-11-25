@@ -168,3 +168,6 @@ body[data-page=calendar] #cal-plan-task {
   background-repeat: no-repeat;
   background-position: right 12px center;
 }
+
+.cal-duration { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 12px; }
+#cal-event-time:has(.cal-duration) { grid-template-columns: minmax(0, 1fr); }

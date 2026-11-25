@@ -33,6 +33,18 @@ export function weekStart(day) {
 }
 
 export function overlaps(a, b) { return a.start < b.end && a.end > b.start; }
+export function taskDurationSeconds(rule) {
+  return rule.duration_seconds ?? rule.duration_minutes * 60;
+}
+
+export function durationLabel(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  if (!minutes) return remaining === 1 ? '1 second' : remaining + ' seconds';
+  if (!remaining) return minutes === 1 ? '1 minute' : minutes + ' minutes';
+  return minutes + ' min ' + remaining + ' sec';
+}
+
 export const interval = event => ({ start: Date.parse(event.starts_at) / 1000, end: Date.parse(event.ends_at) / 1000 });
 
 export function runSuggestions(forecast, { days, events, records = {}, taskTitle = 'Run', timeZone, now,
@@ -109,7 +121,7 @@ export function eventLayout(items, day, timeZone, hourHeight = 76) {
 }
 
 export function taskSuggestions(forecast, { task, days, events, records = {}, timeZone, now }) {
-  const rule = task.rule, duration = rule.duration_minutes * 60;
+  const rule = task.rule, duration = taskDurationSeconds(rule);
   const busy = events.filter(event => event.blocks_time !== false).map(interval);
   const needsWeather = rule.weather !== 'any' || rule.daylight_only;
   const matches = event => event.task_series_id != null && String(event.task_series_id) === String(task.series_id) ||

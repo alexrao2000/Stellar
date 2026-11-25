@@ -1,6 +1,8 @@
 /* Calendar permissions are chosen before OAuth. Read-only is the suggested
    default; upgrading requires a new authorization. Task planning is enabled by default and
    saved by task series, independently from historic completion settings. */
+import { taskDurationSeconds } from './calendar-model.js?v=3';
+
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
 async function api(path, method = 'GET', body) {
   const response = await fetch(path, { method, cache: 'no-store', priority: 'low', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -142,7 +144,23 @@ function mountPlanningEditor(host) {
       control.max = max;
       return field(label, control);
     }
-    const duration = number('Duration (minutes)', 'duration_minutes', 5, 480);
+    const duration = node('div', null, 'cal-duration');
+    const durationInput = input('number', '', 'duration');
+    const unit = node('select');
+    unit.name = 'duration_unit';
+    unit.append(new Option('Minutes', 'minutes'), new Option('Seconds', 'seconds'));
+    unit.value = rule.duration_seconds == null ? 'minutes' : 'seconds';
+    const storedSeconds = taskDurationSeconds(rule);
+    const setDurationBounds = () => {
+      durationInput.min = 1;
+      durationInput.max = unit.value === 'seconds' ? 28800 : 480;
+      const fallback = taskDurationSeconds(defaults);
+      durationInput.placeholder = String(unit.value === 'seconds' ? fallback : Math.ceil(fallback / 60));
+    };
+    if (saved) durationInput.value = unit.value === 'seconds' ? storedSeconds : storedSeconds / 60;
+    unit.onchange = setDurationBounds;
+    setDurationBounds();
+    duration.append(field('Duration', durationInput), field('Duration unit', unit));
     function timeField(label, name) {
       const control = input('time', saved ? clock(rule[name]) : '', name);
       const wrapper = field(label, control);
@@ -195,7 +213,8 @@ function mountPlanningEditor(host) {
       const celsius = value => (Number(value) - 32) * 5 / 9;
       const body = {
         enabled: controls.enabled.checked,
-        duration_minutes: get('duration_minutes'),
+        duration_minutes: unit.value === 'minutes' ? Number(durationInput.value || durationInput.placeholder) : defaults.duration_minutes,
+        duration_seconds: unit.value === 'seconds' ? Number(durationInput.value || durationInput.placeholder) : null,
         earliest: get('earliest', minutes),
         latest: get('latest', minutes),
         weather: weather.value,
