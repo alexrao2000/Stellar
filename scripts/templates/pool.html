@@ -14,7 +14,9 @@
    last dragged position. Escape explicitly restores the starting position.
    New ready stars ignite once per document with a bounded stagger. Only artwork
    scales; pointer targets and labels stay anchored. Redraws retain the entrance
-   timestamp so a resize cannot restart or cut short the first flare. */
+   timestamp so a resize cannot restart or cut short the first flare.
+   Black holes use the task creation date. Their widening shadow and curved
+   links are decorative, and the oldest holes surface first in the list. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -53,12 +55,16 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
 .star:focus-visible .hit { outline: 2px solid var(--line-live); outline-offset: 2px; }
 .star.held { cursor: grabbing; }
-.star:not(.ghost,.ember) svg {
+.star:not(.ghost,.ember,.black-hole) svg {
   transform-origin: center;
   animation: star-bloom var(--glow-period) ease-in-out var(--glow-phase) infinite;
 }
 .star:is(:hover,:focus-visible,.held) svg,
 .sky[data-motion-paused=true] .star svg { animation-play-state: paused; }
+.black-hole .accretion-flow { animation: accretion-glow 7s ease-in-out infinite alternate; }
+.star:is(:hover,:focus-visible,.held) .accretion-flow,
+.sky[data-motion-paused=true] .accretion-flow { animation-play-state: paused; }
+@keyframes accretion-glow { from { opacity: .62; } to { opacity: 1; } }
 @keyframes star-bloom {
   0%, 100% { opacity: var(--star-low); transform: translate(var(--star-offset), var(--star-offset)) scale(.96); }
   50% { opacity: 1; transform: translate(var(--star-offset), var(--star-offset)) scale(var(--star-bloom)); }
@@ -124,6 +130,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star.dim .name { color: rgba(190,186,214,.34); }
 /* After .dim, so it wins on source order where the two would otherwise tie. */
 .star.flip .name, .star.flip .waiting { left: auto; right: 15px; text-align: right; }
+.star.black-hole:not(.flip) .name { left: 26px; }
+.star.black-hole.flip .name { right: 26px; }
 
 .hud {
   position: absolute; left: 26px; top: 20px; z-index: 3;
@@ -314,7 +322,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star.ghost input::placeholder { color: rgba(150,146,185,.4); letter-spacing: .14em; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
-  .star svg, .star.igniting, .star-art,
+  .star svg, .star.igniting, .star-art, .accretion-flow,
   .sky[data-loading=false] :is(.pool-toolbar,.pool-list,.key) { animation: none !important; }
   .star.igniting::before { display: none; }
 }
@@ -516,10 +524,32 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     TASKS.forEach(function (t) { byId[t.id] = t; });
   }
   var SHOW_RESOLVED = false;
+  var dayMs = 86400000, collapseAfter = 90, priorityAfter = 120, ageTimer;
   var PENDING = null;                 // a star being named, not yet saved
   function isOpen(t) { return t && !t.resolved_at; }
   function visible() {
     return SHOW_RESOLVED ? TASKS : TASKS.filter(isOpen);
+  }
+  function daysOpen(task, now) {
+    var days = (now - Date.parse(task.created_at)) / dayMs;
+    return Number.isFinite(days) ? Math.max(0, days) : 0;
+  }
+  function blackHoleAge(task, now) {
+    var days = daysOpen(task, now);
+    return isOpen(task) && days >= collapseAfter ? days : 0;
+  }
+  function refreshAge(now) {
+    clearTimeout(ageTimer);
+    var next = Infinity;
+    TASKS.forEach(function (task) {
+      if (!isOpen(task)) return;
+      var created = Date.parse(task.created_at);
+      var age = daysOpen(task, now);
+      var nextDay = age < collapseAfter ? collapseAfter : Math.floor(age) + 1;
+      var delay = created + nextDay * dayMs - now;
+      if (delay > 0) next = Math.min(next, delay);
+    });
+    if (Number.isFinite(next)) ageTimer = setTimeout(paint, Math.min(next + 1, 2147483647));
   }
 
   /* ---- naming a new star ------------------------------------------------
@@ -579,8 +609,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
      nothing to read. */
   function magnitude(t) {
     if (!t.created_at) return 1.4;
-    var days = (Date.now() - Date.parse(t.created_at)) / 86400000;
-    if (!isFinite(days) || days < 0) days = 0;
+    var days = daysOpen(t, Date.now());
     return 1.0 + Math.min(days / 45, 1) * 1.5;
   }
 
@@ -602,6 +631,20 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     }
     s += '</g><circle class="star-core" cx="0" cy="0" r="' + core.toFixed(2) + '" fill="var(--star)"/></svg>';
     return s;
+  }
+
+  function blackHoleSVG(age, waiting) {
+    var size = Math.min(1.5, 1 + (age - collapseAfter) / 240);
+    return '<svg width="120" height="120" viewBox="-60 -60 120 120" aria-hidden="true" ' +
+      'style="transform:translate(-60px,-60px);opacity:' + (waiting ? '.65' : '1') + '">' +
+      '<g transform="scale(' + size.toFixed(2) + ') rotate(-22)">' +
+      '<g class="accretion-flow" fill="none" stroke-linecap="round">' +
+      '<path d="M-36 0 Q-21 -2 -13 -14 Q0 -30 14 -13 Q22 -1 36 0 M-36 1 Q-21 3 -13 14 Q0 30 14 13 Q22 2 36 1" stroke="#9f9de08c" stroke-width="1"/>' +
+      '<ellipse rx="30" ry="7" stroke="#b273d04a" stroke-width="5"/>' +
+      '<path d="M-30 0 A30 7 0 0 1 30 0" stroke="#f0a18a" stroke-width="1.4"/>' +
+      '</g><circle r="11.5" fill="#03040a" stroke="#a598d6a6" stroke-width="1"/>' +
+      '<path d="M-30 0 A30 7 0 0 0 30 0" fill="none" stroke="#f8ceb3" stroke-width="1.2" stroke-linecap="round"/>' +
+      '</g></svg>';
   }
 
   function unlitSVG() {
@@ -637,6 +680,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (drag) { paintPending = true; return; }
     paintPending = false;
     reindex();
+    var now = Date.now();
+    refreshAge(now);
     Array.prototype.forEach.call(sky.querySelectorAll('.star'), function (n) { n.remove(); });
 
     var ignitions = 0;
@@ -664,12 +709,13 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       }
       var done = !isOpen(t);
       var waits = done ? [] : prereqsOf(t.id);
+      var holeAge = blackHoleAge(t, now);
       var el = document.createElement('div');
       el.className = 'star' + (done ? ' ember' : (waits.length ? ' dim' : '')) +
-        (t.x > .74 ? ' flip' : '');
+        (t.x > .74 ? ' flip' : '') + (holeAge ? ' black-hole' : '');
       el.dataset.id = t.id;
       setStarMotion(el, t.id);
-      if (!done && !waits.length && sky.dataset.view === 'map') {
+      if (!done && !holeAge && !waits.length && sky.dataset.view === 'map') {
         var key = String(t.id), entrance = starEntrances.get(key);
         if (!entrance) {
           entrance = { at: performance.now(), delay: parseFloat(el.style.getPropertyValue('--ignite-delay')) * 1000,
@@ -686,7 +732,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       el.style.left = point.x + 'px';
       el.style.top = point.y + 'px';
       el.innerHTML =
-        '<span class="star-art">' + (done ? emberSVG() : (waits.length ? unlitSVG() : starSVG(t.id, magnitude(t)))) + '</span>' +
+        '<span class="star-art">' + (holeAge ? blackHoleSVG(holeAge, waits.length) :
+          done ? emberSVG() : waits.length ? unlitSVG() : starSVG(t.id, magnitude(t))) + '</span>' +
         '<div class="hit"></div>' +
         '<div class="name">' + esc(t.title) + '</div>' +
         (done ? '<div class="resolvedwhen">resolved</div>' : '') +
@@ -696,18 +743,24 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
         : t.title;
       el.tabIndex = 0;
       el.setAttribute('role', 'button');
-      el.setAttribute('aria-label', t.title + (done ? ', resolved' : ''));
+      el.setAttribute('aria-label', t.title + (done ? ', resolved' : holeAge ? ', black hole' : ''));
       el.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(t); }
       });
       mapField.appendChild(el);
       fitLabel(el);
     });
-    poolList.innerHTML = visible().filter(function (t) { return !t.pending; }).map(function (t) {
+    var list = visible().filter(function (t) { return !t.pending; }).map(function (task) {
+      return { task: task, age: Math.floor(blackHoleAge(task, now)) };
+    });
+    list.sort(function (a, b) { return (b.age >= priorityAfter ? b.age : 0) - (a.age >= priorityAfter ? a.age : 0); });
+    poolList.innerHTML = list.map(function (item) {
+      var t = item.task;
       var waits = prereqsOf(t.id).length;
       return '<li><button type="button" data-open-task="' + esc(t.id) + '">' +
         '<span>' + esc(t.title) + '</span><small>' +
-        (!isOpen(t) ? 'Resolved' : waits ? 'Waiting on ' + waits + ' task' + (waits === 1 ? '' : 's') : 'Ready') +
+        (item.age ? 'Black hole · ' + item.age + ' days open' + (waits ? ' · ' : '') : '') +
+        (!isOpen(t) ? 'Resolved' : waits ? 'Waiting on ' + waits + ' task' + (waits === 1 ? '' : 's') : item.age ? '' : 'Ready') +
         '</small></button></li>';
     }).join('') || '<li class="pool-empty">No tasks here yet. Add one above.</li>';
 
@@ -738,17 +791,50 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     var out = '';
     var shown = {};
-    visible().forEach(function (t) { shown[t.id] = 1; });
+    var now = Date.now(), lenses = [];
+    visible().forEach(function (t) {
+      shown[t.id] = 1;
+      var age = blackHoleAge(t, now);
+      if (age) {
+        var point = screenPoint(t), strength = Math.min(1, (age - collapseAfter) / 120);
+        lenses.push({ id: t.id, x: point.x, y: point.y, radius: 56 + strength * 80, strength: strength });
+      }
+    });
+    if (lenses.length) {
+      out += '<defs><radialGradient id="pool-hole-shadow"><stop stop-color="#03040a" stop-opacity=".85"/>' +
+        '<stop offset=".48" stop-color="#080919" stop-opacity=".48"/>' +
+        '<stop offset="1" stop-color="#080919" stop-opacity="0"/></radialGradient></defs>';
+      lenses.forEach(function (lens) {
+        out += '<circle cx="' + lens.x + '" cy="' + lens.y + '" r="' + lens.radius +
+          '" fill="url(#pool-hole-shadow)" opacity="' + (.58 + lens.strength * .42) + '"/>';
+      });
+    }
     EDGES.forEach(function (e) {
       var a = byId[e.before_id], b = byId[e.after_id];
       if (!a || !b || !shown[a.id] || !shown[b.id]) return;
       var ap = screenPoint(a), bp = screenPoint(b);
       var ax = ap.x, ay = ap.y, bx = bp.x, by = bp.y;
       var dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1;
-      var pad = 13 / L;
-      out += '<line x1="' + (ax + dx * pad) + '" y1="' + (ay + dy * pad) +
-             '" x2="' + (bx - dx * pad) + '" y2="' + (by - dy * pad) +
-             '" stroke="var(--line)" stroke-width="0.7"/>';
+      var ux = dx / L, uy = dy / L, pad = Math.min(L / 2, 13);
+      var bend = 0, center = 0, extent = 0;
+      lenses.forEach(function (lens) {
+        if (lens.id === a.id || lens.id === b.id) return;
+        var rx = lens.x - ax, ry = lens.y - ay;
+        var along = rx * ux + ry * uy, aside = ry * ux - rx * uy;
+        var segment = Math.min(lens.radius * .65, along - pad, L - pad - along);
+        if (segment < 12 || Math.abs(aside) >= lens.radius) return;
+        var offset = (aside > 0 ? -1 : 1) * (1 - Math.abs(aside) / lens.radius) * (30 + lens.strength * 78);
+        if (Math.abs(offset) <= Math.abs(bend)) return;
+        bend = offset; center = along; extent = segment;
+      });
+      var path = 'M' + (ax + ux * pad) + ' ' + (ay + uy * pad);
+      if (bend) {
+        path += ' L' + (ax + ux * (center - extent)) + ' ' + (ay + uy * (center - extent)) +
+          ' Q' + (ax + ux * center - uy * bend) + ' ' + (ay + uy * center + ux * bend) +
+          ' ' + (ax + ux * (center + extent)) + ' ' + (ay + uy * (center + extent));
+      }
+      path += ' L' + (bx - ux * pad) + ' ' + (by - uy * pad);
+      out += '<path d="' + path + '" fill="none" stroke="var(--line)" stroke-width="0.7"/>';
     });
     svg.innerHTML = out;
   }
@@ -766,10 +852,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var flip = x > W / 2;
     el.classList.toggle('flip', flip);
     var name = el.querySelector('.name');
-    name.style.width = Math.max(40, Math.min(220, (flip ? x : W - x) - 28)) + 'px';
+    var hole = el.classList.contains('black-hole');
+    name.style.width = Math.max(40, Math.min(220, (flip ? x : W - x) - (hole ? 39 : 28))) + 'px';
     var height = name.offsetHeight;
     name.style.bottom = 'auto';
-    name.style.top = Math.max(8 - y, Math.min(-height - 9, H - y - height - 8)) + 'px';
+    name.style.top = Math.max(8 - y, Math.min(-height - (hole ? 25 : 9), H - y - height - 8)) + 'px';
   }
 
   function screenPoint(task) {
@@ -952,6 +1039,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     } else if (t.created_at) {
       var c = new Date(t.created_at);
       when = isNaN(c) ? '' : 'added ' + c.toISOString().slice(0, 10);
+      var holeAge = Math.floor(blackHoleAge(t, Date.now()));
+      if (holeAge) when = 'Black hole · ' + holeAge + ' days open';
     }
 
     var html = '<div class="ptitle" id="pool-title">' + esc(t.title) + '</div>' +

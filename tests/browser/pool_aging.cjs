@@ -1,0 +1,65 @@
+/* Check age transitions with synthetic tasks in the standalone Pool. */
+const assert = require('node:assert/strict');
+const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
+const day = 86400000;
+const now = Date.parse('2026-11-25T20:00:00Z');
+const created = daysAgo => new Date(now - daysAgo * day).toISOString();
+
+async function check(engine) {
+  const executablePath = engine === 'chromium' ? process.env.CHROMIUM_EXECUTABLE : undefined;
+  const browser = await ({ chromium, webkit })[engine].launch({ executablePath });
+  try {
+    const mobile = engine === 'webkit';
+    const page = await browser.newPage({ serviceWorkers: 'block', viewport: { width: mobile ? 390 : 1360, height: 840 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.clock.install({ time: now });
+    await page.route('**/api/**', route => {
+      if (new URL(route.request().url()).pathname !== '/api/pool') return route.fulfill({ json: {} });
+      return route.fulfill({ json: {
+        tasks: [
+          { id: 1, title: 'Start the outline', x: .18, y: .56, created_at: created(2) },
+          { id: 2, title: 'Finish the draft', x: .82, y: .56, created_at: created(5) },
+          { id: 3, title: 'Revisit the archive', x: .55, y: .52, created_at: created(195) },
+          { id: 4, title: 'Try a different sketch', x: .48, y: .29, created_at: created(90 - 60000 / day) },
+          { id: 5, title: 'Old completed task', x: .7, y: .7, created_at: created(220), resolved_at: created(1) },
+          { id: 6, title: 'Plan the next chapter', x: .23, y: .78, created_at: created(125) },
+        ],
+        edges: [{ before_id: 1, after_id: 2 }],
+      } });
+    });
+    await page.goto(base + '/pool');
+    if (mobile) {
+      const list = page.getByRole('list', { name: 'Pool tasks' });
+      await list.getByRole('button', { name: /Revisit the archive.*195 days open/ }).waitFor();
+      assert.match(await list.locator('li').first().innerText(), /Revisit the archive/);
+      assert.match(await list.locator('li').nth(1).innerText(), /Plan the next chapter/);
+      await page.getByRole('button', { name: 'Map', exact: true }).click();
+    }
+    const older = page.getByRole('button', { name: 'Revisit the archive, black hole' });
+    await older.locator('.hit').waitFor();
+    const shadows = page.locator('#lines circle');
+    const biggest = Math.max(...await shadows.evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('r')))));
+    assert.match(await page.locator('#lines > path').getAttribute('d'), /Q/, 'A link bends in the old black hole’s vicinity');
+    assert.equal(await page.locator('.star[data-id="4"].black-hole').count(), 0);
+    await page.clock.fastForward(61000);
+    await page.locator('.star[data-id="4"].black-hole').waitFor({ state: 'attached' });
+    const smallest = Math.min(...await shadows.evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('r')))));
+    assert(biggest > smallest * 2, 'Older black holes have a larger effect');
+    await page.getByRole('button', { name: 'Show resolved', exact: true }).click();
+    await page.locator('.star[data-id="5"].ember').waitFor({ state: 'attached' });
+    assert.equal(await page.locator('.star[data-id="5"].black-hole').count(), 0);
+    await page.screenshot({ path: `/private/tmp/stellar-pool-black-hole-${engine}.png` });
+    await older.locator('.hit').click();
+    assert.match(await page.locator('#panel .pmeta').innerText(), /195 days open/);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    assert.equal(await older.locator('.accretion-flow').evaluate(el => getComputedStyle(el).animationName), 'none');
+    assert.deepEqual(errors, []);
+    console.log(`${engine}: age transition, widening shadow, curved link, list priority and reduced motion passed`);
+  } finally { await browser.close(); }
+}
+
+Promise.allSettled(['chromium', 'webkit'].map(check)).then(results => {
+  for (const result of results) if (result.status === 'rejected') { console.error(result.reason); process.exitCode = 1; }
+});
