@@ -50,11 +50,30 @@ async function check(engine) {
     await page.getByRole('button', { name: 'Show resolved', exact: true }).click();
     await page.locator('.star[data-id="5"].ember').waitFor({ state: 'attached' });
     assert.equal(await page.locator('.star[data-id="5"].black-hole').count(), 0);
-    await page.screenshot({ path: `/private/tmp/stellar-pool-black-hole-${engine}.png` });
+    const art = older.locator('.pool-vortex');
+    const motion = await art.evaluate(el => {
+      const ribbon = el.querySelector('.accretion-flow'), mote = el.querySelector('.vortex-mote');
+      const sample = (node, progress) => {
+        const animation = node.getAnimations()[0], timing = animation.effect.getTiming();
+        animation.pause();
+        const cycle = Math.ceil(-timing.delay / timing.duration) + 1;
+        animation.currentTime = timing.delay + timing.duration * (cycle + progress);
+        return new DOMMatrix(getComputedStyle(node).transform);
+      };
+      const first = sample(ribbon, .1), second = sample(ribbon, .3);
+      const near = sample(mote, .72), far = sample(mote, .22);
+      return { turn: Math.abs(first.b - second.b), inward: Math.hypot(far.e, far.f) - Math.hypot(near.e, near.f) };
+    });
+    assert(motion.turn > .25 && motion.inward > 12, 'Ribbons rotate visibly and the dust moves toward the core');
+    await page.screenshot({ path: `/private/tmp/stellar-pool-vortex-${engine}.png` });
+    await page.evaluate(() => window.stellarSetActive(false));
+    assert.equal(await art.locator('.vortex-filaments').evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
+    await page.evaluate(() => window.stellarSetActive(true));
     await older.locator('.hit').click();
     assert.match(await page.locator('#panel .pmeta').innerText(), /195 days open/);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await older.locator('.accretion-flow').evaluate(el => getComputedStyle(el).animationName), 'none');
+    assert.equal(await art.locator('.vortex-mote').first().evaluate(el => getComputedStyle(el).animationName), 'none');
     assert.deepEqual(errors, []);
     console.log(`${engine}: age transition, widening shadow, curved link, list priority and reduced motion passed`);
   } finally { await browser.close(); }

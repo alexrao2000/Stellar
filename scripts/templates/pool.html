@@ -16,7 +16,9 @@
    scales; pointer targets and labels stay anchored. Redraws retain the entrance
    timestamp so a resize cannot restart or cut short the first flare.
    Black holes use the task creation date. Their widening shadow and curved
-   links are decorative, and the oldest holes surface first in the list. */
+   links are decorative, and the oldest holes surface first in the list.
+   Spiral artwork is drawn once, then rotated with CSS independently of dust
+   and the star's hit target. */
 .sky {
   --void: #04050A;
   --star: #FFFCF4;
@@ -53,6 +55,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .sky svg { pointer-events: none; }
 
 .star { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
+.star.black-hole { transform: none; }
+.star:not(.black-hole) { z-index: 1; }
+.star.black-hole > :is(.hit,.name,.waiting) { z-index: 1; }
 .star:focus-visible .hit { outline: 2px solid var(--line-live); outline-offset: 2px; }
 .star.held { cursor: grabbing; }
 .star:not(.ghost,.ember,.black-hole) svg {
@@ -61,10 +66,30 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 }
 .star:is(:hover,:focus-visible,.held) svg,
 .sky[data-motion-paused=true] .star svg { animation-play-state: paused; }
-.black-hole .accretion-flow { animation: accretion-glow 7s ease-in-out infinite alternate; }
-.star:is(:hover,:focus-visible,.held) .accretion-flow,
-.sky[data-motion-paused=true] .accretion-flow { animation-play-state: paused; }
-@keyframes accretion-glow { from { opacity: .62; } to { opacity: 1; } }
+.pool-vortex {
+  position: absolute; width: var(--vortex-size); height: var(--vortex-size);
+  transform: translate(-50%, -50%); pointer-events: none;
+  background: radial-gradient(circle, #050510 14%, #211a4466 30%, #16193745 46%, transparent 69%);
+}
+.pool-vortex svg { width: 100%; height: 100%; }
+.pool-vortex .accretion-flow { animation: vortex-turn var(--vortex-period) linear var(--vortex-phase) infinite; }
+.pool-vortex .vortex-filaments { animation: vortex-turn calc(var(--vortex-period) * 1.46) linear var(--vortex-phase) infinite; }
+.vortex-horizon {
+  position: absolute; inset: 36.5%; border-radius: 50%;
+  background: #010208; box-shadow: 0 0 6px 1px #060615, inset 0 0 0 1px #a798e555;
+}
+.vortex-mote {
+  position: absolute; top: 50%; left: 50%; margin: -1px; width: 2px; height: 2px;
+  border-radius: 50%; background: #e8e4ff; box-shadow: 0 0 4px #b0aafa;
+  opacity: 0; animation: vortex-infall calc(var(--vortex-period) * .57) linear var(--mote-delay) infinite;
+}
+.sky[data-motion-paused=true] .pool-vortex :is(.accretion-flow,.vortex-filaments,.vortex-mote) { animation-play-state: paused; }
+@keyframes vortex-turn { to { transform: rotate(1turn); } }
+@keyframes vortex-infall {
+  0% { opacity: 0; transform: rotate(var(--mote-angle)) translateX(calc(var(--vortex-size) * .44)) scale(1.15); }
+  16%, 68% { opacity: .85; }
+  100% { opacity: 0; transform: rotate(calc(var(--mote-angle) + 201deg)) translateX(calc(var(--vortex-size) * .14)) scale(.35); }
+}
 @keyframes star-bloom {
   0%, 100% { opacity: var(--star-low); transform: translate(var(--star-offset), var(--star-offset)) scale(.96); }
   50% { opacity: 1; transform: translate(var(--star-offset), var(--star-offset)) scale(var(--star-bloom)); }
@@ -322,7 +347,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star.ghost input::placeholder { color: rgba(150,146,185,.4); letter-spacing: .14em; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
-  .star svg, .star.igniting, .star-art, .accretion-flow,
+  .star svg, .star.igniting, .star-art, .vortex-mote,
   .sky[data-loading=false] :is(.pool-toolbar,.pool-list,.key) { animation: none !important; }
   .star.igniting::before { display: none; }
 }
@@ -633,18 +658,48 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     return s;
   }
 
-  function blackHoleSVG(age, waiting) {
-    var size = Math.min(1.5, 1 + (age - collapseAfter) / 240);
-    return '<svg width="120" height="120" viewBox="-60 -60 120 120" aria-hidden="true" ' +
-      'style="transform:translate(-60px,-60px);opacity:' + (waiting ? '.65' : '1') + '">' +
-      '<g transform="scale(' + size.toFixed(2) + ') rotate(-22)">' +
-      '<g class="accretion-flow" fill="none" stroke-linecap="round">' +
-      '<path d="M-36 0 Q-21 -2 -13 -14 Q0 -30 14 -13 Q22 -1 36 0 M-36 1 Q-21 3 -13 14 Q0 30 14 13 Q22 2 36 1" stroke="#9f9de08c" stroke-width="1"/>' +
-      '<ellipse rx="30" ry="7" stroke="#b273d04a" stroke-width="5"/>' +
-      '<path d="M-30 0 A30 7 0 0 1 30 0" stroke="#f0a18a" stroke-width="1.4"/>' +
-      '</g><circle r="11.5" fill="#03040a" stroke="#a598d6a6" stroke-width="1"/>' +
-      '<path d="M-30 0 A30 7 0 0 0 30 0" fill="none" stroke="#f8ceb3" stroke-width="1.2" stroke-linecap="round"/>' +
-      '</g></svg>';
+  var vortexRibbons;
+  function vortexSpiral(angle, radius, turn, width, endRadius) {
+    var outside = [], inside = [];
+    for (var i = 0; i <= 48; i++) {
+      var progress = i / 48;
+      var direction = angle + progress * turn;
+      var distance = radius * Math.pow(endRadius / radius, progress);
+      var spread = width * Math.sin(progress * Math.PI) * (1 - progress * .5);
+      var x = Math.cos(direction), y = Math.sin(direction);
+      outside.push(((distance + spread) * x).toFixed(1) + ' ' + ((distance + spread) * y).toFixed(1));
+      inside.push(((distance - spread) * x).toFixed(1) + ' ' + ((distance - spread) * y).toFixed(1));
+    }
+    return 'M' + outside.concat(inside.reverse()).join('L') + 'Z';
+  }
+
+  function blackHoleArt(id, age, waiting) {
+    if (!vortexRibbons) {
+      vortexRibbons = [
+        vortexSpiral(.6, 53, 4.9, 7.2, 13),
+        vortexSpiral(3.85, 48, 4.4, 6.5, 13),
+        vortexSpiral(2.05, 57, 4.7, 2.1, 13),
+        vortexSpiral(5.25, 52, 4.6, 1.65, 13),
+      ];
+    }
+    var strength = Math.min(1, (age - collapseAfter) / 120);
+    var period = 10 - strength * 4;
+    var phase = performance.now() / 1000 + Math.abs(Number(id) || 0) % 13;
+    var gradient = 'pool-vortex-' + esc(id);
+    return '<span class="pool-vortex" aria-hidden="true" style="--vortex-size:' + (88 + 42 * strength).toFixed(1) +
+      'px;--vortex-period:' + period + 's;--vortex-phase:' + -phase.toFixed(3) + 's;opacity:' + (waiting ? '.68' : '1') + '">' +
+      '<svg class="accretion-flow" viewBox="-60 -60 120 120"><defs><radialGradient id="' + gradient +
+      '" cx="0" cy="0" r="52" gradientUnits="userSpaceOnUse"><stop offset=".24" stop-color="#ece5ff"/>' +
+      '<stop offset=".36" stop-color="#b8a7fa"/><stop offset=".63" stop-color="#736bba" stop-opacity=".62"/>' +
+      '<stop offset="1" stop-color="#4b5791" stop-opacity="0"/></radialGradient></defs>' +
+      '<path fill="url(#' + gradient + ')" d="' + vortexRibbons[0] + '"/>' +
+      '<path fill="url(#' + gradient + ')" opacity=".74" d="' + vortexRibbons[1] + '"/></svg>' +
+      '<svg class="vortex-filaments" viewBox="-60 -60 120 120"><path fill="url(#' + gradient + ')" opacity=".44" d="' +
+      vortexRibbons[2] + ' ' + vortexRibbons[3] + '"/></svg>' +
+      [21, 154, 276].map(function (angle, index) {
+        return '<span class="vortex-mote" style="--mote-angle:' + angle + 'deg;--mote-delay:' +
+          -(phase + index * period * .19).toFixed(3) + 's"></span>';
+      }).join('') + '<span class="vortex-horizon"></span></span>';
   }
 
   function unlitSVG() {
@@ -732,7 +787,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       el.style.left = point.x + 'px';
       el.style.top = point.y + 'px';
       el.innerHTML =
-        '<span class="star-art">' + (holeAge ? blackHoleSVG(holeAge, waits.length) :
+        '<span class="star-art">' + (holeAge ? blackHoleArt(t.id, holeAge, waits.length) :
           done ? emberSVG() : waits.length ? unlitSVG() : starSVG(t.id, magnitude(t))) + '</span>' +
         '<div class="hit"></div>' +
         '<div class="name">' + esc(t.title) + '</div>' +
