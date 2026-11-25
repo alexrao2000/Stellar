@@ -152,3 +152,9 @@ html body .cal-dialog { --cal-muted: #a5afc8; width: min(460px,calc(100% - 24px)
 }
 @media (max-width: 360px) { .cal-view { width: 100%; margin-left: 0; justify-content: center; } .cal-view button { flex: 1; } .cal-date-controls { width: 100%; justify-content: space-between; } }
 @media (prefers-reduced-transparency: reduce) { .cal-board, .cal-weather-strip, .cal-outlook-day { background: #172238; } }
+
+.cal-task-picker select { min-height: 42px; min-width: 0; max-width: 210px; width: 100%; }
+.cal-weather-actions { flex-wrap: wrap; justify-content: flex-end; }
+.cal-event[data-kind=task] { border-color: #d5c4f370; background: #b49bd52b; }
+.cal-event[data-source] { border-style: solid; }
+@media(max-width: 760px) { .cal-heading { align-items: flex-start; flex-wrap: wrap; } .cal-setting-actions { justify-content: flex-end; } .cal-weather-actions { width: 100%; } .cal-task-picker { flex: 1; min-width: 0; } .cal-task-picker select { max-width: 100%; } }

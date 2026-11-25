@@ -4,9 +4,10 @@
    Visibility-aware refreshes retain the page and never replace an open editor.
    Booking uses stable IDs, server versions and database conflict checks.
 */
+import { mountConnections } from './calendar-settings.js?v=1';
 import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
-import { eventLayout, interval, localParts, overlaps, runSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=1';
+import { eventLayout, interval, localParts, overlaps, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=2';
 
 const boot = JSON.parse(document.getElementById('calendar-boot').textContent);
 const $ = selector => document.querySelector(selector);
@@ -25,14 +26,18 @@ const dayLabel = day => dayFormat.format(zonedTime(day, 12 * 60, tz) * 1000);
 const validDay = value => { try { return /^\d{4}-\d{2}-\d{2}$/.test(value || '') && new Date(value + 'T12:00:00Z').toISOString().slice(0, 10) === value; } catch { return false; } };
 const minutes = text => { const [hours, mins] = text.split(':').map(Number); return hours * 60 + mins; };
 const clock = value => String(Math.floor(value / 60)).padStart(2, '0') + ':' + String(value % 60).padStart(2, '0');
-const pref = read('stellar:calendar:hours') || {};
+const connectionResult = new URLSearchParams(location.search).get('connection');
 let selectedDay = validDay(boot.day) ? boot.day : today();
 let view = ['day', 'week'].includes(boot.view) ? boot.view : read('stellar:calendar:view') || (matchMedia('(max-width: 760px)').matches ? 'day' : 'week');
 if (!['day', 'week'].includes(view)) view = 'week';
 let events = [], records = {}, forecast = null, forecastAt = 0, plans = [], eventsReady = false, recordsReady = false;
 let eventsError = '', recordsError = '', weatherError = '', weatherPending = false, mutating = false;
 let eventSeq = 0, recordSeq = 0, eventJob, recordJob, forecastJob, citySeq = 0, locationSeq = 0, eventTag = '', eventKey = '';
-let editingEvent = null, booking = null, creatorId = null, selectedTask = 'Run', lastPlanTime = 0;
+let editingEvent = null, booking = null, creatorId = null, lastPlanTime = 0;
+let localEvents = [], externalEvents = [], externalReady = false, planningReady = false, plannedTasks = [], connections = [];
+let externalError = '', planningError = '', externalJob, planningJob, externalSeq = 0, externalChecked = 0, externalKey = '', planningChecked = 0;
+let selectedTaskId = read('stellar:calendar:planned-task') || '';
+const plannedTask = () => plannedTasks.find(task => String(task.series_id) === String(selectedTaskId));
 const cityValid = value => value && typeof value.name === 'string' && value.name.trim() && Number.isFinite(value.latitude) && Number.isFinite(value.longitude) &&
   Math.abs(value.latitude) <= 90 && Math.abs(value.longitude) <= 180;
 let place = read('stellar:weather:place');
@@ -61,43 +66,43 @@ async function request(url, options = {}) {
 
 function status() {
   const node = $('#cal-status'); node.replaceChildren();
-  const problem = eventsError || recordsError;
+  const problem = eventsError || recordsError || externalError || planningError;
   if (problem) {
     node.append(document.createTextNode(problem + ' '));
     const retry = element('button', 'Try again', 'cal-link');
-    retry.addEventListener('click', () => { loadEvents(true); loadRecords(true); }); node.append(retry);
+    retry.addEventListener('click', () => { loadEvents(true); loadRecords(true); loadPlanning(true); }); node.append(retry);
   } else if (!eventsReady) node.textContent = 'Loading your calendar…';
   const cityLabel = place?.name || 'Choose city';
   if ($('#cal-location').textContent !== cityLabel) $('#cal-location').textContent = cityLabel;
   $('#cal-weather-retry').disabled = weatherPending || !place;
-  $('#cal-weather-status').textContent = weatherError || (weatherPending ? (forecast ? 'Updating forecast…' : 'Finding weather windows…') :
-    !place ? 'Choose your weather location to find running slots.' : !forecast ? 'Forecast unavailable. Try refreshing.' :
-    !eventsReady || !recordsReady ? 'Reading your schedule before suggesting times…' :
-    `${plans.reduce((sum, day) => sum + day.slots.length, 0)} slots fit your schedule and forecast`);
+  const task = plannedTask(), needsWeather = task && (task.rule.weather !== 'any' || task.rule.daylight_only);
+  $('#cal-weather-status').textContent = !planningReady ? 'Loading task planning settings…' : !task ? 'Enable task planning in Settings to see suggestions.' :
+    !eventsReady || !externalReady || !recordsReady ? 'Checking all calendars and task records…' : needsWeather && (!forecast || weatherError) ?
+    weatherError || (!place ? 'Choose a weather location for this task.' : 'Loading the forecast required for this task…') :
+    `${plans.reduce((sum, day) => sum + day.slots.length, 0)} slots fit this task and your calendars`;
+
 }
 
 function calculate() {
-  const days = span();
-  const taskNames = [...new Set(Object.values(records).flatMap(rows => rows.map(row => row.title)))];
-  selectedTask = taskNames.find(title => /^run$/i.test(title)) || taskNames.find(title => /\b(run|running|jog)\b/i.test(title)) || 'Run';
-  const form = $('#cal-preferences');
-  if (forecast && eventsReady && recordsReady && Date.now() - forecastAt < 45 * 60000) {
-    plans = runSuggestions(forecast, { days, events, records, taskTitle: selectedTask, timeZone: tz, now: Date.now() / 1000,
-      earliest: minutes(form.earliest.value), latest: minutes(form.latest.value), buffer: +form.buffer.value });
-  } else plans = days.map(day => ({ day, slots: [], reason: !place ? 'Choose a weather location' : !eventsReady ? 'Calendar unavailable' :
-    !recordsReady ? 'Task records unavailable' : 'Forecast unavailable' }));
+  const days = span(), task = plannedTask();
+  const needsWeather = task && (task.rule.weather !== 'any' || task.rule.daylight_only);
+  const weather = forecast && Date.now() - forecastAt < 45 * 60000 ? forecast : null;
+  if (task && eventsReady && externalReady && planningReady && recordsReady && (!needsWeather || weather)) {
+    plans = taskSuggestions(weather, { task, days, events, records, timeZone: tz, now: Date.now() / 1000 });
+  } else plans = days.map(day => ({ day, slots: [], reason: !planningReady ? 'Task settings unavailable' : !task ? 'Enable task planning in Settings' :
+    !eventsReady || !externalReady ? 'Waiting for all connected calendars' : !recordsReady ? 'Task records unavailable' : 'Weather forecast required for this task' }));
   lastPlanTime = Date.now();
 }
 
-function isDone(event) { return event.kind === 'run' && records[dateKey(interval(event).start)]?.some(row => row.title === (event.task_title || 'Run') && row.is_completed); }
-function conflicted(event) { return event.kind === 'run' && events.some(other => other.id !== event.id && overlaps(interval(event), interval(other))); }
+function isDone(event) { return ['run', 'task'].includes(event.kind) && records[dateKey(interval(event).start)]?.some(row => row.title === (event.task_title || 'Run') && row.is_completed); }
+function conflicted(event) { return ['run', 'task'].includes(event.kind) && events.some(other => other.id !== event.id && other.blocks_time !== false && overlaps(interval(event), interval(other))); }
 
 function eventButton(event) {
   const button = element('button', null, 'cal-event'); button.type = 'button';
-  button.dataset.kind = event.kind; button.dataset.event = event.id;
+  button.dataset.kind = event.kind; if (event.source) button.dataset.source = event.source; button.dataset.event = event.id;
   if (isDone(event)) button.classList.add('is-complete');
   if (conflicted(event)) button.classList.add('is-conflicted');
-  button.append(element('strong', (event.kind === 'run' ? '✦ ' : '') + event.title));
+  button.append(element('strong', (['run', 'task'].includes(event.kind) ? '✦ ' : '') + event.title));
   if (!event.all_day) button.append(element('small', `${timeLabel(interval(event).start)} – ${timeLabel(interval(event).end)}`));
   button.title = event.title + (event.all_day ? ' · All day' : ` · ${timeLabel(interval(event).start)} – ${timeLabel(interval(event).end)}`) +
     (conflicted(event) ? ' · Conflicts with another event' : isDone(event) ? ' · Run recorded' : '');
@@ -146,9 +151,9 @@ function render() {
       let button;
       if (item.slot) {
         button = element('button', null, 'cal-event is-suggestion'); button.dataset.slot = item.slot.start;
-        button.append(element('strong', `✧ ${timeLabel(item.slot.start)} · Run`));
-        button.setAttribute('aria-label', `${dayLabel(day)}, ${timeLabel(item.slot.start)}, suggested 10-minute run${item.slot.rank === 1 ? ', best match' : ''}`);
-        button.title = `10-minute run · ${item.slot.rain}% precipitation chance · ${Math.round(item.slot.gust / 1.609344)} mph gusts`;
+        button.append(element('strong', `✧ ${timeLabel(item.slot.start)} · ${item.slot.taskTitle}`));
+        button.setAttribute('aria-label', `${dayLabel(day)}, ${timeLabel(item.slot.start)}, suggested ${Math.round((item.slot.end - item.slot.start) / 60)}-minute ${item.slot.taskTitle}${item.slot.rank === 1 ? ', best match' : ''}`);
+        button.title = slotDescription(item.slot);
         button.addEventListener('click', () => openRun(item.slot));
       } else button = eventButton(item);
       button.style.top = item.top + 'px'; button.style.height = item.height + 'px';
@@ -163,7 +168,7 @@ function render() {
     if (!plan.slots.length) card.append(element('p', plan.reason));
     plan.slots.forEach(slot => {
       const button = element('button', null, 'cal-slot-link'); button.type = 'button';
-      button.append(element('span', timeLabel(slot.start)), element('small', slot.rank === 1 ? 'Best match ✧' : `${slot.rain}% rain`));
+      button.append(element('span', timeLabel(slot.start)), element('small', slot.rank === 1 ? 'Best match ✧' : slot.rain == null ? 'Free slot' : `${slot.rain}% rain`));
       button.addEventListener('click', () => openRun(slot)); card.append(button);
     });
     outlook.append(card);
@@ -184,10 +189,11 @@ function remember() {
 }
 
 function navigate(day = selectedDay, nextView = view) {
-  selectedDay = day; view = nextView; eventsReady = recordsReady = false; eventTag = ''; remember(); render(); loadEvents(); loadRecords();
+  selectedDay = day; view = nextView; eventsReady = recordsReady = externalReady = false; eventTag = ''; remember(); render(); loadEvents(); loadRecords();
 }
 
 async function loadEvents(force = false) {
+  loadExternal(force);
   if (!active() || !force && (editing() || mutating)) return false;
   const days = span(), key = days[0] + ':' + days.at(-1);
   if (eventJob?.key === key) return eventJob.promise;
@@ -198,9 +204,10 @@ async function loadEvents(force = false) {
     if (ticket !== eventSeq) return false;
     if (data && !Array.isArray(data.events)) throw new Error('Calendar data could not load. Try again.');
     const signature = rows => rows.map(row => row.id + ':' + row.updated_at).sort().join('|');
-    const changed = !eventsReady || data && signature(events) !== signature(data.events);
+    const changed = !eventsReady || data && signature(localEvents) !== signature(data.events);
     eventsReady = true; eventsError = ''; eventKey = key; eventTag = response.headers.get('ETag') || eventTag;
-    if (data) events = data.events;
+    if (data) localEvents = data.events;
+    events = [...localEvents, ...externalEvents];
     if (changed && !editing()) render(); else status();
     return true;
   }).catch(error => { if (ticket === eventSeq) { eventsReady = false; eventsError = error.message; if (!editing()) render(); } return false; })
@@ -271,15 +278,21 @@ function cityButton(city) {
 function openEditor(event = null, day = selectedDay, start = null) {
   if (mutating) return;
   const dialog = $('#cal-editor'), form = $('#cal-event-form');
-  editingEvent = event; creatorId = event?.id || crypto.randomUUID(); form.reset();
+  editingEvent = event; creatorId = event && !event.source ? event.id : crypto.randomUUID(); form.reset();
   const local = event ? localParts(interval(event).start, tz) : { day, minutes: start ?? 9 * 60 };
   form.elements.title.value = event?.title || ''; form.day.value = local.day; form.time.value = clock(local.minutes);
   form.duration.value = event ? Math.round((interval(event).end - interval(event).start) / 60) : 60;
-  form.notes.value = event?.notes || ''; form.kind.value = event?.kind || 'event'; form.all_day.checked = event?.all_day || false;
-  form.all_day.disabled = form.kind.value === 'run';
-  $('#cal-editor-title').textContent = event ? 'Edit event' : 'New event'; $('#cal-delete').hidden = !event;
+  form.notes.value = event?.notes || ''; form.kind.value = event && ['task', 'run'].includes(event.kind) ? 'task' : 'event'; form.all_day.checked = event?.all_day || false;
+  form.all_day.disabled = form.kind.value === 'task';
+  populateDestinations(form.destination, event); populateTaskChoice(event);
+  form.querySelectorAll('input,textarea,select,button[type=submit]').forEach(el => { el.disabled = !!event?.read_only; });
+  form.destination.disabled = !!event;
+  form.all_day.disabled = !!event?.read_only || form.kind.value === 'task';
+  form.querySelector('button[type=submit]').hidden = !!event?.read_only;
+  $('#cal-editor-title').textContent = event?.read_only ? 'Calendar event · read only' : event ? 'Edit event' : 'New event'; $('#cal-delete').hidden = !event || event.read_only;
+  $('#cal-event-source').textContent = event?.source ? `${event.calendar_label} · ${event.recurring ? 'This occurrence only. ' : ''}${event.has_guests ? 'Edits may notify invited guests.' : ''}` : 'Choose where this event is saved.';
   $('#cal-event-time').hidden = form.all_day.checked;
-  dialog.querySelector('.cal-form-error').textContent = event && conflicted(event) ? 'This run overlaps another event. Move it to a free time.' : '';
+  dialog.querySelector('.cal-form-error').textContent = event && conflicted(event) ? 'This task overlaps another event. Move it to a free time.' : '';
   dialog.showModal(); form.elements.title.focus();
 }
 
@@ -287,7 +300,10 @@ function openRun(slot) {
   if (mutating) return;
   booking = slot; creatorId = crypto.randomUUID();
   $('#cal-run-time').textContent = `${dayLabel(slot.day)} · ${timeLabel(slot.start)}–${timeLabel(slot.end)}`;
-  $('#cal-run-weather').textContent = `${slot.rain}% precipitation chance · feels like ${Math.round(slot.feels * 9 / 5 + 32)}°F · gusts ${Math.round(slot.gust / 1.609344)} mph`;
+  $('#cal-run h2').textContent = slot.taskTitle;
+  $('#cal-book-run').textContent = 'Schedule ' + slot.taskTitle;
+  $('#cal-run-weather').textContent = slotDescription(slot);
+  populateDestinations($('#cal-run-destination'));
   $('#cal-run .cal-form-error').textContent = ''; $('#cal-run').showModal();
 }
 
@@ -296,9 +312,18 @@ async function writeEvent(body, dialog, method = 'POST') {
   mutating = true;
   dialog.querySelectorAll('button').forEach(button => { button.disabled = true; });
   try {
-    const url = method === 'PUT' ? '/api/calendar/events/' + editingEvent.id : '/api/calendar/events';
+    const destination = dialog.id === 'cal-run' ? $('#cal-run-destination').value : $('#cal-event-destination').value;
+    const external = method === 'PUT' ? !!editingEvent.source : destination !== 'local';
+    if (external) {
+      const [connection_id, calendar_id] = method === 'PUT' ? [editingEvent.connection_id, editingEvent.calendar_id] : JSON.parse(destination);
+      body = { ...body, connection_id, calendar_id, remote_version: editingEvent?.updated_at, version: null };
+    }
+    const url = external ? '/api/calendar/external-events' + (method === 'PUT' ? '/' + encodeURIComponent(editingEvent.id) : '') :
+      method === 'PUT' ? '/api/calendar/events/' + editingEvent.id : '/api/calendar/events';
     const { data } = await request(url, { method, body: JSON.stringify(body) });
-    events = [...events.filter(event => event.id !== data.id), data]; eventTag = ''; eventSeq++; eventJob = null;
+    if (external) externalEvents = [...externalEvents.filter(event => event.id !== data.id), data];
+    else localEvents = [...localEvents.filter(event => event.id !== data.id), data];
+    events = [...localEvents, ...externalEvents]; eventTag = ''; eventSeq++; eventJob = null;
     save('stellar:calendar:changed', Date.now() + ':' + crypto.randomUUID());
     dialog.close();
   } catch (error) { dialog.querySelector('.cal-form-error').textContent = error.message; loadEvents(true); }
@@ -313,28 +338,30 @@ $('#cal-event-form').addEventListener('submit', event => {
   if (start == null || end == null) { $('#cal-editor .cal-form-error').textContent = 'That local time does not exist because the clocks change. Choose another time.'; return; }
   writeEvent({ id: creatorId, title: form.elements.title.value, notes: form.notes.value, starts_at: new Date(start * 1000).toISOString(),
     ends_at: new Date(end * 1000).toISOString(), all_day: form.all_day.checked, kind: form.kind.value,
-    task_title: form.kind.value === 'run' ? editingEvent?.task_title || selectedTask : null, version: editingEvent?.updated_at },
+    task_title: form.kind.value === 'task' ? plannedTasks.find(t => String(t.series_id) === form.planned_task.value)?.title || editingEvent?.task_title : null, task_series_id: form.kind.value === 'task' ? +form.planned_task.value || editingEvent?.task_series_id : null, version: editingEvent?.updated_at },
   $('#cal-editor'), editingEvent ? 'PUT' : 'POST');
 });
 $('#cal-event-form').all_day.addEventListener('change', event => { $('#cal-event-time').hidden = event.target.checked; });
 $('#cal-event-form').kind.addEventListener('change', event => {
-  const form = $('#cal-event-form'), run = event.target.value === 'run';
+  const form = $('#cal-event-form'), run = event.target.value === 'task';
+  $('#cal-event-task-label').hidden = !run;
   form.all_day.disabled = run;
-  if (run) { form.all_day.checked = false; form.duration.value = 10; $('#cal-event-time').hidden = false; }
+  if (run) { form.all_day.checked = false; form.duration.value = plannedTasks.find(t => String(t.series_id) === form.planned_task.value)?.rule.duration_minutes || 30; $('#cal-event-time').hidden = false; }
 });
 $('#cal-book-run').addEventListener('click', () => {
   if (!booking || Date.now() / 1000 >= booking.start) { $('#cal-run .cal-form-error').textContent = 'This slot has passed. Choose another suggestion.'; return; }
-  if (!eventsReady || !recordsReady || Date.now() - forecastAt >= 45 * 60000) { $('#cal-run .cal-form-error').textContent = 'Refresh the calendar and forecast before reserving this slot.'; return; }
+  if (!eventsReady || !externalReady || !recordsReady || !planningReady || !plans.some(day => day.slots.some(slot => slot.start === booking.start && slot.taskSeriesId === booking.taskSeriesId))) { $('#cal-run .cal-form-error').textContent = 'Refresh the calendars and task settings before reserving this slot.'; return; }
   if (records[booking.day]?.some(row => row.title === booking.taskTitle && row.is_completed)) { $('#cal-run .cal-form-error').textContent = 'This run is already recorded. No reservation is needed.'; return; }
-  writeEvent({ id: creatorId, title: 'Run', notes: '', starts_at: new Date(booking.start * 1000).toISOString(), ends_at: new Date(booking.end * 1000).toISOString(),
-    all_day: false, kind: 'run', task_title: booking.taskTitle }, $('#cal-run'));
+  writeEvent({ id: creatorId, title: booking.taskTitle, notes: '', starts_at: new Date(booking.start * 1000).toISOString(), ends_at: new Date(booking.end * 1000).toISOString(),
+    all_day: false, kind: 'task', task_title: booking.taskTitle, task_series_id: booking.taskSeriesId }, $('#cal-run'));
 });
 $('#cal-delete').addEventListener('click', async () => {
   if (mutating || !editingEvent) return;
   const button = $('#cal-delete'); button.disabled = true; mutating = true;
   try {
-    await request('/api/calendar/events/' + editingEvent.id + '?' + new URLSearchParams({ version: editingEvent.updated_at }), { method: 'DELETE' });
-    events = events.filter(event => event.id !== editingEvent.id); eventTag = ''; eventSeq++; eventJob = null;
+    await request((editingEvent.source ? '/api/calendar/external-events/' : '/api/calendar/events/') + encodeURIComponent(editingEvent.id) + '?' + new URLSearchParams({ version: editingEvent.updated_at }), { method: 'DELETE' });
+    localEvents = localEvents.filter(event => event.id !== editingEvent.id); externalEvents = externalEvents.filter(event => event.id !== editingEvent.id);
+    events = [...localEvents, ...externalEvents]; eventTag = ''; eventSeq++; eventJob = null;
     save('stellar:calendar:changed', Date.now() + ':' + crypto.randomUUID()); $('#cal-editor').close();
   } catch (error) { $('#cal-editor .cal-form-error').textContent = error.message; loadEvents(true); }
   finally { mutating = false; button.disabled = false; if (!$('#cal-editor').open) render(); }
@@ -349,15 +376,6 @@ $('#cal-next').addEventListener('click', () => navigate(shiftDay(selectedDay, vi
 $('#cal-today').addEventListener('click', () => navigate(today()));
 document.querySelectorAll('[data-cal-view]').forEach(button => button.addEventListener('click', () => navigate(selectedDay, button.dataset.calView)));
 $('#cal-options').addEventListener('click', () => { $('#cal-preferences').hidden = !$('#cal-preferences').hidden; });
-$('#cal-preferences').earliest.value = clock(Number.isInteger(pref.earliest) && pref.earliest >= 0 && pref.earliest < 1440 ? pref.earliest : 420);
-$('#cal-preferences').latest.value = clock(Number.isInteger(pref.latest) && pref.latest > 0 && pref.latest < 1440 ? pref.latest : 1260);
-$('#cal-preferences').buffer.value = [0, 5, 10, 15].includes(pref.buffer) ? String(pref.buffer) : '0';
-$('#cal-preferences').addEventListener('submit', event => {
-  event.preventDefault(); const form = event.currentTarget;
-  if (minutes(form.latest.value) <= minutes(form.earliest.value)) { form.latest.setCustomValidity('Choose an end time after the start.'); form.latest.reportValidity(); return; }
-  form.latest.setCustomValidity(''); save('stellar:calendar:hours', { earliest: minutes(form.earliest.value), latest: minutes(form.latest.value), buffer: +form.buffer.value }); form.hidden = true; render();
-});
-$('#cal-preferences').latest.addEventListener('input', event => event.target.setCustomValidity(''));
 $('#cal-location').addEventListener('click', () => { cities(); $('#cal-cities').showModal(); });
 $('#cal-weather-retry').addEventListener('click', () => loadForecast(true));
 $('#cal-city-search').addEventListener('submit', async event => {
@@ -373,7 +391,8 @@ $('#cal-city-search').addEventListener('submit', async event => {
   } catch (error) { if (ticket === citySeq) $('#cal-city-status').textContent = error.message; }
 });
 window.addEventListener('storage', event => {
-  if (event.key === 'stellar:calendar:changed') loadEvents();
+  if (['stellar:calendar:changed', 'stellar:calendar:connections-changed'].includes(event.key)) { externalChecked = 0; loadEvents(true); }
+  if (event.key === 'stellar:calendar:planning-changed') { planningChecked = 0; loadPlanning(true); }
   if (event.key === 'stellar:weather:place') {
     const city = read(event.key);
     if (cityValid(city) && (!place || pointKey(city) !== pointKey(place))) { place = city; locationSeq++; forecast = null; forecastAt = 0; forecastJob = null; restoreForecast(); render(); loadForecast(); }
@@ -383,14 +402,76 @@ window.addEventListener('storage', event => {
 function resume() {
   if (!active()) return;
   const changed = restoreForecast();
-  loadEvents(); loadForecast(); if (!window.StellarSync?.managed) loadRecords();
+  loadEvents(); loadPlanning(); loadForecast(); if (!window.StellarSync?.managed) loadRecords();
   if (!editing() && (changed || Date.now() - lastPlanTime > 5 * 60000)) render(); else paintNow();
 }
 window.addEventListener('focus', resume); window.addEventListener('pageshow', resume); window.addEventListener('stellar:visibility', resume);
 document.addEventListener('visibilitychange', () => { if (active()) resume(); });
 window.StellarSync?.subscribe(['records', 'definitions'], () => loadRecords());
-setInterval(() => { if (active()) { loadEvents(); if (Date.now() - lastPlanTime > 5 * 60000 && !editing()) { render(); loadForecast(); } else paintNow(); } }, 30000);
+setInterval(() => { if (active()) { loadEvents(); loadPlanning(); if (Date.now() - lastPlanTime > 5 * 60000 && !editing()) { render(); loadForecast(); } else paintNow(); } }, 30000);
 $('#cal-timezone').textContent = tz.replaceAll('_', ' ');
 document.querySelectorAll('[data-calendar-timezone]').forEach(node => { node.textContent = tz.replaceAll('_', ' '); });
-restoreForecast(); remember(); render(); loadEvents(); loadRecords(); loadForecast();
+restoreForecast(); remember(); render(); loadEvents(); loadPlanning(); loadRecords(); loadForecast();
 requestAnimationFrame(() => { $('#cal-scroll').scrollTop = (selectedDay === today() ? Math.max(6, localParts(Date.now() / 1000, tz).minutes / 60 - 1) : 7) * 76; });
+
+function slotDescription(slot) {
+  const duration = Math.round((slot.end - slot.start) / 60) + ' minutes';
+  return slot.rain == null ? duration + ' · within allowed hours · no calendar conflicts' :
+    `${duration} · ${slot.rain}% precipitation chance · feels like ${Math.round(slot.feels * 9 / 5 + 32)}°F · gusts ${Math.round(slot.gust / 1.609344)} mph`;
+}
+function populateTaskChoice(event) {
+  const select = $('#cal-event-task'); select.replaceChildren(...plannedTasks.map(task => new Option(task.title, task.series_id)));
+  if (event?.task_title && !plannedTasks.some(task => task.titles.includes(event.task_title))) select.append(new Option(event.task_title, event.task_series_id || ''));
+  select.value = String(event?.task_series_id || selectedTaskId || plannedTasks[0]?.series_id || '');
+  $('#cal-event-task-label').hidden = $('#cal-event-form').kind.value !== 'task';
+}
+function populateDestinations(select, event) {
+  select.replaceChildren(new Option('Stellar', 'local'));
+  for (const connection of connections.filter(c => c.mode === 'write')) for (const calendar of connection.calendars.filter(c => c.can_write && connection.selected_ids.includes(c.id))) {
+    select.append(new Option(calendar.label + ' · ' + (connection.provider === 'google' ? 'Google' : 'Outlook'), JSON.stringify([connection.id, calendar.id])));
+  }
+  let selected = event?.source ? JSON.stringify([event.connection_id, event.calendar_id]) : read('stellar:calendar:destination') ||
+    connections.filter(c => c.write_calendar_id).map(c => JSON.stringify([c.id, c.write_calendar_id]))[0] || 'local';
+  if (event?.source && ![...select.options].some(o => o.value === selected)) select.append(new Option(event.calendar_label, selected));
+  if (![...select.options].some(o => o.value === selected)) selected = 'local';
+  select.value = selected;
+}
+async function loadExternal(force = false) {
+  if (!active() || !force && editing()) return;
+  const days = span(), key = days[0] + ':' + days.at(-1);
+  if (externalJob?.key === key) return externalJob.promise;
+  if (!force && externalKey === key && Date.now() - externalChecked < 60000) return;
+  const ticket = ++externalSeq;
+  const promise = request('/api/calendar/external-events?' + new URLSearchParams({ start: days[0], end: days.at(-1), fresh: String(force) }), { priority: 'low' })
+    .then(({ data }) => {
+      if (ticket !== externalSeq) return;
+      if (!Array.isArray(data.events) || typeof data.complete !== 'boolean') throw new Error('Connected calendars could not load. Task suggestions are paused.');
+      externalEvents = data.events; connections = data.connections || []; externalReady = data.complete;
+      externalError = data.complete ? '' : 'A connected calendar could not sync. Task suggestions are paused until all calendars are available.';
+      externalKey = key; externalChecked = Date.now(); events = [...localEvents, ...externalEvents];
+      if (!editing()) render(); else status();
+    }).catch(error => { if (ticket === externalSeq) { externalReady = false; externalError = error.message; if (!editing()) render(); else status(); } })
+    .finally(() => { if (ticket === externalSeq) externalJob = null; });
+  externalJob = { key, promise }; return promise;
+}
+async function loadPlanning(force = false) {
+  if (!active() || !force && (editing() || Date.now() - planningChecked < 60000)) return;
+  if (planningJob) return planningJob;
+  planningJob = request('/api/calendar/task-planning', { priority: 'low' }).then(({ data }) => {
+    if (!Array.isArray(data.tasks)) throw new Error('Task planning settings could not load.');
+    plannedTasks = data.tasks.filter(task => task.rule.enabled);
+    if (!plannedTask()) selectedTaskId = String(plannedTasks[0]?.series_id || '');
+    const select = $('#cal-plan-task'); select.replaceChildren(...(plannedTasks.length ? plannedTasks.map(task => new Option(task.title, task.series_id)) : [new Option('Choose tasks in Settings', '')]));
+    select.value = selectedTaskId; planningReady = true; planningError = ''; planningChecked = Date.now();
+    if (!editing()) render(); else status();
+  }).catch(error => { planningReady = false; planningError = error.message; if (!editing()) render(); else status(); }).finally(() => { planningJob = null; });
+  return planningJob;
+}
+$('#cal-plan-task').addEventListener('change', event => { selectedTaskId = event.target.value; save('stellar:calendar:planned-task', selectedTaskId); render(); });
+for (const select of [$('#cal-event-destination'), $('#cal-run-destination')]) select.addEventListener('change', () => save('stellar:calendar:destination', select.value));
+$('#cal-event-task').addEventListener('change', event => { const task = plannedTasks.find(t => String(t.series_id) === event.target.value); if (task) $('#cal-event-form').duration.value = task.rule.duration_minutes; });
+const connectionPanel = mountConnections($('#cal-connections'), () => { externalChecked = 0; loadExternal(true); });
+connectionPanel.dialog.addEventListener('close', () => { if (!mutating) render(); });
+if (connectionResult) { connectionPanel.open(); if (connectionResult !== 'connected') $('#cal-status').textContent = 'Calendar authorization was cancelled or could not finish. Try connecting again.'; }
+window.addEventListener('stellar:calendar:planning-changed', () => loadPlanning(true));
+window.addEventListener('stellar:calendar:connections-changed', () => loadExternal(true));

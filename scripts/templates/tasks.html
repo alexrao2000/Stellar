@@ -73,6 +73,8 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
 #status.ok { color: var(--ok); } #status.bad { color: var(--bad); }
 </style>
 
+<link rel="stylesheet" href="/app-assets/calendar.css?v=2">
+<link rel="stylesheet" href="/app-assets/calendar-settings.css?v=1">
 <div class="wrap">
   <p class="eyebrow">Stellar</p>
   <h1>Settings</h1>
@@ -103,6 +105,8 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
 
   <div class="card" id="stopped-card" hidden><h2>Stopped</h2><div id="stopped"></div></div>
   <div class="card" id="bin-card" hidden><h2>Bin</h2><div id="bin"></div></div>
+  <section class="card" id="task-planning-card"><h2>Task planning</h2><div id="task-planning-settings"></div></section>
+  <section class="card"><h2>Connected calendars</h2><div class="add"><p>Choose calendar access and account permissions.</p><button type="button" id="settings-calendar-connections" class="cal-button">Manage calendars</button></div></section>
   <div id="status"></div>
 </div>
 
@@ -384,3 +388,5 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   }
 })();
 </script>
+
+<script type="module" src="/app-assets/calendar-settings.js?v=1"></script>

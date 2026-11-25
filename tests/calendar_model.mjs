@@ -69,3 +69,43 @@ test('calendar cards share columns when their minimum readable height overlaps',
   assert.equal(laidOut[0].columns, 2); assert.equal(laidOut[1].columns, 2);
   assert.notEqual(laidOut[0].column, laidOut[1].column);
 });
+
+test('indoor task planning works without weather and ignores free calendar events', async () => {
+  const { taskSuggestions } = await import('../scripts/static/calendar-model.js');
+  const task = { series_id: 1, title: 'Read', titles: ['Read'], starts_on: today, rule: { enabled: true, duration_minutes: 30, earliest: 9 * 60, latest: 12 * 60, weather: 'any', daylight_only: false, buffer_minutes: 5 } };
+  const input = { ...options, task, days: [today], records: { [today]: [{ title: 'Read', series_id: 1, is_completed: false }] }, events: [event(hour(9), hour(10)), event(hour(10), hour(11), { id: 'free', blocks_time: false })] };
+  const plan = taskSuggestions(null, input)[0];
+  assert(plan.slots.length);
+  assert(plan.slots.every(slot => slot.start >= hour(10) + 300 && slot.end - slot.start === 1800 && slot.end <= hour(12)));
+  assert.equal(taskSuggestions(null, { ...input, records: {} })[0].slots.length, 0);
+});
+
+test('task-specific weather, duration and deadline must hold across the entire slot', async () => {
+  const { taskSuggestions } = await import('../scripts/static/calendar-model.js');
+  const task = { series_id: 1, title: 'Run', titles: ['Run'], starts_on: today, rule: { enabled: true, duration_minutes: 10, earliest: 7 * 60, latest: 21 * 60, weather: 'dry', daylight_only: true, buffer_minutes: 0, max_rain_percent: 30, max_wind_kph: 40, min_temperature_c: 2, max_temperature_c: 30 } };
+  const input = { ...options, task, days: [today] };
+  const plan = taskSuggestions(readForecast(forecast()), input)[0];
+  assert.equal(plan.slots[0].start, hour(10));
+  assert(plan.slots.every(slot => slot.end <= hour(12)));
+  assert.equal(taskSuggestions(null, input)[0].slots.length, 0);
+  const longer = { ...task, rule: { ...task.rule, duration_minutes: 90 } };
+  assert.equal(taskSuggestions(readForecast(forecast()), { ...input, task: longer })[0].slots.length, 0);
+});
+
+test('task series identity survives renames and a booked or recorded task needs no suggestion', async () => {
+  const { taskSuggestions } = await import('../scripts/static/calendar-model.js');
+  const task = { series_id: 3, title: 'Read a chapter', titles: ['Read', 'Read a chapter'], starts_on: today, rule: { enabled: true, duration_minutes: 15, earliest: 540, latest: 1260, weather: 'any', daylight_only: false, buffer_minutes: 0 } };
+  const input = { ...options, task, days: [today], records: { [today]: [{ series_id: 3, title: 'Read', is_completed: false }] } };
+  assert.equal(taskSuggestions(null, input)[0].slots[0].taskTitle, 'Read');
+  assert.equal(taskSuggestions(null, { ...input, events: [event(hour(10), hour(10.5), { kind: 'task', task_series_id: '3' })] })[0].reason, 'Task scheduled');
+  assert.equal(taskSuggestions(null, { ...input, records: { [today]: [{ series_id: 3, title: 'Read', is_completed: true }] } })[0].reason, 'Task recorded');
+});
+
+test('overnight task windows stay continuous and honor the reporting deadline', async () => {
+  const { taskSuggestions } = await import('../scripts/static/calendar-model.js');
+  const task = { series_id: 2, title: 'Study', titles: ['Study'], starts_on: today, rule: { enabled: true, duration_minutes: 60, earliest: 1320, latest: 60, weather: 'any', daylight_only: false, buffer_minutes: 0 } };
+  const input = { ...options, task, days: [today], records: { [today]: [{ title: 'Study', deadline_at: new Date(hour(24.5) * 1000).toISOString() }] } };
+  const plan = taskSuggestions(null, input)[0];
+  assert(plan.slots.length);
+  assert(plan.slots.every(slot => slot.start >= hour(22) && slot.end <= hour(24.5)));
+});

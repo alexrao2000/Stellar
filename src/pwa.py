@@ -36,6 +36,8 @@ ASSET_TYPES = {
     "weather-fair.jpg": "image/jpeg",
     "weather-storm.jpg": "image/jpeg",
     "weather-rain.svg": "image/svg+xml",
+    "calendar-settings.js": "text/javascript",
+    "calendar-settings.css": "text/css",
     "calendar.js": "text/javascript",
     "calendar-model.js": "text/javascript",
     "calendar.css": "text/css",

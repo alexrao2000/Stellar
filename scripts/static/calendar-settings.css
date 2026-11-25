@@ -1,0 +1,41 @@
+/* Shared glass settings use fixed choice controls, one focus ring and bounded
+   dialog scrolling. Permission and scheduling labels remain readable on phones. */
+html body .calendar-settings-dialog { width: min(640px, calc(100% - 24px)); max-height: calc(100dvh - 32px); padding: 0; overflow: clip; color-scheme: dark; color: #edf0fb; background: #111b2cf5; border: 1px solid #d1dcf143; border-radius: 20px; font: 14px/1.5 system-ui,sans-serif; }
+.calendar-settings-dialog[open] { display: flex; flex-direction: column; }
+.calendar-settings-dialog::backdrop { background: #03050d9e; }
+.calendar-settings-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; flex: none; border-bottom: 1px solid #ced8ee21; }
+.calendar-settings-dialog h2 { font-size: 20px; margin: 0; }
+.calendar-settings-dialog h3 { margin: 0 0 12px; font-size: 16px; }
+.cal-settings-content { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 20px; display: grid; gap: 16px; }
+.cal-settings-feedback { margin: 0; color: #c3d0ea; font-size: 13px; overflow-wrap: anywhere; }
+.calendar-settings-dialog > .cal-settings-feedback:not(:empty) { padding: 12px 20px; flex: none; }
+.cal-provider-buttons, .cal-connection-card footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cal-connection-card, .cal-planning-task { border: 1px solid #ced8ee29; border-radius: 12px; padding: 16px; background: #172238a1; min-width: 0; }
+.cal-connection-card form, .cal-planning-task form { display: grid; gap: 16px; margin-top: 16px; }
+form.cal-connection-card { display: grid; gap: 16px; }
+.cal-setting-summary { margin: 0; color: #acbad3; font-size: 13px; }
+.cal-setting-suggestion { margin: 0; color: #b8cae8; font-size: 12px; font-weight: 500; }
+.cal-setting-choice { display: flex !important; align-items: center; gap: 12px; cursor: pointer; min-width: 0; }
+.cal-setting-choice input[type=checkbox] { width: 22px; height: 22px; min-width: 22px; flex: 0 0 22px; min-height: 22px; max-height: 22px; margin: 0; padding: 0; accent-color: #c9d7f4; }
+.cal-setting-choice span { min-width: 0; overflow-wrap: anywhere; }
+.cal-setting-choice strong { display: block; font-weight: 550; }
+.cal-setting-choice small { display: block; color: #acbad3; }
+.cal-setting-field { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
+:is(.calendar-settings-dialog,#task-planning-settings) :is(input:not([type=checkbox]),select) { box-sizing: border-box; min-height: 44px; width: 100%; min-width: 0; max-width: 100%; padding: 8px 12px; background: #0d1728; color: #edf0fb; border: 1px solid #ced8ee40; border-radius: 10px; font: inherit; }
+:is(.calendar-settings-dialog,#task-planning-settings) :is(button,input,select,summary):focus-visible { outline: 2px solid #dacbff; outline-offset: 3px; }
+#task-planning-settings { display: grid; gap: 12px; padding: 16px; }
+.cal-planning-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.cal-planning-task > summary strong { overflow-wrap: anywhere; }
+.cal-planning-task .cal-form-row, .cal-weather-limits { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.cal-setting-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media(max-width: 480px) { .cal-settings-content { padding: 16px; } .cal-provider-buttons > button { width: 100%; } .cal-planning-task { padding: 12px; } .cal-planning-task > summary { align-items: flex-start; flex-direction: column; gap: 4px; } .cal-planning-task .cal-form-row { grid-template-columns: 1fr; } }
+
+.calendar-settings-dialog > header { margin: 0; }
+.cal-setting-choice:has(input[role=switch]) { min-height: 44px; }
+.cal-setting-choice input[role=switch] { appearance: none; flex-basis: 44px; width: 44px; min-width: 44px; height: 26px; min-height: 26px; max-height: 26px; border: 1px solid #c1cde64d; border-radius: 16px; background: #3a465e; position: relative; cursor: pointer; transition: background 160ms ease; }
+.cal-setting-choice input[role=switch]::before { content: ''; position: absolute; width: 18px; height: 18px; top: 3px; left: 3px; border-radius: 50%; background: #edf0fb; transition: transform 160ms ease; }
+.cal-setting-choice input[role=switch]:checked { background: #9baed5; }
+.cal-setting-choice input[role=switch]:checked::before { transform: translateX(18px); background: #142139; }
+:is(.calendar-settings-dialog,#task-planning-settings) [hidden] { display: none !important; }
+@media(prefers-reduced-motion: reduce) { .cal-setting-choice input[role=switch], .cal-setting-choice input[role=switch]::before { transition: none; } }
+.cal-setting-field select { appearance: none; height: 44px; padding-right: 32px !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23c7d2e8' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }

@@ -21,7 +21,7 @@ from .postgrest import PostgrestError
 from .timezones import resolve_timezone
 
 router = APIRouter()
-COLUMNS = "id,title,notes,starts_at,ends_at,all_day,kind,task_title,run_day,time_zone,updated_at"
+COLUMNS = "id,title,notes,starts_at,ends_at,all_day,kind,task_title,task_series_id,run_day,time_zone,updated_at"
 
 
 def _db():
@@ -40,8 +40,9 @@ class CalendarEvent(BaseModel):
     starts_at: AwareDatetime
     ends_at: AwareDatetime
     all_day: bool = False
-    kind: Literal["event", "run"] = "event"
+    kind: Literal["event", "run", "task"] = "event"
     task_title: str | None = Field(default=None, max_length=200)
+    task_series_id: int | None = Field(default=None, gt=0)
     version: AwareDatetime | None = None
 
     @model_validator(mode="after")
@@ -51,8 +52,8 @@ class CalendarEvent(BaseModel):
             raise ValueError("Enter a title and an end time after the start")
         if self.ends_at - self.starts_at > timedelta(days=31):
             raise ValueError("An event can span at most 31 days")
-        if self.kind == "run" and (self.all_day or not timedelta(minutes=1) <= self.ends_at - self.starts_at <= timedelta(hours=3)):
-            raise ValueError("A run needs a timed slot of 1–180 minutes")
+        if self.kind in {"run", "task"} and (self.all_day or not timedelta(minutes=1) <= self.ends_at - self.starts_at <= timedelta(hours=8)):
+            raise ValueError("A scheduled task needs a timed slot of 1–480 minutes")
         return self
 
     def row(self) -> dict:
@@ -61,8 +62,9 @@ class CalendarEvent(BaseModel):
         return {"id": str(self.id), "title": self.title, "notes": self.notes,
                 "starts_at": start.isoformat(), "ends_at": self.ends_at.astimezone(timezone.utc).isoformat(),
                 "all_day": self.all_day, "kind": self.kind, "time_zone": tz_name,
-                "task_title": self.task_title if self.kind == "run" else None,
-                "run_day": start.astimezone(ZoneInfo(tz_name)).date().isoformat() if self.kind == "run" else None}
+                "task_title": self.task_title if self.kind in {"run", "task"} else None,
+                "task_series_id": self.task_series_id if self.kind in {"run", "task"} else None,
+                "run_day": start.astimezone(ZoneInfo(tz_name)).date().isoformat() if self.kind in {"run", "task"} else None}
 
 
 def _shape(row: dict) -> dict:
@@ -71,16 +73,16 @@ def _shape(row: dict) -> dict:
 
 def _same_event(row: dict, body: CalendarEvent) -> bool:
     expected = body.row()
-    return (all(row.get(key) == expected.get(key) for key in ("title", "notes", "all_day", "kind", "task_title"))
+    return (all(row.get(key) == expected.get(key) for key in ("title", "notes", "all_day", "kind", "task_title", "task_series_id"))
             and all(datetime.fromisoformat(row[key].replace("Z", "+00:00")) == getattr(body, key)
                     for key in ("starts_at", "ends_at")))
 
 
 def _write_error(exc: PostgrestError):
     if "23P01" in str(exc) or "calendar_run_conflict" in str(exc):
-        raise HTTPException(409, "That running slot is now occupied. Choose another suggestion.") from None
+        raise HTTPException(409, "That task slot is now occupied. Choose another suggestion.") from None
     if "23505" in str(exc):
-        raise HTTPException(409, "A run is already scheduled for this task and day. Move or remove it first.") from None
+        raise HTTPException(409, "This task is already scheduled for that day. Move or remove it first.") from None
     raise exc
 
 
@@ -104,13 +106,16 @@ def events(request: Request, start: date, end: date) -> Response:
 
 
 @router.post("/api/calendar/events")
-def create_event(body: CalendarEvent) -> dict:
+def create_event(body: CalendarEvent, request: Request) -> dict:
     row = body.row()
     existing = _db().table("calendar_events").select(COLUMNS).eq("id", row["id"]).execute().data or []
     if existing:
         if _same_event(existing[0], body):
             return _shape(existing[0])
         raise HTTPException(409, "This event changed on another device. Refresh before editing it.")
+    if body.kind == "task":
+        from .calendar_connections import check_slot
+        check_slot(request, body)
     try:
         rows = _db().table("calendar_events").insert(row).execute().data or []
     except PostgrestError as exc:
@@ -125,11 +130,14 @@ def create_event(body: CalendarEvent) -> dict:
 
 
 @router.put("/api/calendar/events/{event_id}")
-def update_event(event_id: UUID, body: CalendarEvent) -> dict:
+def update_event(event_id: UUID, body: CalendarEvent, request: Request) -> dict:
     if body.version is None:
         raise HTTPException(400, "Refresh this event before editing it")
     row = body.row()
     row.pop("id")
+    if body.kind == "task":
+        from .calendar_connections import check_slot
+        check_slot(request, body, str(event_id))
     try:
         rows = (_db().table("calendar_events").update(row).eq("id", str(event_id))
                 .eq("updated_at", body.version.isoformat()).execute().data or [])

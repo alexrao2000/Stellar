@@ -28,6 +28,9 @@ async function check(engine, mobile) {
     await context.route('**/api/**', async route => {
       const req = route.request(), url = new URL(req.url());
       if (url.pathname === '/api/weather/forecast') { await pendingWeather; return route.fulfill({ json: forecast() }); }
+      if (url.pathname === '/api/calendar/external-events') return route.fulfill({ json: { events: [], complete: true, errors: [], connections: [] } });
+      if (url.pathname === '/api/calendar/task-planning') return route.fulfill({ json: { tasks: [{ series_id: 1, title: 'Run', titles: ['Run'], starts_on: today,
+        rule: { enabled: true, duration_minutes: 10, earliest: 420, latest: 1260, weather: 'dry', daylight_only: true, min_temperature_c: 2, max_temperature_c: 30, max_rain_percent: 30, max_wind_kph: 40, buffer_minutes: 0 } }] } });
       if (url.pathname.startsWith('/api/calendar/events')) {
         if (req.method() === 'GET') return route.fulfill({ json: { events: stored }, headers: { ETag: '"' + revision + '"' } });
         if (req.method() === 'DELETE') { const id = url.pathname.split('/').at(-1); stored = stored.filter(row => row.id !== id); revision++; return route.fulfill({ json: { deleted: id } }); }
@@ -49,19 +52,19 @@ async function check(engine, mobile) {
     assert.equal(await page.locator('.cal-day-column[data-day="2026-11-17"] .is-suggestion').count(), 3);
     assert.equal(mutations.length, 0, 'Recommendations do not write any reservations');
     await page.locator(`.cal-event[data-slot="${hour(10)}"]`).click();
-    const run = page.getByRole('dialog', { name: '10-minute run' });
+    const run = page.getByRole('dialog', { name: 'Run', exact: true });
     assert.equal(stored.length, 1);
-    await run.getByRole('button', { name: 'Schedule this run' }).click();
+    await run.getByRole('button', { name: 'Schedule Run' }).click();
     await run.waitFor({ state: 'hidden' });
-    assert.equal(stored.filter(row => row.kind === 'run').length, 1);
+    assert.equal(stored.filter(row => row.kind === 'task').length, 1);
     assert.equal(Date.parse(stored.at(-1).ends_at) - Date.parse(stored.at(-1).starts_at), 600000);
     assert.equal(await page.locator(`.cal-day-column[data-day="${today}"] .is-suggestion`).count(), 0);
-    await page.locator('.cal-event[data-kind=run]').first().click();
+    await page.locator('.cal-event[data-kind=task]').first().click();
     const editor = page.getByRole('dialog', { name: 'Edit event' });
     await editor.getByLabel('Start', { exact: true }).fill('10:15');
     await editor.getByRole('button', { name: 'Save event' }).click();
     await editor.waitFor({ state: 'hidden' });
-    assert.equal(Date.parse(stored.find(row => row.kind === 'run').starts_at) / 1000, hour(10.25));
+    assert.equal(Date.parse(stored.find(row => row.kind === 'task').starts_at) / 1000, hour(10.25));
     await page.getByRole('button', { name: '＋ Add event' }).click();
     const create = page.getByRole('dialog', { name: 'New event' });
     await create.getByLabel('Title', { exact: true }).fill('An all-day event with a long readable name');
@@ -71,7 +74,7 @@ async function check(engine, mobile) {
     await create.waitFor({ state: 'hidden' });
     assert.equal(stored.length, 3);
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.locator('.cal-event[data-kind=run]').first().waitFor();
+    await page.locator('.cal-event[data-kind=task]').first().waitFor();
     await page.getByRole('button', { name: 'Wednesday, Nov 18', exact: true }).click();
     if (mobile) await page.locator('#cal-mobile-all-day .cal-event').waitFor();
     for (const width of mobile ? [320, 390] : [1440]) {

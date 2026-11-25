@@ -40,7 +40,7 @@ from .pwa import ASSETS, INSTALL_BUTTON, PUBLIC_PATHS as PWA_PUBLIC_PATHS, RANGE
 from .postgrest import PostgrestError
 from .read import read_rows
 from .web_auth import AuthError, AuthSession, web_auth
-from . import calendar_schedule, reminders, weather
+from . import calendar_connections, calendar_schedule, reminders, task_planning, weather
 
 log = logging.getLogger("cal-task-sync")
 
@@ -76,6 +76,8 @@ app.include_router(pwa_router)
 app.include_router(reminders.router)
 app.include_router(weather.router)
 app.include_router(calendar_schedule.router)
+app.include_router(calendar_connections.router)
+app.include_router(task_planning.router)
 
 
 @app.exception_handler(PostgrestError)
@@ -1146,7 +1148,7 @@ def _annotated_record(row: dict, definition: dict, day: str, tz) -> dict:
         state = "incomplete"
     else:
         state = "unreported"
-    return {**row, "optional": optional, "deadline_at": _deadline_at(day, deadline, tz),
+    return {**row, "series_id": definition.get("series_id") or definition.get("id"), "optional": optional, "deadline_at": _deadline_at(day, deadline, tz),
             "report_due_at": due, "report_state": state}
 
 

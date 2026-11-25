@@ -689,7 +689,7 @@ def test_settings_page_lists_tasks_and_flags_the_migration(db, monkeypatch):
 # ---- the Tasks tab: viewing never writes ---------------------------------------
 def test_calendar_serves_a_separate_timed_schedule():
     page = server.page_calendar()
-    assert 'id="cal-grid"' in page and '/app-assets/calendar.js?v=2' in page
+    assert 'id="cal-grid"' in page and '/app-assets/calendar.js?v=3' in page
     assert '"tz":' in page and '/api/calendar/events' not in page
 
 

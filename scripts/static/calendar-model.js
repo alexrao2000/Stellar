@@ -1,5 +1,5 @@
 /* Calendar dates follow the app timezone, including 23/25-hour DST days.
-   Run candidates use complete hourly weather intervals, daylight, task outcomes
+   Task candidates use complete hourly weather intervals, daylight, task outcomes
    and busy events. Ranking is stable; alternatives are at least an hour apart.
    Recommendations reserve no time until the user selects a slot. */
 import { dayKeyFor, daylightAt, outdoorSuitable } from './weather-model.js?v=4';
@@ -106,4 +106,57 @@ export function eventLayout(items, day, timeZone, hourHeight = 76) {
   }
   finish();
   return visible;
+}
+
+export function taskSuggestions(forecast, { task, days, events, records = {}, timeZone, now }) {
+  const rule = task.rule, duration = rule.duration_minutes * 60;
+  const busy = events.filter(event => event.blocks_time !== false).map(interval);
+  const needsWeather = rule.weather !== 'any' || rule.daylight_only;
+  const matches = event => event.task_series_id != null && String(event.task_series_id) === String(task.series_id) ||
+    (task.titles || [task.title]).includes(event.task_title);
+  return days.map(day => {
+    const rows = records[day] || [], row = rows.find(row => row.series_id != null && String(row.series_id) === String(task.series_id)) ||
+      rows.find(row => (task.titles || [task.title]).includes(row.title));
+    const scheduled = events.some(event => ['run', 'task'].includes(event.kind) && matches(event) && localParts(interval(event).start, timeZone).day === day);
+    const unavailable = !rule.enabled ? 'Planning is off for this task' : !row || day < task.starts_on || task.ends_on && day > task.ends_on ? 'Not scheduled this day' :
+      row.is_completed ? 'Task recorded' : scheduled ? 'Task scheduled' : needsWeather && !forecast ? 'Waiting for the weather forecast' : '';
+    if (unavailable) return { day, slots: [], reason: unavailable };
+    const overnight = rule.latest <= rule.earliest;
+    const first = zonedTime(day, rule.earliest, timeZone);
+    const last = zonedTime(overnight ? shiftDay(day, 1) : day, rule.latest, timeZone);
+    const deadline = Date.parse(row.deadline_at || row.report_due_at) / 1000;
+    const candidates = [], chosen = [];
+    if (first == null || last == null) return { day, slots: [], reason: 'The clocks change during this time window' };
+    for (let start = Math.ceil(Math.max(first, now + 5 * 60) / 300) * 300; start + duration <= last; start += 300) {
+      const end = start + duration;
+      if (Number.isFinite(deadline) && end > deadline) continue;
+      if (busy.some(event => overlaps({ start: start - rule.buffer_minutes * 60, end: end + rule.buffer_minutes * 60 }, event))) continue;
+      let rain = null, gust = null, feels = null, sun = 0;
+      if (needsWeather) {
+        const hours = forecast.intervals.filter(hour => hour.end > start && hour.start < end);
+        if (hours.reduce((sum, hour) => sum + Math.min(end, hour.end) - Math.max(start, hour.start), 0) !== duration) continue;
+        if (rule.daylight_only) {
+          const solar = forecast.days.find(d => d.key === dayKeyFor(forecast.timezone)(start));
+          if (!solar || !Number.isFinite(solar.sunrise) || !Number.isFinite(solar.sunset) || start < solar.sunrise || end > solar.sunset) continue;
+        }
+        if (rule.weather !== 'any' && !hours.every(hour => hour.known && !hour.blocked && hour.rain <= rule.max_rain_percent &&
+          hour.precipitation <= .1 && hour.gust <= rule.max_wind_kph && hour.minFeels >= rule.min_temperature_c && hour.maxFeels <= rule.max_temperature_c)) continue;
+        sun = hours.reduce((sum, hour) => sum + (Math.min(end, hour.end) - Math.max(start, hour.start)) * (Number.isFinite(hour.sunshine) ? hour.sunshine / 3600 : 0), 0) / duration;
+        if (rule.weather === 'sunny' && sun < .35) continue;
+        rain = Math.max(...hours.map(h => h.rain)); gust = Math.max(...hours.map(h => h.gust));
+        feels = hours.reduce((sum, h) => sum + h.minFeels + h.maxFeels, 0) / (hours.length * 2);
+      }
+      const score = needsWeather && rule.weather !== 'any' ? sun * 35 - rain * 1.5 - gust * .3 - Math.abs(feels - 15) * .8 : 0;
+      candidates.push({ day, start, end, rain, gust, feels, sun, score, taskTitle: row.title, taskSeriesId: task.series_id });
+    }
+    while (chosen.length < 3) {
+      const distance = slot => chosen.length ? Math.min(...chosen.map(other => Math.abs(slot.start - other.start))) : 0;
+      const eligible = candidates.filter(slot => !chosen.includes(slot) && (!chosen.length || distance(slot) >= Math.max(3600, duration)));
+      eligible.sort((a, b) => b.score - a.score || distance(b) - distance(a) || a.start - b.start);
+      if (!eligible.length) break;
+      chosen.push(eligible[0]);
+    }
+    return { day, slots: chosen.map((slot, i) => ({ ...slot, rank: i + 1 })).sort((a, b) => a.start - b.start),
+      reason: needsWeather ? 'No free slot meets this task’s time and weather settings' : 'No free slot within this task’s allowed hours' };
+  });
 }
