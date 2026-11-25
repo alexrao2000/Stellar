@@ -129,7 +129,9 @@ async function check(engine, mobile) {
     assert.equal(local.length, 1, 'Saving the rule creates no calendar reservations');
 
     await page.goto(base + '/calendar?day=' + today + '&view=day');
-    await page.getByRole('button', { name: /suggested .*1 second/ }).first().click();
+    const suggestion = page.getByRole('button', { name: /suggested .*1 second/ }).first();
+    assert(await suggestion.evaluate(el => el.classList.contains('is-callout')));
+    await suggestion.click();
     const booking = page.getByRole('dialog', { name: tasks[0].title, exact: true });
     await booking.getByLabel('Calendar', { exact: true }).selectOption('local');
     await booking.getByRole('button', { name: 'Schedule ' + tasks[0].title }).click();
@@ -143,6 +145,38 @@ async function check(engine, mobile) {
     await edit.getByRole('button', { name: 'Save event' }).click();
     await edit.waitFor({ state: 'hidden' });
     assert.equal(Date.parse(local.at(-1).ends_at) - Date.parse(local.at(-1).starts_at), 1000);
+
+    const shortStart = hour(12.5) + 17;
+    local.push(event('overlap-demo', 'Project review', hour(12), hour(13)),
+      event('short-one', 'Quick log', shortStart, shortStart + 1, { kind: 'task' }),
+      event('short-two', 'File receipt', shortStart + 20, shortStart + 21, { kind: 'task' }));
+    if (mobile) await page.setViewportSize({ width: 320, height: 844 });
+    await page.reload();
+    for (const view of ['Day', 'Week']) {
+      if (view === 'Week') await page.getByRole('button', { name: view, exact: true }).click();
+      const short = page.getByRole('button', { name: /Quick log.*12:30:17/ });
+      await short.waitFor();
+      await page.locator('#cal-scroll').evaluate(el => { el.scrollTop = 9 * 76; });
+      const bounds = await short.evaluate(el => {
+        const column = el.closest('.cal-day-column'), bubble = el.closest('.cal-callout');
+        const neighbor = column.querySelector('[data-event="overlap-demo"]');
+        const arrow = bubble.querySelector('path');
+        const pt = arrow.getPointAtLength(arrow.getTotalLength() - 5);
+        const arrowTip = new DOMPoint(pt.x, pt.y).matrixTransform(arrow.getScreenCTM());
+        const label = el.getBoundingClientRect(), day = column.getBoundingClientRect();
+        const second = column.querySelector('[data-event="short-two"]').getBoundingClientRect();
+        const title = neighbor.querySelector('strong').getBoundingClientRect();
+        return { fits: label.left >= day.left && arrowTip.x <= day.right, anchor: arrowTip.y - day.top,
+          width: neighbor.offsetWidth - column.clientWidth, titleClear: label.top >= title.bottom || label.bottom <= title.top,
+          background: getComputedStyle(el).backgroundColor, labelBottom: label.bottom, nextTop: second.top };
+      });
+      assert(bounds.fits && bounds.titleClear, `${view}: callout fits in its column and avoids the meeting title ${JSON.stringify(bounds)}`);
+      assert(Math.abs(bounds.anchor - (12.5 + 17 / 3600) * 76) < 0.1, `${view}: leader points to the second`);
+      assert(bounds.width >= -7, `${view}: meeting remains full width`);
+      assert.match(bounds.background, /^rgba\(.*, 0\.\d+\)$/);
+      assert(bounds.labelBottom <= bounds.nextTop, `${view}: nearby labels remain separate ${JSON.stringify(bounds)}`);
+      await page.locator('.cal-board').screenshot({ path: `/private/tmp/stellar-calendar-callout-${engine}-${view}.png` });
+    }
     assert.deepEqual(errors, []);
     console.log(`${engine}: explicit OAuth intent, read-only enforcement, external destination, task settings and mobile bounds passed`);
   } finally { await browser.close(); }

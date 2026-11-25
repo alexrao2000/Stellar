@@ -70,6 +70,30 @@ test('calendar cards share columns when their minimum readable height overlaps',
   assert.notEqual(laidOut[0].column, laidOut[1].column);
 });
 
+test('short tasks keep their exact time and leave overlapping event cards full width', () => {
+  const start = hour(10.5) + 17;
+  const [meeting, first, second] = eventLayout([
+    event(hour(10), hour(11)),
+    event(start, start + 1, { id: 'short-task', kind: 'task' }),
+    event(start + 10, start + 11, { id: 'short-suggestion', slot: {} }),
+  ], today, options.timeZone);
+  assert.equal(meeting.columns, 1);
+  assert.equal(meeting.height, 76);
+  assert.equal(first.anchor, (10.5 + 17 / 3600) * 76);
+  assert(first.top >= 10.5 * 76 + 14 || first.top + first.height <= 10.5 * 76 - 14);
+  assert(first.top + first.height < second.top);
+});
+
+test('short task bubbles stay stacked inside the timeline near midnight', () => {
+  const start = hour(24) - 3;
+  const result = eventLayout([0, 1, 2].map(offset => event(start + offset, start + offset + 1,
+    { id: String(offset), kind: 'task' })), today, options.timeZone);
+  for (const item of result) assert(item.top >= 0 && item.top + item.height <= 24 * 76);
+  assert(result[0].top + result[0].height <= result[1].top);
+  assert(result[1].top + result[1].height <= result[2].top);
+  assert(result[2].anchor > result[1].anchor);
+});
+
 test('indoor task planning works without weather and ignores free calendar events', async () => {
   const { taskSuggestions } = await import('../scripts/static/calendar-model.js');
   const task = { series_id: 1, title: 'Read', titles: ['Read'], starts_on: today, rule: { enabled: true, duration_minutes: 30, earliest: 9 * 60, latest: 12 * 60, weather: 'any', daylight_only: false, buffer_minutes: 5 } };

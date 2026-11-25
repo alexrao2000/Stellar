@@ -1,7 +1,7 @@
 /* Calendar permissions are chosen before OAuth. Read-only is the suggested
    default; upgrading requires a new authorization. Task planning is enabled by default and
    saved by task series, independently from historic completion settings. */
-import { taskDurationSeconds } from './calendar-model.js?v=3';
+import { taskDurationSeconds } from './calendar-model.js?v=4';
 
 const node = (tag, text, className) => { const el = document.createElement(tag); if (text != null) el.textContent = text; if (className) el.className = className; return el; };
 async function api(path, method = 'GET', body) {

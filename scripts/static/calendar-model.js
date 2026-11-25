@@ -1,7 +1,9 @@
 /* Calendar dates follow the app timezone, including 23/25-hour DST days.
    Task candidates use complete hourly weather intervals, daylight, task outcomes
    and busy events. Ranking is stable; alternatives are at least an hour apart.
-   Recommendations reserve no time until the user selects a slot. */
+   Recommendations reserve no time until the user selects a slot. On the grid,
+   callouts keep short tasks out of the event columns. Their labels can move
+   away from event text while their arrows stay attached to the start time. */
 import { dayKeyFor, daylightAt, outdoorSuitable } from './weather-model.js?v=4';
 
 const formats = new Map();
@@ -101,15 +103,21 @@ export function runSuggestions(forecast, { days, events, records = {}, taskTitle
 export function eventLayout(items, day, timeZone, hourHeight = 76) {
   const first = zonedTime(day, 0, timeZone), last = zonedTime(shiftDay(day, 1), 0, timeZone);
   if (first == null || last == null) return [];
+  const calloutHeight = 26;
+  const minuteOfDay = time => localParts(time, timeZone).minutes + ((time % 60 + 60) % 60) / 60;
   const visible = items.filter(event => overlaps(interval(event), { start: first, end: last })).map(event => {
     const span = interval(event);
-    const top = Math.max(0, localParts(Math.max(span.start, first), timeZone).minutes) / 60 * hourHeight;
-    const until = span.end >= last ? 1440 : localParts(span.end, timeZone).minutes;
-    return { ...event, top, height: Math.max(28, until / 60 * hourHeight - top), column: 0, columns: 1 };
+    const top = minuteOfDay(Math.max(span.start, first)) / 60 * hourHeight;
+    const until = span.end >= last ? 1440 : minuteOfDay(span.end);
+    const height = until / 60 * hourHeight - top;
+    const shortTask = (event.slot || event.kind === 'task' || event.kind === 'run') && (span.end - span.start) / 3600 * hourHeight < 14;
+    return { ...event, top, height: shortTask ? calloutHeight : Math.max(28, height),
+      anchor: shortTask ? top : null, column: 0, columns: 1 };
   }).sort((a, b) => a.top - b.top || b.height - a.height || a.id.localeCompare(b.id));
+  const cards = visible.filter(event => event.anchor == null);
   let group = [], ends = [], bottom = -1;
   const finish = () => { group.forEach(event => { event.columns = ends.length; }); group = []; ends = []; };
-  for (const event of visible) {
+  for (const event of cards) {
     if (event.top >= bottom) finish();
     let column = ends.findIndex(end => end <= event.top);
     if (column < 0) column = ends.length;
@@ -117,7 +125,31 @@ export function eventLayout(items, day, timeZone, hourHeight = 76) {
     event.column = column; group.push(event); bottom = Math.max(...ends);
   }
   finish();
-  return visible;
+  const textBands = cards.map(event => {
+    const center = event.top + event.height / 2;
+    const half = event.height < 42 ? 9 : 14;
+    return { start: center - half, end: center + half };
+  }).sort((a, b) => a.start - b.start);
+  const callouts = visible.filter(event => event.anchor != null);
+  const endOfDay = 24 * hourHeight;
+  const step = Math.min(calloutHeight + 4, (endOfDay - calloutHeight) / Math.max(1, callouts.length - 1));
+  let nextTop = 0;
+  for (const [index, event] of callouts.entries()) {
+    const latest = Math.max(nextTop, endOfDay - calloutHeight - (callouts.length - 1 - index) * step);
+    const preferred = Math.min(latest, Math.max(nextTop, event.anchor - calloutHeight / 2));
+    let above = preferred, below = preferred;
+    for (const band of textBands) {
+      if (overlaps({ start: below, end: below + calloutHeight }, band)) below = band.end;
+    }
+    for (let i = textBands.length - 1; i >= 0; i--) {
+      const band = textBands[i];
+      if (overlaps({ start: above, end: above + calloutHeight }, band)) above = band.start - calloutHeight;
+    }
+    const choices = [above, below].filter(top => top >= nextTop && top <= latest && Math.abs(top - preferred) <= 32);
+    event.top = choices.sort((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred))[0] ?? preferred;
+    nextTop = event.top + step;
+  }
+  return [...cards, ...callouts];
 }
 
 export function taskSuggestions(forecast, { task, days, events, records = {}, timeZone, now }) {

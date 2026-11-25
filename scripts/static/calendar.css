@@ -171,3 +171,34 @@ body[data-page=calendar] #cal-plan-task {
 
 .cal-duration { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 12px; }
 #cal-event-time:has(.cal-duration) { grid-template-columns: minmax(0, 1fr); }
+
+.cal-callout {
+  position: absolute;
+  inset-inline-end: 4px;
+  display: flex;
+  max-width: min(236px, calc(100% - 8px));
+  padding-inline-end: 20px;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 1;
+  color: #ded2fa;
+}
+.cal-event.is-callout {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 3px 7px;
+  border: 1px solid #dbcaff5c;
+  border-radius: 8px;
+  background: #a99ee02e;
+  box-shadow: none;
+  color: #f5efff;
+  text-shadow: 0 1px 3px #0a1023;
+  pointer-events: auto;
+}
+.cal-event.is-callout.is-suggestion { border-style: dashed; border-color: #becdff70; background: #a4b5f226; color: #e7eeff; }
+.cal-event.is-callout.is-conflicted { border-color: #f3bda68c; background: #da9a872b; }
+.cal-event.is-callout:is(:hover,:focus-visible) { background: #a99ee04c; }
+.cal-callout:focus-within { z-index: 2; }
+.cal-callout-leader { position: absolute; inset-inline-end: 0; width: 20px; overflow: visible; }
+.cal-callout-leader path { fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }

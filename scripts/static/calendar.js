@@ -4,10 +4,10 @@
    Visibility-aware refreshes retain the page and never replace an open editor.
    Booking uses stable IDs, server versions and database conflict checks.
 */
-import { mountConnections } from './calendar-settings.js?v=3';
+import { mountConnections } from './calendar-settings.js?v=4';
 import { notifyWeather, requestWeatherForecast } from './weather-background.js?v=1';
 import { dayKeyFor, describeWeather, readForecast } from './weather-model.js?v=4';
-import { durationLabel, eventLayout, interval, localParts, overlaps, taskDurationSeconds, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=3';
+import { durationLabel, eventLayout, interval, localParts, overlaps, taskDurationSeconds, taskSuggestions, shiftDay, weekStart, zonedTime } from './calendar-model.js?v=4';
 
 const boot = JSON.parse(document.getElementById('calendar-boot').textContent);
 const $ = selector => document.querySelector(selector);
@@ -115,14 +115,41 @@ function conflicted(event) { return ['run', 'task'].includes(event.kind) && even
 function eventButton(event) {
   const button = element('button', null, 'cal-event'); button.type = 'button';
   button.dataset.kind = event.kind; if (event.source) button.dataset.source = event.source; button.dataset.event = event.id;
-  if (isDone(event)) button.classList.add('is-complete');
-  if (conflicted(event)) button.classList.add('is-conflicted');
+  const done = isDone(event), conflict = conflicted(event);
+  if (done) button.classList.add('is-complete');
+  if (conflict) button.classList.add('is-conflicted');
   button.append(element('strong', (['run', 'task'].includes(event.kind) ? '✦ ' : '') + event.title));
-  if (!event.all_day) button.append(element('small', timeRange(interval(event).start, interval(event).end)));
-  button.title = event.title + (event.all_day ? ' · All day' : ` · ${timeRange(interval(event).start, interval(event).end)}`) +
-    (conflicted(event) ? ' · Conflicts with another event' : isDone(event) ? ' · Run recorded' : '');
+  const time = event.all_day ? 'All day' : timeRange(interval(event).start, interval(event).end);
+  if (!event.all_day && event.anchor == null) button.append(element('small', time));
+  button.title = `${event.title} · ${time}` + (conflict ? ' · Conflicts with another event' : done ? ' · Task recorded' : '');
+  if (event.anchor != null) button.setAttribute('aria-label', button.title);
   button.addEventListener('click', () => openEditor(event));
   return button;
+}
+
+function taskCallout(button, item) {
+  const bubble = element('div', null, 'cal-callout');
+  bubble.style.top = `${item.top}px`;
+  bubble.style.height = `${item.height}px`;
+  button.classList.add('is-callout');
+
+  const offset = item.anchor - item.top;
+  const arrowTop = Math.min(offset, item.height / 2) - 4;
+  const arrowHeight = Math.abs(offset - item.height / 2) + 8;
+  const anchor = offset - arrowTop;
+  const center = item.height / 2 - arrowTop;
+  const svgNamespace = 'http://www.w3.org/2000/svg';
+  const leader = document.createElementNS(svgNamespace, 'svg');
+  leader.setAttribute('class', 'cal-callout-leader');
+  leader.setAttribute('viewBox', `0 0 20 ${arrowHeight}`);
+  leader.setAttribute('height', arrowHeight);
+  leader.setAttribute('aria-hidden', 'true');
+  leader.style.top = `${arrowTop}px`;
+  const arrow = document.createElementNS(svgNamespace, 'path');
+  arrow.setAttribute('d', `M0 ${center} H5 L13 ${anchor} H18 M14 ${anchor - 3} L18 ${anchor} L14 ${anchor + 3}`);
+  leader.append(arrow);
+  bubble.append(button, leader);
+  return bubble;
 }
 
 function render() {
@@ -166,11 +193,16 @@ function render() {
       let button;
       if (item.slot) {
         button = element('button', null, 'cal-event is-suggestion'); button.dataset.slot = item.slot.start;
-        button.append(element('strong', `✧ ${timeLabel(item.slot.start)} · ${item.slot.taskTitle}`));
+        const label = item.anchor == null ? `${timeLabel(item.slot.start)} · ${item.slot.taskTitle}` : item.slot.taskTitle;
+        button.append(element('strong', `✧ ${label}`));
         button.setAttribute('aria-label', `${dayLabel(day)}, ${timeLabel(item.slot.start)}, suggested ${item.slot.taskTitle}, ${durationLabel(item.slot.end - item.slot.start)}${item.slot.rank === 1 ? ', best match' : ''}`);
         button.title = slotDescription(item.slot);
         button.addEventListener('click', () => openRun(item.slot));
       } else button = eventButton(item);
+      if (item.anchor != null) {
+        column.append(taskCallout(button, item));
+        continue;
+      }
       button.style.top = item.top + 'px'; button.style.height = item.height + 'px';
       button.style.left = `calc(${item.column / item.columns * 100}% + 3px)`;
       button.style.width = `calc(${100 / item.columns}% - 6px)`;
