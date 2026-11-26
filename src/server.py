@@ -2231,13 +2231,37 @@ def _clamp01(v: float) -> float:
     return 0.02 if v < 0.02 else (0.98 if v > 0.98 else float(v))
 
 
-@app.post("/api/pool/task")
-def api_pool_add(title: str, x: float = 0.5, y: float = 0.5, notes: str | None = None) -> dict:
-    title = (title or "").strip()
+def _pool_title(title: str) -> str:
+    title = title.strip()
     if not title:
         raise HTTPException(400, "a star needs a name")
     if len(title) > 200:
         raise HTTPException(400, "title longer than 200 characters")
+    return title
+
+
+class StarRename(BaseModel):
+    title: str
+
+
+@app.post("/api/pool/task/{task_id}/rename")
+def api_pool_rename(task_id: int, body: StarRename) -> dict:
+    title = _pool_title(body.title)
+    rows = _sb().table("pool_tasks").update({"title": title}).eq("id", task_id).execute().data
+    if not rows:
+        raise HTTPException(404, f"Star {task_id} not found")
+    def patch(state):
+        for star in state["tasks"]:
+            if star["id"] == task_id:
+                star["title"] = title
+                break
+    _pool_patch(patch)
+    return rows[0]
+
+
+@app.post("/api/pool/task")
+def api_pool_add(title: str, x: float = 0.5, y: float = 0.5, notes: str | None = None) -> dict:
+    title = _pool_title(title)
     created = _sb().table("pool_tasks").insert({
         "title": title, "notes": notes,
         "x": _clamp01(x), "y": _clamp01(y),

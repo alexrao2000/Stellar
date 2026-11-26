@@ -197,8 +197,12 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 10.5px; letter-spacing: .06em;
   color: var(--ink-sky); text-shadow: 0 1px 8px var(--void), 0 0 3px var(--void);
-  user-select: none;                 /* clickable: it is half the target */
+  user-select: none; pointer-events: none;
 }
+.star .name-text { pointer-events: auto; cursor: text; }
+.star .name-text:hover { text-decoration: underline; text-underline-offset: 3px; }
+.star.held .name-text { cursor: grabbing; }
+.pool-map[data-linking] .name-text { cursor: crosshair; }
 .star .waiting {
   position: absolute; left: 15px; bottom: -4px; white-space: nowrap;
   font-family: ui-monospace, Menlo, monospace; font-size: 8.5px;
@@ -292,10 +296,23 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 }
 #panel.open { display: block; }
 #panel .ptitle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  min-height: 36px; padding: 4px 0; border: 0; background: transparent; text-align: left;
   font-family: ui-monospace, Menlo, monospace; font-size: 10px;
   letter-spacing: .06em;
-  color: var(--ink-sky); margin-bottom: 3px; word-break: break-word;
+  color: var(--ink-sky); margin-bottom: 3px; overflow-wrap: anywhere; cursor: pointer;
 }
+#panel .ptitle svg { position: static; flex: 0 0 16px; opacity: .7; }
+#panel .ptitle:hover span { text-decoration: underline; text-underline-offset: 3px; }
+#panel :is(.ptitle,.star-rename :is(textarea,button)):focus-visible { outline: 2px solid var(--line-live); outline-offset: 2px; }
+#panel .star-rename { padding-top: 8px; }
+#panel .star-rename label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--ink-sky); }
+#panel .star-rename .link-actions { justify-content: flex-end; }
+#panel .star-rename .link-actions button { flex: 0 1 auto; padding: 8px 14px; }
+#panel .star-rename button[type=submit] { background: #eee; color: #111; }
+#panel .star-rename button:disabled { opacity: .55; }
+#pool-rename-error { margin: 6px 0 0; color: #f0a393; font-size: 13px; overflow-wrap: anywhere; }
+#pool-rename-error:empty { display: none; }
 #panel .pmeta {
   font-family: ui-monospace, Menlo, monospace; font-size: 8.5px;
   letter-spacing: .12em; color: rgba(140,136,180,.6); margin-bottom: 10px;
@@ -448,7 +465,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   <div id="veil"><div class="box" role="alertdialog" aria-modal="true"
        aria-labelledby="veilh"></div></div>
   <details class="key"><summary>How to use Constellations</summary>
-    <p>Select a star to edit it, or drag to move it. Right-click a star, then
+    <p>Select a star to open its details, or select its name to rename it. Drag a
+    star to move it. Right-click a star, then
     select the star that must finish first. Right-click empty sky to add a star
     and press Enter to save it. Click empty sky or press Escape to cancel.</p>
   </details>
@@ -941,7 +959,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
         '<span class="star-art">' + (holeAge ? blackHoleArt(t.id, holeAge, waits.length) :
           done ? emberSVG() : waits.length ? unlitSVG() : starSVG(t.id, magnitude(t, now), stage)) + collapseArt + '</span>' +
         '<div class="hit"></div>' +
-        '<div class="name">' + esc(t.title) + '</div>' +
+        '<div class="name"><span class="name-text">' + esc(t.title) + '</span></div>' +
         (done ? '<div class="resolvedwhen">resolved</div>' : '') +
         (waits.length ? '<div class="waiting">waiting on ' + waits.length + '</div>' : '');
       el.title = waits.length
@@ -1110,13 +1128,20 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (!isPrimaryPress(e) || drag || linkSource !== null) return;
     var el = e.target.closest ? e.target.closest('.star') : null;
     if (!el || el.classList.contains('ghost')) return;
+    var rename = e.target.closest('.name-text') ? byId[el.dataset.id] : null;
+    if (rename) {
+      var underlyingHit = document.elementsFromPoint(e.clientX, e.clientY).find(function (target) {
+        return target.classList.contains('hit') && target.parentElement !== el;
+      });
+      if (underlyingHit) el = underlyingHit.parentElement;
+    }
     var t = byId[el.dataset.id];
     if (!t) return;
     poolRevision++;
     var r = mapField.getBoundingClientRect(), point = screenPoint(t);
     el.setPointerCapture(e.pointerId);
     el.classList.add('held');
-    drag = { el: el, t: t, id: e.pointerId, moved: false,
+    drag = { el: el, t: t, rename: rename, id: e.pointerId, moved: false,
              ox: e.clientX, oy: e.clientY, sx: t.x, sy: t.y,
              grabX: e.clientX - r.left - point.x, grabY: e.clientY - r.top - point.y };
     el.addEventListener('lostpointercapture', function (event) {
@@ -1165,7 +1190,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
 
     if (paintPending) paint();
-    if (!d.moved) { if (openDetails) openPanel(d.t); return; }
+    if (!d.moved) { if (openDetails) openPanel(d.rename || d.t, !!d.rename); return; }
     var position = positions[d.t.id] || { saving: false };
     position.x = d.t.x; position.y = d.t.y;
     position.confirmed = false;
@@ -1297,6 +1322,12 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (cancelMapLink()) { e.preventDefault(); return; }
     if (cancelDrag()) { e.preventDefault(); return; }
     if (veil.classList.contains('open')) { closeVeil(); return; }
+    var renameForm = document.getElementById('pool-rename-form');
+    if (renameForm && !renameForm.hidden) {
+      e.preventDefault();
+      document.getElementById('pool-rename-cancel').click();
+      return;
+    }
     var linkPicker = document.getElementById('pool-link-picker');
     if (linkPicker && linkPicker.open) {
       linkPicker.open = false; linkPicker.querySelector('summary').focus(); return;
@@ -1323,7 +1354,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     panelEl.innerHTML = '';
   }
 
-  function openPanel(t) {
+  function openPanel(t, rename) {
+    if (PANEL_ID === t.id && document.querySelector('#pool-rename-form:not([hidden])')) return;
     PANEL_ID = t.id;
     var done = !isOpen(t);
     var waits = EDGES.filter(function (e) { return e.after_id === t.id; })
@@ -1342,7 +1374,15 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       else if (!done && when) when = starStage(t, now).label + ' · ' + when;
     }
 
-    var html = '<div class="ptitle" id="pool-title">' + esc(t.title) + '</div>' +
+    var html = '<button type="button" class="ptitle" id="pool-title" title="Rename star" aria-controls="pool-rename-form" aria-expanded="false">' +
+      '<span>' + esc(t.title) + '</span>' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+      '<path d="m5 16-1 4 4-1L19 8l-3-3ZM14 7l3 3"/></svg></button>' +
+      '<form id="pool-rename-form" class="star-rename" hidden><label for="pool-rename-title">Star name</label>' +
+      '<textarea id="pool-rename-title" rows="2" maxlength="200" required enterkeyhint="done"></textarea>' +
+      '<p id="pool-rename-error" role="alert"></p><div class="link-actions">' +
+      '<button type="button" id="pool-rename-cancel">Cancel</button><button type="submit">Save</button></div></form>' +
+      '<div id="pool-detail-body">' +
       '<div class="pmeta">' + esc(when) + '</div>' +
       '<textarea id="pnotes" aria-label="Task description" placeholder="what this actually involves">' +
         esc(t.notes || '') + '</textarea>';
@@ -1381,7 +1421,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     html += '<div class="acts">' +
       '<button class="primary" id="ptoggle">' + (done ? 'Restore' : 'Resolve') + '</button>' +
       '<button id="pclose">Close</button></div>' +
-      '<button class="danger" id="pdelete">delete this star</button>';
+      '<button class="danger" id="pdelete">delete this star</button></div>';
     panelEl.innerHTML = html;
     panelEl.className = 'open';
 
@@ -1394,6 +1434,63 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (top < 12) top = 12;
     panelEl.style.left = left + 'px';
     panelEl.style.top = top + 'px';
+
+    var titleButton = document.getElementById('pool-title');
+    var renameForm = document.getElementById('pool-rename-form');
+    var renameField = document.getElementById('pool-rename-title');
+    var renameError = document.getElementById('pool-rename-error');
+    var detailBody = document.getElementById('pool-detail-body');
+    var renameButtons = renameForm.querySelectorAll('button');
+    function finishRename() {
+      renameForm.hidden = true;
+      detailBody.hidden = false;
+      titleButton.setAttribute('aria-expanded', 'false');
+      titleButton.focus({ preventScroll: true });
+      window.StellarSync?.retry();
+    }
+    function beginRename() {
+      if (!renameForm.hidden) { renameField.focus(); return; }
+      renameField.value = t.title;
+      renameError.textContent = '';
+      detailBody.hidden = true;
+      renameForm.hidden = false;
+      titleButton.setAttribute('aria-expanded', 'true');
+      renameField.focus();
+      renameField.select();
+    }
+    titleButton.addEventListener('click', beginRename);
+    document.getElementById('pool-rename-cancel').addEventListener('click', finishRename);
+    renameField.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      renameForm.requestSubmit();
+    });
+    renameForm.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      if (renameField.readOnly) return;
+      var title = renameField.value.trim();
+      if (!title) { renameError.textContent = 'Enter a star name.'; renameField.focus(); return; }
+      if (title === t.title) { finishRename(); return; }
+      renameField.readOnly = true;
+      renameButtons.forEach(function (button) { button.disabled = true; });
+      renameError.textContent = '';
+      try {
+        var saved = await post('/api/pool/task/' + t.id + '/rename', 'POST', { title: title });
+        t.title = saved.title;
+        paint();
+        if (PANEL_ID === t.id) {
+          document.querySelector('#pool-title span').textContent = saved.title;
+          if (renameForm.isConnected) finishRename();
+        }
+        note('Star renamed');
+      } catch (error) {
+        renameError.textContent = error.message;
+        if (renameField.isConnected) renameField.focus();
+      } finally {
+        renameField.readOnly = false;
+        renameButtons.forEach(function (button) { button.disabled = false; });
+      }
+    });
 
     var reminderForm = document.getElementById('pool-reminder-form');
     if (reminderForm) {
@@ -1480,6 +1577,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
           .catch(function (err) { note(err.message, true); });
       });
     });
+    if (rename) beginRename();
   }
 
   /* ---- deleting ---------------------------------------------------------
@@ -1610,6 +1708,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var notes = document.getElementById('pnotes'), reminder = document.getElementById('pool-reminder-time');
     var prerequisite = document.getElementById('pool-prerequisite');
     return writesInFlight || drag || PENDING || panelEl.classList.contains('open') && (
+      panelEl.querySelector('#pool-rename-form:not([hidden])') ||
       notes && notes.value !== (byId[PANEL_ID]?.notes || '') ||
       reminder && reminder.value !== reminder.dataset.saved || prerequisite && prerequisite.value);
   }

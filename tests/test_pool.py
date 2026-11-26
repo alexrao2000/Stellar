@@ -1,4 +1,5 @@
-"""Pool refreshes read shared state; every visible star can retain its position."""
+"""Constellations refresh shared state and update individual star fields."""
+import json
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -41,3 +42,32 @@ def test_move_persists_open_and_resolved_stars(monkeypatch, resolved_at):
     assert response.json()["resolved_at"] == resolved_at
     assert row["x"] == .98 and row["y"] == .02
     assert len(requests) == 1
+
+
+@pytest.mark.parametrize("resolved_at", [None, "2026-11-04T12:00:00Z"])
+def test_rename_updates_only_the_title_of_open_and_resolved_stars(monkeypatch, resolved_at):
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    row = {"id": 1, "title": "Old name", "x": .1, "y": .2,
+           "resolved_at": resolved_at, "remind_at": "2026-12-01T12:00:00Z"}
+    writes = []
+
+    def database(request):
+        assert request.method == "PATCH"
+        assert request.url.params.get("id") == "eq.1"
+        body = json.loads(request.content)
+        writes.append(body)
+        return httpx.Response(200, json=[{**row, **body}])
+
+    with httpx.Client(transport=httpx.MockTransport(database)) as http:
+        monkeypatch.setattr(postgrest, "_http", lambda: http)
+        monkeypatch.setattr(server, "_sb", lambda: postgrest.Client("https://database.invalid", "test"))
+        monkeypatch.setattr(server, "_cache", {"pool": (0, {"tasks": [row], "edges": []})})
+        client = TestClient(server.app)
+        assert client.post("/api/pool/task/1/rename", json={"title": " "}).status_code == 400
+        assert client.post("/api/pool/task/1/rename", json={"title": "x" * 201}).status_code == 400
+        response = client.post("/api/pool/task/1/rename", json={"title": "  Order via eBay  "})
+
+    assert response.status_code == 200
+    assert response.json() == row
+    assert writes == [{"title": "Order via eBay"}]
+    assert row["title"] == "Order via eBay"

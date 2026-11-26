@@ -17,6 +17,7 @@ async function check(engine) {
       created_at: new Date(Date.now() - 135 * 86400000).toISOString(), resolved_at: null }], edges: [] };
     const original = JSON.stringify(state);
     let stale = false, hold = false, finish, writes = 0, fail = false;
+    const renames = [];
     await context.addInitScript(() => {
       const interval = window.setInterval;
       window.setInterval = (fn, ms, ...args) => {
@@ -43,6 +44,15 @@ async function check(engine) {
         state.edges.push({ before_id: Number(url.searchParams.get('before_id')), after_id: Number(url.searchParams.get('after_id')) });
         return route.fulfill({ json: { already: false } });
       }
+      const task = state.tasks.find(item => item.id === Number(url.pathname.split('/').at(-2)));
+      assert(task);
+      if (url.pathname.endsWith('/rename')) {
+        const { title } = request.postDataJSON();
+        renames.push({ id: task.id, title });
+        if (title === 'Try again later') return route.fulfill({ status: 503, json: { detail: 'Could not save the name.' } });
+        task.title = title;
+        return route.fulfill({ json: task });
+      }
       assert(url.pathname.endsWith('/move'));
       writes++;
       if (hold) { hold = false; await new Promise(resolve => { finish = resolve; }); }
@@ -50,9 +60,9 @@ async function check(engine) {
         fail = false;
         return route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"Temporary failure"}' });
       }
-      state.tasks[0].x = Number(url.searchParams.get('x'));
-      state.tasks[0].y = Number(url.searchParams.get('y'));
-      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(state.tasks[0]) });
+      task.x = Number(url.searchParams.get('x'));
+      task.y = Number(url.searchParams.get('y'));
+      return route.fulfill({ json: task });
     });
     const page = await context.newPage();
     const errors = [];
@@ -267,11 +277,66 @@ async function check(engine) {
     assert.equal(state.tasks[2].title, 'Placed in the sky');
     assert(Math.abs(state.tasks[2].x - (blank.x - map.x) / map.width) < .0001);
     assert(Math.abs(state.tasks[2].y - (blank.y - map.y) / map.height) < .0001);
+    const labelled = { id: 5, title: 'Review the eBay listing', x: .39, y: .62 };
+    state.tasks.push(labelled);
+    await refresh();
+    const mapLabel = page.locator('.star[data-id="5"] .name-text');
+    const labelBox = await mapLabel.boundingBox();
+    const overlap = { x: labelBox.x + labelBox.width / 2, y: labelBox.y + labelBox.height / 2 };
+    const underlying = { id: 4, title: 'Move this star', x: (overlap.x - map.x) / map.width, y: (overlap.y - map.y) / map.height };
+    state.tasks.splice(state.tasks.length - 1, 0, underlying);
+    await refresh();
+    const hitOrder = await page.evaluate(({ x, y }) => document.elementsFromPoint(x, y).slice(0, 8).map(node =>
+      [node.className, node.closest('.star')?.dataset.id]), overlap);
+    assert.deepEqual(hitOrder[0], ['name-text', '5'], 'The visible title sits over a different star');
+    assert(hitOrder.some(([className, id]) => className === 'hit' && id === '4'));
+    await page.mouse.click(overlap.x, overlap.y);
+    const rename = page.getByRole('textbox', { name: 'Star name' });
+    assert.equal(await rename.inputValue(), labelled.title);
+    await rename.fill('Discard this title');
+    await page.keyboard.press('Escape');
+    await rename.waitFor({ state: 'hidden' });
+    assert.equal(renames.length, 0);
+    await page.locator('#pclose').click();
+
+    const beforeMove = underlying.x;
+    const moveSaved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/pool/task/4/move');
+    await page.mouse.move(overlap.x, overlap.y);
+    await page.mouse.down();
+    await page.mouse.move(overlap.x + 72, overlap.y + 44, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForFunction(() => !document.querySelector('.held'));
+    await moveSaved;
+    assert(underlying.x > beforeMove, 'A drag through the overlap moves the underlying star');
+    assert.equal(labelled.x, .39, 'Dragging leaves the title’s own star in place');
+    assert.equal(await rename.isVisible(), false);
+    await mapLabel.click();
+    await rename.fill('Try again later');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByText('Could not save the name.', { exact: true }).waitFor();
+    assert.equal(await rename.inputValue(), 'Try again later');
+    await rename.fill('Review my eBay Listing');
+    await rename.press('Enter');
+    await page.locator('#panel').getByRole('button', { name: 'Review my eBay Listing', exact: true }).waitFor();
+    assert.equal(await mapLabel.textContent(), 'Review my eBay Listing');
+    assert.deepEqual(renames.at(-1), { id: 5, title: 'Review my eBay Listing' });
+    await page.locator('#pclose').click();
+
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: 'List', exact: true }).click();
     await page.locator('[data-open-task="2"]').click({ button: 'right' });
     await page.getByLabel('Task that must finish first').waitFor();
     assert.equal(await page.locator('#pool-title').textContent(), 'Added during drag');
+    const titleBounds = await page.locator('#pool-title span').boundingBox();
+    const iconBounds = await page.locator('#pool-title svg').boundingBox();
+    assert(iconBounds.x >= titleBounds.x + titleBounds.width);
+    await page.locator('#pool-title').click();
+    assert.equal(await rename.inputValue(), 'Added during drag');
+    await page.screenshot({ path: `/private/tmp/stellar-star-rename-${engine}.png` });
+    await rename.fill('Renamed on my phone');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Renamed on my phone', exact: true }).waitFor();
+    await page.getByRole('button', { name: /Renamed on my phone.*(Main sequence|Protostar)/ }).waitFor();
     assert.deepEqual(errors, []);
     console.log(engine + ': continuous vortex rotation, drag persistence, map linking, star creation and cancellation passed');
   } finally { await browser.close(); }
