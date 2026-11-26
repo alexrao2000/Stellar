@@ -42,9 +42,10 @@ body[data-space-theme=true] .settings-card-header > h2 { padding: 0; border: 0; 
 .settings-task { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); padding: 4px 16px; border-bottom: 1px solid var(--rule); }
 .settings-task summary, .settings-disclosure > summary { padding: 12px 4px; cursor: pointer; overflow-wrap: anywhere; min-height: 44px; }
 .settings-task summary .meta { margin-inline-start: 8px; }
-.settings-task .task-plan { position: absolute; top: 4px; right: 16px; }
+.settings-task .task-tools { position: absolute; top: 4px; right: 16px; display: flex; gap: 6px; }
 .settings-task details { grid-column: 1 / -1; min-width: 0; }
 .settings-task summary { padding-right: 66px; }
+.settings-task:has(.task-rename) summary { padding-right: 128px; }
 .settings-task .row .dl { flex-wrap: wrap; }
 .settings-options { flex-basis: 100%; }
 .settings-options summary, .settings-disclosure > summary { color: var(--ink-muted); cursor: pointer; }

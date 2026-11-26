@@ -93,10 +93,10 @@ async function check(engine, mobile) {
     await readable(page.locator('.wrap > h1'));
     assert(await page.locator('.opt:checked').count() > 0);
     assert(await page.locator('.opt:not(:checked)').count() > 0);
-    await page.locator('#live details:has(.title) > summary').first().click();
+    await page.locator('#live .settings-task:has(.task-rename) summary').first().click();
     for (const width of mobile ? [320, 390] : [1440]) {
       await page.setViewportSize({ width, height: mobile ? 844 : 1000 }); await fits();
-      for (const input of await page.locator('.wrap input:not([type=checkbox]), .wrap textarea.title').all()) {
+      for (const input of await page.locator('.wrap input:not([type=checkbox])').all()) {
         if (!await input.isVisible()) continue;
         assert(await input.evaluate(node => {
           const row = node.closest('.row,.bar,.add'), a = row.getBoundingClientRect(), b = node.getBoundingClientRect();
@@ -108,6 +108,22 @@ async function check(engine, mobile) {
       }));
       assert(choices.filter(([w]) => w > 0).every(([w, h]) => w === h && w >= 16), 'Choice indicators retain fixed square dimensions');
     }
+    if (mobile) await page.setViewportSize({ width: 320, height: 844 });
+    const rename = page.getByRole('button', { name: 'Rename ' + longName, exact: true });
+    const tools = await rename.locator('..').boundingBox();
+    const taskSummary = await page.getByText(longName, { exact: true }).boundingBox();
+    assert(tools.x + tools.width <= taskSummary.x + taskSummary.width + 1);
+    await rename.click();
+    const dialog = page.getByRole('dialog', { name: 'Rename task', exact: true });
+    const taskName = dialog.getByRole('textbox', { name: 'Task name' });
+    assert.equal(await taskName.inputValue(), longName);
+    assert(await taskName.evaluate(el => el === document.activeElement));
+    const bounds = await dialog.boundingBox();
+    assert(bounds.x >= 0 && bounds.x + bounds.width <= (mobile ? 320 : 1440));
+    await page.screenshot({ path: `/private/tmp/stellar-rename-${engine}-${mobile ? 'mobile' : 'desktop'}.png` });
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    assert(await rename.evaluate(el => el === document.activeElement));
+    if (mobile) await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: `/private/tmp/stellar-themed-settings-${engine}-${mobile ? 'mobile' : 'desktop'}.png` });
     await page.goto(base + '/docs'); await page.locator('#swagger-ui .opblock').first().waitFor();
     await readable(page.locator('.swagger-ui .info .title')); await fits();

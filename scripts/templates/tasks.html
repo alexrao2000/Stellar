@@ -37,12 +37,6 @@ h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 4p
 .name { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
 .dot { width: 10px; height: 10px; border-radius: 3px; background: var(--todo-bg); flex: 0 0 auto; }
 .row.optional .dot { background: var(--opt-bg); }
-.name .title {
-  flex: 1; min-width: 0; font: inherit; font-weight: 600; padding: 5px 7px;
-  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink);
-}
-.name .title { resize: none; overflow: hidden; line-height: 1.5; }
-.name .title:hover, .name .title:focus { border-color: var(--rule); background: var(--bg); }
 .meta { font-size: .76rem; color: var(--ink-muted); font-weight: 400; }
 .ctl { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; }
 .ctl input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--accent); }
@@ -87,12 +81,23 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px;
   background: var(--surface-2); color: var(--ink); font: inherit;
 }
+html body .task-rename-dialog { max-width: 440px; }
+.task-rename-dialog .cal-setting-actions { justify-content: flex-end; }
+.task-rename-dialog textarea { resize: vertical; line-height: 1.45; }
+.task-rename-dialog button {
+  padding: 8px 16px; min-height: 44px; border: 1px solid #ced8ee40;
+  border-radius: 8px; background: #202e46; color: inherit; font: inherit; cursor: pointer;
+}
+.task-rename-dialog button[type=submit] { background: #e4dcff; color: #161c2e; }
+.task-rename-dialog button:disabled { opacity: .55; }
+#rename-error { margin: 0; color: #f0a393; overflow-wrap: anywhere; }
+#rename-error:empty { display: none; }
 #status:not(:empty) { margin: 0 16px 14px; font-size: .82rem; font-family: ui-monospace, Menlo, monospace; }
 #status.ok { color: var(--ok); } #status.bad { color: var(--bad); }
 </style>
 
 <link rel="stylesheet" href="/app-assets/calendar.css?v=7">
-<link rel="stylesheet" href="/app-assets/calendar-settings.css?v=3">
+<link rel="stylesheet" href="/app-assets/calendar-settings.css?v=4">
 <div class="wrap">
   <p class="eyebrow">Stellar</p>
   <h1>Settings</h1>
@@ -144,6 +149,20 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
     </div>
   </div>
 </div>
+<dialog class="calendar-settings-dialog task-rename-dialog" id="task-rename-dialog" aria-labelledby="rename-heading">
+  <header><h2 id="rename-heading">Rename task</h2></header>
+  <form class="cal-settings-content" id="task-rename-form">
+    <label class="cal-setting-field">Task name
+      <textarea id="rename-title" name="title" rows="3" maxlength="200" required autofocus enterkeyhint="done" aria-describedby="rename-when"></textarea>
+    </label>
+    <p class="cal-setting-summary" id="rename-when"></p>
+    <p id="rename-error" role="alert"></p>
+    <div class="cal-setting-actions">
+      <button type="button" id="rename-cancel">Cancel</button>
+      <button type="submit" id="rename-save">Save</button>
+    </div>
+  </form>
+</dialog>
 
 <script id="bootstrap" type="application/json">__BOOTSTRAP__</script>
 <script>
@@ -220,7 +239,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
 
   function change(row, t, changes) {
     var body = Object.assign({}, changes);
-    if (allEl.checked && !('title' in changes)) body.all_days = true;
+    if (allEl.checked) body.all_days = true;
     else body.from_day = fromEl.value || BOOT.today;
     var when = body.all_days ? 'all days' : ('from ' + fmtDay(body.from_day));
     return act(row, api('POST', '/api/series/' + t.id, body),
@@ -237,6 +256,65 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   var live = BOOT.tasks.filter(function (t) { return !t.binned && !t.stopped; });
   var stopped = BOOT.tasks.filter(function (t) { return !t.binned && t.stopped; });
   var binned = BOOT.tasks.filter(function (t) { return t.binned; });
+  var renameDialog = document.getElementById('task-rename-dialog');
+  var renameForm = document.getElementById('task-rename-form');
+  var renameTitle = document.getElementById('rename-title'), renameWhen = document.getElementById('rename-when');
+  var renameError = document.getElementById('rename-error'), renameCancel = document.getElementById('rename-cancel');
+  var renameSave = document.getElementById('rename-save');
+  var renameTask, renameFrom, savingRename = false;
+
+  function openRename(task) {
+    renameTask = task;
+    renameFrom = fromEl.value || BOOT.today;
+    if (task.starts_on && renameFrom < task.starts_on) renameFrom = task.starts_on;
+    renameWhen.textContent = 'The new name applies from ' + (renameFrom === BOOT.today ? 'today' : fmtDay(renameFrom)) + '.';
+    renameTitle.value = task.title;
+    renameError.textContent = '';
+    renameDialog.showModal();
+    renameTitle.select();
+  }
+
+  renameCancel.addEventListener('click', function () { renameDialog.close(); });
+  renameDialog.addEventListener('cancel', function (event) {
+    if (savingRename) event.preventDefault();
+  });
+  renameDialog.addEventListener('close', function () {
+    document.getElementById('rename-task-' + renameTask?.id)?.focus({ preventScroll: true });
+    window.StellarSync?.retry();
+  });
+  renameTitle.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      renameForm.requestSubmit();
+    }
+  });
+  renameForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    if (savingRename) return;
+    var title = renameTitle.value.replace(/\s+/g, ' ').trim();
+    if (!title) { renameError.textContent = 'Enter a task name.'; renameTitle.focus(); return; }
+    if (title === renameTask.title) { renameDialog.close(); return; }
+    savingRename = true;
+    renameTitle.readOnly = renameCancel.disabled = renameSave.disabled = true;
+    renameError.textContent = '';
+    try {
+      var updated = await api('POST', '/api/series/' + renameTask.id, { title: title, from_day: renameFrom });
+      var tasks = JSON.parse(settingsSnapshot).map(function (task) {
+        return task.id === renameTask.id ? Object.assign({}, task, updated) : task;
+      });
+      renderSettings(tasks);
+      settingsSnapshot = JSON.stringify(tasks);
+      say('Renamed to ' + title + ', from ' + fmtDay(renameFrom) + '.');
+      renameDialog.close();
+      window.stellarRecordsChanged?.();
+    } catch (error) {
+      renameError.textContent = error.message;
+      renameTitle.focus();
+    } finally {
+      savingRename = false;
+      renameTitle.readOnly = renameCancel.disabled = renameSave.disabled = false;
+    }
+  });
 
   function liveRow(t) {
     var row = document.createElement('div');
@@ -255,21 +333,35 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
     details.dataset.taskId = t.id;
     details.append(summary, row);
     group.append(details);
+    var tools = document.createElement('div');
+    tools.className = 'task-tools';
+    if (!t.measurement) {
+      var rename = document.createElement('button');
+      rename.type = 'button';
+      rename.id = 'rename-task-' + t.id;
+      rename.className = 'btn task-rename';
+      rename.textContent = 'Rename';
+      rename.setAttribute('aria-label', 'Rename ' + t.title);
+      rename.setAttribute('aria-haspopup', 'dialog');
+      rename.addEventListener('click', function () { openRename(t); });
+      tools.append(rename);
+    }
     var plan = document.createElement('button');
     plan.type = 'button';
     plan.className = 'btn task-plan';
     plan.textContent = 'Plan';
     plan.dataset.planTask = t.id;
     plan.setAttribute('aria-label', 'Plan ' + t.title);
-    group.append(plan);
+    tools.append(plan);
+    group.append(tools);
     var s = split(t.deadline_minutes);
     row.innerHTML =
-      '<div class="name"><span class="dot"></span>' +
-        (t.measurement
-          ? '<span>' + esc(t.title) + ' <span class="meta">measurement</span></span>'
-          : '<textarea class="title" rows="1" maxlength="200" aria-label="Name"></textarea>') +
+      (t.measurement || t.ends_on
+        ? '<div class="name"><span class="dot"></span><span>' + esc(t.title) +
+        (t.measurement ? ' <span class="meta">measurement</span>' : '') + '</span>' +
         (t.ends_on ? '<span class="meta">last day ' + esc(fmtDay(t.ends_on)) + '</span>' : '') +
-      '</div>' +
+        '</div>'
+        : '') +
       '<label class="ctl"><input type="checkbox" class="opt"> Optional</label>' +
       '<span class="dl"><label class="ctl">Deadline <input type="time" class="time"></label>' +
       '<label class="ctl"><input type="checkbox" class="next"> next day</label>' +
@@ -278,27 +370,11 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
         '<button type="button" class="btn stop">Stop</button>' +
         (t.measurement ? '' : '<button type="button" class="btn danger bin">Delete</button>') +
       '</span>';
-    var title = row.querySelector('.title');
-    if (title) {
-      title.value = t.title; title.setAttribute('aria-label', 'Name: ' + t.title);
-      var fit = function () { title.style.height = 'auto'; title.style.height = (title.scrollHeight + 2) + 'px'; };
-      details.addEventListener('toggle', function () { if (details.open) fit(); });
-      title.addEventListener('input', fit);
-      title._fit = fit;
-    }
     row.querySelector('.opt').checked = t.optional;
     row.querySelector('.opt').title = 'Extra task: excluded from the required daily target; unreported until you enter an outcome';
     row.querySelector('.time').value = s[0];
     row.querySelector('.next').checked = s[1];
 
-    if (title) {
-      title.addEventListener('change', function () {
-        var v = title.value.trim();
-        if (!v || v === t.title) { title.value = t.title; return; }
-        change(row, t, { title: v }).catch(function () { title.value = t.title; });
-      });
-      title.addEventListener('keydown', function (e) { if (e.key === 'Enter') title.blur(); });
-    }
     row.querySelector('.opt').addEventListener('change', function (e) {
       change(row, t, { optional: e.target.checked })
         .catch(function () { e.target.checked = t.optional; });
@@ -388,7 +464,7 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
   var baseline = new WeakMap(), settingsSnapshot = JSON.stringify(BOOT.tasks), settingsBusy = false;
   function controlValue(el) { return el.type === 'checkbox' ? el.checked : el.value; }
   function settingsEditing() {
-    return !!document.querySelector('.row.busy, .row .last') ||
+    return renameDialog.open || !!document.querySelector('.row.busy, .row .last') ||
       Array.from(document.querySelectorAll('#live input, #live textarea')).some(function (el) { return baseline.get(el) !== controlValue(el); });
   }
   function renderSettings(tasks) {
@@ -405,7 +481,6 @@ input[type=time], input[type=date] { font-family: ui-monospace, Menlo, monospace
     document.querySelectorAll('#live input, #live textarea').forEach(function (el) { baseline.set(el, controlValue(el)); });
   }
   renderSettings(BOOT.tasks);
-  window.addEventListener('resize', function () { document.querySelectorAll('#live .title').forEach(function (el) { el._fit?.(); }); });
   window.StellarSync?.subscribe(['definitions'], async function () {
     if (settingsBusy || settingsEditing()) return false;
     settingsBusy = true;
