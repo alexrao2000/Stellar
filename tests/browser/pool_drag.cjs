@@ -13,7 +13,8 @@ async function check(engine) {
   const browser = await ({ chromium, webkit }[engine]).launch(options);
   try {
     const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
-    const state = { tasks: [{ id: 1, title: 'Demo star', x: .3, y: .4, resolved_at: null }], edges: [] };
+    const state = { tasks: [{ id: 1, title: 'Demo star', x: .3, y: .4,
+      created_at: new Date(Date.now() - 135 * 86400000).toISOString(), resolved_at: null }], edges: [] };
     const original = JSON.stringify(state);
     let stale = false, hold = false, finish, writes = 0, fail = false;
     await context.addInitScript(() => {
@@ -81,6 +82,39 @@ async function check(engine) {
     await page.evaluate(() => document.addEventListener('pointerdown', event => {
       window.testPointerId = event.pointerId;
     }, true));
+    const hit = await star.locator('.hit').boundingBox();
+    const center = { x: hit.x + hit.width / 2, y: hit.y + hit.height / 2 };
+    await page.mouse.move(center.x, center.y);
+    const ribbon = await star.locator('.accretion-flow').elementHandle();
+    const phase = () => ribbon.evaluate(el => {
+      const animation = el.getAnimations()[0];
+      if (!el.isConnected || animation?.playState !== 'running') throw Error('The original vortex should keep rotating');
+      return animation.currentTime;
+    });
+    const beforeDrag = await phase();
+    await page.mouse.down();
+    const redraws = await page.evaluate(async ({ x, y }) => {
+      let redraws = 0;
+      const observer = new MutationObserver(records => { redraws += records.length; });
+      observer.observe(document.querySelector('#lines'), { childList: true });
+      for (let i = 0; i < 20; i++) {
+        document.dispatchEvent(new PointerEvent('pointermove', {
+          pointerId: window.testPointerId, pointerType: 'mouse', clientX: x + 10 + i, clientY: y + i, buttons: 1,
+        }));
+      }
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      observer.disconnect();
+      return redraws;
+    }, center);
+    assert.equal(redraws, 1, 'A burst of pointer samples only draws the links once');
+    await page.mouse.move(center.x + 33, center.y + 17);
+    await page.waitForTimeout(90);
+    const duringDrag = await phase();
+    assert(duringDrag > beforeDrag + 40, 'Rotation advances while the black hole is held');
+    await page.mouse.up();
+    await refresh();
+    assert((await phase()) > duringDrag, 'Dropping a black hole and confirming its position do not restart its rotation');
+
     const desktopInput = engine === 'chromium' ? await context.newCDPSession(page) : null;
     for (let i = 0; i < 12; i++) {
       const start = await point(), box = await star.locator('.hit').boundingBox();
@@ -101,7 +135,7 @@ async function check(engine) {
         })), { x: x + dx, y: y + dy });
         await page.mouse.up();
       }
-      await near({ x: start.x + dx, y: start.y + dy }, 1);
+      await near({ x: start.x + dx, y: start.y + dy }, 1.25);
       assert.equal(await page.locator('#panel.open').count(), 0, 'Fast release must not become a click');
       assert.equal(await page.locator('.held').count(), 0);
     }
@@ -237,7 +271,7 @@ async function check(engine) {
     await page.getByLabel('Task that must finish first').waitFor();
     assert.equal(await page.locator('#pool-title').textContent(), 'Added during drag');
     assert.deepEqual(errors, []);
-    console.log(engine + ': drag persistence, map linking, star creation and cancellation, and the list picker passed');
+    console.log(engine + ': continuous vortex rotation, drag persistence, map linking, star creation and cancellation passed');
   } finally { await browser.close(); }
 }
 (async () => { for (const engine of ['chromium', 'webkit']) await check(engine); })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -65,7 +65,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   transform-origin: center;
   animation: star-bloom var(--glow-period) ease-in-out var(--glow-phase) infinite;
 }
-.star:is(:hover,:focus-visible,.held) svg,
+.star:not(.black-hole):is(:hover,:focus-visible,.held) svg,
 .sky[data-motion-paused=true] .star svg { animation-play-state: paused; }
 .star[data-stage=protostar] {
   --stellar-core: #fff0da; --stellar-bloom: #ffc785; --stellar-halo: #d57f5790;
@@ -988,10 +988,16 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
 
   /* ---- dragging -------------------------------------------------------- */
-  var drag = null;
+  var drag = null, dragFrame = 0;
+
+  function clearDragFrame() {
+    if (dragFrame) cancelAnimationFrame(dragFrame);
+    dragFrame = 0;
+  }
 
   function cancelDrag() {
     if (!drag) return false;
+    clearDragFrame();
     var d = drag; drag = null;
     d.t.x = d.sx; d.t.y = d.sy;
     d.el.classList.remove('held');
@@ -1037,11 +1043,18 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (!drag || e.pointerId !== drag.id) return;
     var dx = e.clientX - drag.ox, dy = e.clientY - drag.oy;
     if (!drag.moved && Math.hypot(dx, dy) < 4) return;   // a click, not a drag
+    if (drag.clientX === e.clientX && drag.clientY === e.clientY) return;
     drag.moved = true;
+    drag.clientX = e.clientX;
+    drag.clientY = e.clientY;
+    if (!dragFrame) dragFrame = requestAnimationFrame(renderDrag);
+  }
 
+  function renderDrag() {
+    dragFrame = 0;
     var r = mapField.getBoundingClientRect();
-    drag.t.x = Math.min(Math.max((e.clientX - r.left - drag.grabX) / W, 0.02), 0.98);
-    drag.t.y = Math.min(Math.max((e.clientY - r.top - drag.grabY) / H, 0.02), 0.98);
+    drag.t.x = Number(Math.min(Math.max((drag.clientX - r.left - drag.grabX) / W, 0.02), 0.98).toFixed(4));
+    drag.t.y = Number(Math.min(Math.max((drag.clientY - r.top - drag.grabY) / H, 0.02), 0.98).toFixed(4));
     var point = screenPoint(drag.t);
     drag.el.style.left = point.x + 'px';
     drag.el.style.top = point.y + 'px';
@@ -1057,6 +1070,10 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
   function finishDrag(openDetails) {
     if (!drag) return;
+    if (dragFrame) {
+      clearDragFrame();
+      renderDrag();
+    }
     var d = drag; drag = null;
     d.el.classList.remove('held');
     if (d.el.hasPointerCapture(d.id)) d.el.releasePointerCapture(d.id);
@@ -1064,11 +1081,10 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (paintPending) paint();
     if (!d.moved) { if (openDetails) openPanel(d.t); return; }
     var position = positions[d.t.id] || { saving: false };
-    position.x = Number(d.t.x.toFixed(4)); position.y = Number(d.t.y.toFixed(4));
+    position.x = d.t.x; position.y = d.t.y;
     position.confirmed = false;
     positions[d.t.id] = position;
     savePosition(d.t.id);
-    drawLines();
   }
   function savePosition(id) {
     var position = positions[id];
