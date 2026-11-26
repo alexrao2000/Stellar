@@ -2135,7 +2135,8 @@ def page_data(tab_frame: bool = False) -> str:
 # task_history, and there is no WRITE_FLOOR because there are no dates to be
 # before: a pool task has no day, which is the whole reason it exists.
 # --------------------------------------------------------------------------- #
-POOL_COLS = ("id", "title", "notes", "x", "y", "created_at", "resolved_at", "remind_at", "reminder_sent_at", "reminder_version")
+POOL_COLS = ("id", "title", "notes", "x", "y", "created_at", "age_started_at", "resolved_at",
+             "remind_at", "reminder_sent_at", "reminder_version")
 
 
 def _pool_patch(fn) -> None:
@@ -2299,24 +2300,37 @@ def api_pool_move(task_id: int, x: float, y: float) -> dict:
 
 
 @app.post("/api/pool/task/{task_id}/resolve")
-def api_pool_resolve(task_id: int, done: bool = True) -> dict:
+def api_pool_resolve(task_id: int, done: bool = True, expected_resolved_at: datetime | None = None) -> dict:
     """Resolving is allowed even while something it waits on is still open.
 
     The graph is advice. A hard lock would strand a task whenever a dependency
     turned out to be wrong, and would need an unlink-to-escape flow to undo.
     """
     stamp = datetime.now(timezone.utc).isoformat() if done else None
-    updated = (
-        _sb().table("pool_tasks").update({"resolved_at": stamp, "remind_at": None, "reminder_sent_at": None})
-        .eq("id", task_id).execute().data or []
-    )
+    if expected_resolved_at is not None and (done or expected_resolved_at.tzinfo is None):
+        raise HTTPException(400, "Undo requires the original resolution timestamp with a time zone")
+    client = _sb()
+    query = client.table("pool_tasks").update({"resolved_at": stamp, "remind_at": None, "reminder_sent_at": None}).eq("id", task_id)
+    if expected_resolved_at is not None:
+        query = query.eq("resolved_at", expected_resolved_at.isoformat())
+    elif done:
+        query = query.is_("resolved_at", "null")
+    updated = query.execute().data
     if not updated:
+        if expected_resolved_at is not None:
+            raise HTTPException(409, "The star’s resolution has changed. There’s nothing to undo for that change.")
+        existing = client.table("pool_tasks").select("*").eq("id", task_id).execute().data
+        if existing:
+            if existing[0].get("resolved_at"):
+                return existing[0]
+            raise HTTPException(409, "The star changed while it was being resolved.")
         raise HTTPException(404, f"Star {task_id} not found")
     row = updated[0]
     def _patch(s):
         for t in s["tasks"]:
             if t["id"] == task_id:
                 t["resolved_at"] = row.get("resolved_at")
+                t["age_started_at"] = row.get("age_started_at")
                 t["remind_at"] = None
                 t["reminder_sent_at"] = None
                 break

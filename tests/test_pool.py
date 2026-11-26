@@ -71,3 +71,34 @@ def test_rename_updates_only_the_title_of_open_and_resolved_stars(monkeypatch, r
     assert response.json() == row
     assert writes == [{"title": "Order via eBay"}]
     assert row["title"] == "Order via eBay"
+
+
+def test_undo_matches_the_specific_resolution_and_returns_resumed_age(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    original = "2026-11-20T12:00:00+00:00"
+    resumed = "2026-08-30T12:00:00+00:00"
+    row = {"id": 1, "resolved_at": original, "created_at": "2026-08-24T12:00:00+00:00"}
+
+    def database(request):
+        assert request.method == "PATCH"
+        assert request.url.params.get("id") == "eq.1"
+        if request.url.params.get("resolved_at") != "eq." + original:
+            return httpx.Response(200, json=[])
+        assert json.loads(request.content)["resolved_at"] is None
+        return httpx.Response(200, json=[{**row, "resolved_at": None, "age_started_at": resumed}])
+
+    with httpx.Client(transport=httpx.MockTransport(database)) as http:
+        monkeypatch.setattr(postgrest, "_http", lambda: http)
+        monkeypatch.setattr(server, "_sb", lambda: postgrest.Client("https://database.invalid", "test"))
+        monkeypatch.setattr(server, "_cache", {"pool": (0, {"tasks": [row], "edges": []})})
+        client = TestClient(server.app)
+        url = "/api/pool/task/1/resolve"
+        stale = client.post(url, params={"done": False, "expected_resolved_at": "2026-11-19T12:00:00Z"})
+        assert stale.status_code == 409
+        assert row["resolved_at"] == original
+        undone = client.post(url, params={"done": False, "expected_resolved_at": original})
+
+    assert undone.status_code == 200
+    assert undone.json()["age_started_at"] == resumed
+    assert row["age_started_at"] == resumed
+    assert row["created_at"] == "2026-08-24T12:00:00+00:00"

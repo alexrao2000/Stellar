@@ -225,12 +225,26 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   font-family: ui-monospace, Menlo, monospace; font-size: 9.5px;
   letter-spacing: .13em; color: rgba(120,116,150,.5);
 }
+.pool-feedback {
+  position: absolute; left: 26px; top: 44px; z-index: 3;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; max-width: calc(100% - 52px);
+}
+.pool-feedback:has(#note:empty + [hidden]) { display: none; }
+body[data-embedded=true] .pool-feedback { position: static; max-width: none; }
+@media (max-width: 760px) { .pool-feedback { position: static; max-width: none; } }
 #note {
-  position: absolute; left: 26px; top: 44px; z-index: 3; min-height: 1.2em;
   font-family: ui-monospace, Menlo, monospace; font-size: 10px;
   letter-spacing: .1em; color: rgba(196,178,255,.8);
 }
 #note.bad { color: #E3806B; }
+#pool-undo {
+  min-height: 32px; padding: 4px 10px; border: 1px solid var(--line);
+  border-radius: 7px; background: #10111e; color: #eee9ff; font: 12px system-ui, sans-serif;
+  cursor: pointer;
+}
+#pool-undo:focus-visible { outline: 2px solid var(--line-live); outline-offset: 2px; }
+#pool-undo:disabled { opacity: .55; }
+@media (max-width: 760px), (pointer: coarse) { #pool-undo { min-height: 44px; } }
 
 .new {
   position: absolute; right: 26px; top: 18px; z-index: 3; display: flex; gap: 8px;
@@ -449,7 +463,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   </div>
   <div class="pool-toolbar">
   <div class="hud" id="hud">Constellations</div>
-  <div id="note" role="status" aria-live="polite"></div>
+  <div class="pool-feedback"><div id="note" role="status" aria-live="polite"></div>
+    <button type="button" id="pool-undo" hidden aria-keyshortcuts="Control+Z Meta+Z">Undo resolve</button></div>
   <form class="new" id="pool-add">
     <input id="add" type="text" placeholder="Name a task" maxlength="200" enterkeyhint="done"
            aria-label="Add a task to the pool">
@@ -466,7 +481,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
        aria-labelledby="veilh"></div></div>
   <details class="key"><summary>How to use Constellations</summary>
     <p>Select a star to open its details, or select its name to rename it. Drag a
-    star to move it. Right-click a star, then
+    star to move it. Press Ctrl+Z or ⌘Z to undo a resolution. Right-click a star, then
     select the star that must finish first. Right-click empty sky to add a star
     and press Enter to save it. Click empty sky or press Escape to cancel.</p>
   </details>
@@ -488,6 +503,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   var linkHint = document.getElementById('pool-link-hint');
   var linkSource = null, linkSaving = false;
   var noteEl = document.getElementById('note');
+  var undoButton = document.getElementById('pool-undo');
+  var resolutionHistory = [], resolutionBusy = false;
   var panelEl = document.getElementById('panel');
   var veil = document.getElementById('veil');
   var W = 0, H = 0;
@@ -541,7 +558,9 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     return fetch(url, options).then(function (res) {
       if (res.ok) return res.json();
       return res.json().catch(function () { return {}; }).then(function (j) {
-        throw new Error(j.detail || ('HTTP ' + res.status));
+        var error = new Error(j.detail || ('HTTP ' + res.status));
+        error.status = res.status;
+        throw error;
       });
     }).then(function (value) {
       writesInFlight--;
@@ -660,8 +679,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   function visible() {
     return SHOW_RESOLVED ? TASKS : TASKS.filter(isOpen);
   }
+  function ageStartedAt(task) { return Date.parse(task.age_started_at || task.created_at); }
   function daysOpen(task, now) {
-    var days = (now - Date.parse(task.created_at)) / dayMs;
+    var resolved = Date.parse(task.resolved_at);
+    var until = Number.isFinite(resolved) ? Math.min(now, resolved) : now;
+    var days = (until - ageStartedAt(task)) / dayMs;
     return Number.isFinite(days) ? Math.max(0, days) : 0;
   }
   function blackHoleAge(task, now) {
@@ -669,7 +691,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     return isOpen(task) && days >= collapseAfter ? days : 0;
   }
   function starStage(task, now) {
-    if (!task.created_at || !Number.isFinite(Date.parse(task.created_at))) return lifecycle[1];
+    if (!Number.isFinite(ageStartedAt(task))) return lifecycle[1];
     var age = daysOpen(task, now);
     return lifecycle.find(function (stage) { return age < stage.until; });
   }
@@ -678,11 +700,10 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var next = Infinity;
     TASKS.forEach(function (task) {
       if (!isOpen(task)) return;
-      var created = Date.parse(task.created_at);
       var age = daysOpen(task, now);
       var stage = starStage(task, now);
       var nextDay = stage ? stage.until : Math.floor(age) + 1;
-      var delay = created + nextDay * dayMs - now;
+      var delay = ageStartedAt(task) + nextDay * dayMs - now;
       if (delay > 0) next = Math.min(next, delay);
     });
     if (Number.isFinite(next)) ageTimer = setTimeout(paint, Math.min(next + 1, 2147483647));
@@ -709,7 +730,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   function collapseStart(task, previous, now) {
     if (!previous || collapseMapSince === Infinity) return null;
     if (previous.dataset.collapseStarted !== undefined) return Number(previous.dataset.collapseStarted);
-    var deadline = Date.parse(task.created_at) + collapseAfter * dayMs;
+    var deadline = ageStartedAt(task) + collapseAfter * dayMs;
     if (previous.dataset.stage === 'supernova' && collapseMapSince <= deadline && now - deadline < collapseGrace) {
       return performance.now();
     }
@@ -987,7 +1008,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       return '<li><button type="button" data-open-task="' + esc(t.id) + '">' +
         '<span>' + esc(t.title) + '</span><small>' +
         (item.age ? 'Black hole · ' + item.age + ' days open' + (waits ? ' · ' : '') : '') +
-        (!isOpen(t) ? 'Resolved' : waits ? 'Waiting on ' + waits + ' task' + (waits === 1 ? '' : 's') : item.age ? '' : item.stage.label) +
+        (!isOpen(t) ? 'Resolved' + (Number.isFinite(ageStartedAt(t)) ? ' · ' + Math.floor(daysOpen(t, now)) + ' days old' : '') :
+          waits ? 'Waiting on ' + waits + ' task' + (waits === 1 ? '' : 's') : item.age ? '' : item.stage.label) +
         '</small></button></li>';
     }).join('') || '<li class="pool-empty">No tasks here yet. Add one above.</li>';
 
@@ -1008,6 +1030,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       paint();
     });
     if (PANEL_ID && !byId[PANEL_ID]) closePanel();
+    syncUndoButton();
   }
 
   function drawLines() {
@@ -1365,6 +1388,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     if (done && t.resolved_at) {
       var d = new Date(t.resolved_at);
       when = isNaN(d) ? 'resolved' : 'resolved ' + d.toISOString().slice(0, 10);
+      if (Number.isFinite(ageStartedAt(t))) when += ' · ' + Math.floor(daysOpen(t, Date.now())) + ' days old';
     } else if (t.created_at) {
       var c = new Date(t.created_at);
       when = isNaN(c) ? '' : 'added ' + c.toISOString().slice(0, 10);
@@ -1419,7 +1443,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     }
 
     html += '<div class="acts">' +
-      '<button class="primary" id="ptoggle">' + (done ? 'Restore' : 'Resolve') + '</button>' +
+      '<button class="primary" id="ptoggle"' + (resolutionBusy ? ' disabled' : '') + '>' + (done ? 'Restore' : 'Resolve') + '</button>' +
       '<button id="pclose">Close</button></div>' +
       '<button class="danger" id="pdelete">delete this star</button></div>';
     panelEl.innerHTML = html;
@@ -1635,22 +1659,79 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     });
   }
 
-  function setResolved(t, done) {
+  function syncUndoButton() {
+    resolutionHistory = resolutionHistory.filter(function (entry) {
+      return byId[entry.id]?.resolved_at === entry.at;
+    });
+    undoButton.hidden = !resolutionHistory.length;
+    undoButton.disabled = resolutionBusy;
+  }
+
+  function undoResolve() {
+    if (resolutionBusy || drag || veil.classList.contains('open')) return false;
+    syncUndoButton();
+    var last = resolutionHistory[resolutionHistory.length - 1];
+    if (!last) return false;
+    setResolved(byId[last.id], false, last.at);
+    return true;
+  }
+
+  function undoKey(event) {
+    if (!window.stellarPageActive() || !embeddedVisible || event.defaultPrevented || event.repeat ||
+        event.isComposing || event.shiftKey || event.altKey || !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== 'z' || event.target.isContentEditable ||
+        event.target.closest?.('input,textarea,select,[contenteditable]')) return;
+    if (undoResolve()) event.preventDefault();
+  }
+
+  undoButton.addEventListener('click', undoResolve);
+  var shortcutWindows = [...new Set([window, parent, top])];
+  shortcutWindows.forEach(function (owner) {
+    try { owner.addEventListener('keydown', undoKey); } catch {}
+  });
+  window.addEventListener('pagehide', function (event) {
+    if (event.persisted) return;
+    shortcutWindows.forEach(function (owner) {
+      try { owner.removeEventListener('keydown', undoKey); } catch {}
+    });
+  });
+
+  function setResolved(t, done, undoAt) {
+    if (resolutionBusy) return;
+    resolutionBusy = true;
+    document.getElementById('ptoggle')?.setAttribute('disabled', '');
+    syncUndoButton();
     var waits = done ? prereqsOf(t.id) : [];
-    post('/api/pool/task/' + t.id + '/resolve?done=' + done)
+    var params = new URLSearchParams({ done: done });
+    if (undoAt) params.set('expected_resolved_at', undoAt);
+    post('/api/pool/task/' + t.id + '/resolve?' + params)
       .then(function (row) {
         t.resolved_at = row.resolved_at;
+        t.age_started_at = row.age_started_at;
         t.remind_at = row.remind_at; t.reminder_sent_at = row.reminder_sent_at;
+        if (done) resolutionHistory.push({ id: t.id, at: t.resolved_at });
         note(done
           ? (waits.length
               ? t.title + ' resolved, ahead of ' + waits.length + ' it was waiting on'
               : t.title + ' resolved')
           : t.title + ' restored');
-        /* A resolved star only stays on screen while the toggle is on. */
-        if (done && !SHOW_RESOLVED) closePanel(); else openPanel(t);
+        if (PANEL_ID === t.id) {
+          if (done && !SHOW_RESOLVED) closePanel(); else openPanel(t);
+        }
         paint();
       })
-      .catch(function (err) { note(err.message, true); });
+      .catch(function (err) {
+        if (undoAt && err.status === 409) {
+          resolutionHistory = resolutionHistory.filter(function (entry) { return entry.id !== t.id || entry.at !== undoAt; });
+          pollPool();
+        }
+        note(err.message, true);
+      })
+      .finally(function () {
+        resolutionBusy = false;
+        document.getElementById('ptoggle')?.removeAttribute('disabled');
+        syncUndoButton();
+      });
   }
 
 
