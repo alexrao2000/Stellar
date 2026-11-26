@@ -148,7 +148,7 @@ def test_tasks_page_does_not_read_pool_until_the_browser_opens_it(client, monkey
     response = client.get("/?view=week")
     assert response.status_code == 200
     assert 'aria-controls="pool-pane"' in response.text
-    assert '<iframe id="pool-frame" title="Undated task pool"></iframe>' in response.text
+    assert '<iframe id="pool-frame" title="Constellations"></iframe>' in response.text
 
 
 def test_cached_sections_share_only_the_outer_sidebar(client, monkeypatch):
@@ -158,7 +158,7 @@ def test_cached_sections_share_only_the_outer_sidebar(client, monkeypatch):
         page = client.get(path + "?tab_frame=true")
         assert page.status_code == 200
         assert '<nav class="sidenav"' not in page.text
-        assert '/app-assets/sections.js?v=3' in page.text
+        assert '/app-assets/sections.js?v=4' in page.text
         assert 'data-embedded="true"' not in page.text
         assert '<nav class="sidenav"' in client.get(path).text
 

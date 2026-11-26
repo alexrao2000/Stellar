@@ -35,8 +35,27 @@ async function check(engine, mobile) {
     const first = mobile ? '/?view=day&day=2026-11-04' : '/metrics?tab=weight';
     await page.goto(base + first);
     const rootIdentity = await page.evaluate(() => window.testIdentity = Math.random());
+    const toggle = page.getByRole('button', { name: 'Navigation menu', exact: true });
+    if (mobile) {
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await toggle.click();
+        const drawer = page.getByRole('dialog', { name: 'Navigation', exact: true });
+        await drawer.waitFor();
+        await page.waitForFunction(width => Math.abs(document.getElementById('app-nav-links').getBoundingClientRect().right - width) < 1, width);
+        assert.equal(await drawer.getByRole('link', { name: 'Constellations', exact: true }).count(), 1);
+        assert.equal(await drawer.getByRole('button', { name: 'Close menu' }).evaluate(el => document.activeElement === el), true);
+        await page.keyboard.press('Shift+Tab');
+        assert.equal(await drawer.getByRole('link', { name: 'API', exact: true }).evaluate(el => document.activeElement === el), true);
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        await page.screenshot({ path: `/private/tmp/stellar-drawer-${engine}-${width}.png` });
+        if (width === 320) await page.keyboard.press('Escape');
+        else await page.mouse.click(12, 300);
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+        assert.equal(await toggle.evaluate(el => document.activeElement === el), true);
+      }
+    }
     const click = async label => {
-      const toggle = page.getByRole('button', { name: 'Navigation menu', exact: true });
       if (mobile && await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
       await page.getByRole('link', { name: label, exact: true }).click();
     };
@@ -55,6 +74,43 @@ async function check(engine, mobile) {
     const activityScroll = await activity.evaluate(() => scrollY);
     await click('Settings');
     const settings = await readyFrame('/tasks');
+    const tasksBox = await settings.locator('#task-planning-card').boundingBox();
+    const preferencesBox = await settings.locator('.settings-other').boundingBox();
+    if (mobile) {
+      assert(preferencesBox.y >= tasksBox.y + tasksBox.height, 'Mobile Settings stack below the task list');
+    } else {
+      assert(preferencesBox.x >= tasksBox.x + tasksBox.width + 16, 'Desktop Settings use two columns');
+      assert(Math.abs(preferencesBox.y - tasksBox.y) < 1, 'Both settings columns start at the same height');
+      const archive = settings.getByText('Edit dates and archived tasks', { exact: true });
+      await archive.click();
+      assert(await settings.getByLabel('Apply changes from').isVisible());
+      assert(await settings.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await page.screenshot({ path: `/private/tmp/stellar-settings-wide-${engine}.png` });
+      await archive.click();
+    }
+    if (mobile) {
+      await settings.getByText('Appearance', { exact: true }).click();
+      const menu = settings.getByLabel('Mobile menu');
+      assert.equal(await menu.inputValue(), 'drawer');
+      await menu.selectOption('top');
+      await page.waitForFunction(() => document.documentElement.dataset.mobileMenu === 'top');
+      await page.setViewportSize({ width: 320, height: 844 });
+      await toggle.click();
+      const links = page.locator('#app-nav-links');
+      assert.equal(await links.evaluate(el => getComputedStyle(el).position), 'absolute');
+      assert.equal(await links.getByRole('link', { name: 'Constellations', exact: true }).count(), 1);
+      assert(await links.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+      await page.screenshot({ path: `/private/tmp/stellar-top-menu-${engine}-320.png` });
+      await toggle.click();
+      await page.setViewportSize({ width: 390, height: 844 });
+      const separatePage = await context.newPage();
+      await separatePage.goto(base + '/tasks');
+      await separatePage.getByText('Appearance', { exact: true }).click();
+      assert.equal(await separatePage.getByLabel('Mobile menu').inputValue(), 'top');
+      await separatePage.close();
+      await menu.selectOption('drawer');
+      await page.waitForFunction(() => document.documentElement.dataset.mobileMenu === 'drawer');
+    }
     await settings.locator('#new-title').fill('Keep my unfinished draft');
     await click('Activity');
     assert.equal(await activity.locator('#q').inputValue(), 'Read');

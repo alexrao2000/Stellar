@@ -53,7 +53,7 @@
     toggle.hidden = !fits;
     fallback.hidden = !desktop.matches || fits;
     toggle.setAttribute('aria-pressed', String(open));
-    const label = open ? 'Hide Pool' : 'Show Pool';
+    const label = open ? 'Hide Constellations' : 'Show Constellations';
     if (toggle.textContent !== label) toggle.textContent = label;
     host.classList.toggle('workspace-open', open);
     document.body.classList.toggle('space-open', open);

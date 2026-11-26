@@ -144,7 +144,7 @@
     const url = pop ? clean(raw) : entry?.url || clean(raw);
     if (!entry) {
       const frame = document.createElement('iframe');
-      frame.className = 'stellar-section'; frame.title = ({ '/': 'Space', '/calendar': 'Calendar', '/data': 'Activity', '/tasks': 'Settings', '/metrics': 'Metrics', '/pool': 'Pool', '/docs': 'API' })[key] + ' · Stellar'; frame.hidden = true;
+      frame.className = 'stellar-section'; frame.title = ({ '/': 'Space', '/calendar': 'Calendar', '/data': 'Activity', '/tasks': 'Settings', '/metrics': 'Metrics', '/pool': 'Constellations', '/docs': 'API' })[key] + ' · Stellar'; frame.hidden = true;
       entry = { key, url, frame, state, title: 'Stellar' }; entries.set(key, entry);
       const target = new URL(url, location.origin); target.searchParams.set('tab_frame', 'true');
       frame.addEventListener('load', () => {

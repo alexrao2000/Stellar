@@ -1,4 +1,4 @@
-<title>Pool · Stellar</title>
+<title>Constellations · Stellar</title>
 <style>
 /* Pool colours live on .sky so the shared sidebar retains its theme. Star
    artwork pulses independently while labels, hit targets and links stay put.
@@ -191,14 +191,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   position: absolute; left: 50%; top: 50%; width: 66px; height: 66px;
   transform: translate(-50%, -50%); border-radius: 50%;
 }
-/* Annotated the way a chart annotates a star -- offset, small, tracked --
-   rather than centred underneath the way a graph names a node. Uppercase
-   because it has to read as a label and not as a proper noun, and because it
-   is the type the rest of the app already uses for labels. */
+/* Offset map labels keep the center and its drag target clear. */
 .star .name {
   position: absolute; left: 15px; bottom: 9px; white-space: nowrap;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 9.5px; letter-spacing: .19em; text-transform: uppercase;
+  font-size: 10.5px; letter-spacing: .06em;
   color: var(--ink-sky); text-shadow: 0 1px 8px var(--void), 0 0 3px var(--void);
   user-select: none;                 /* clickable: it is half the target */
 }
@@ -296,7 +293,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 #panel.open { display: block; }
 #panel .ptitle {
   font-family: ui-monospace, Menlo, monospace; font-size: 10px;
-  letter-spacing: .17em; text-transform: uppercase;
+  letter-spacing: .06em;
   color: var(--ink-sky); margin-bottom: 3px; word-break: break-word;
 }
 #panel .pmeta {
@@ -402,7 +399,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star.ghost input {
   position: absolute; left: 15px; bottom: 4px; width: 178px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 9.5px; letter-spacing: .19em; text-transform: uppercase;
+  font-size: 10.5px; letter-spacing: .06em;
   color: var(--star); background: rgba(255,255,255,.05);
   border: none; border-bottom: 1px solid var(--line-live);
   padding: 3px 4px; outline: none;
@@ -422,7 +419,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 <div class="sky" id="sky" data-view="list" data-loading="true">
   <canvas id="dust"></canvas>
   <div id="pool-loading" class="pool-loading stellar-loading" role="status">
-    <span class="stellar-spinner" aria-hidden="true"></span><span id="pool-load-status">Loading Pool…</span>
+    <span class="stellar-spinner" aria-hidden="true"></span><span id="pool-load-status">Loading Constellations…</span>
     <button type="button" id="pool-retry" hidden>Retry</button>
   </div>
   <div class="pool-map" id="pool-map">
@@ -434,23 +431,23 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     <div id="pool-link-hint" role="status" hidden></div>
   </div>
   <div class="pool-toolbar">
-  <div class="hud" id="hud">Pool</div>
+  <div class="hud" id="hud">Constellations</div>
   <div id="note" role="status" aria-live="polite"></div>
   <form class="new" id="pool-add">
     <input id="add" type="text" placeholder="Name a task" maxlength="200" enterkeyhint="done"
            aria-label="Add a task to the pool">
     <button type="submit">Add</button>
   </form>
-  <div class="pool-view" role="group" aria-label="Pool view">
+  <div class="pool-view" role="group" aria-label="Constellations view">
     <button type="button" data-pool-view="list" aria-pressed="true">List</button>
     <button type="button" data-pool-view="map" aria-pressed="false">Map</button>
   </div>
   </div>
-  <ul class="pool-list" id="pool-list" aria-label="Pool tasks"></ul>
+  <ul class="pool-list" id="pool-list" aria-label="Constellation tasks"></ul>
   <div id="panel" role="dialog" aria-labelledby="pool-title"></div>
   <div id="veil"><div class="box" role="alertdialog" aria-modal="true"
        aria-labelledby="veilh"></div></div>
-  <details class="key"><summary>How to use the pool</summary>
+  <details class="key"><summary>How to use Constellations</summary>
     <p>Select a star to edit it, or drag to move it. Right-click a star, then
     select the star that must finish first. Right-click empty sky to add a star
     and press Enter to save it. Click empty sky or press Escape to cancel.</p>
@@ -981,7 +978,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var waiting = open.filter(function (t) { return prereqsOf(t.id).length; }).length;
     var done = TASKS.length - open.length;
     document.getElementById('hud').innerHTML =
-      '<span class="pool-count">Pool &nbsp;&middot;&nbsp; ' + open.length + ' open' +
+      '<span class="pool-count">Constellations &nbsp;&middot;&nbsp; ' + open.length + ' open' +
       (waiting ? ' &nbsp;&middot;&nbsp; ' + waiting + ' waiting' : '') +
       (done ? ' &nbsp;&middot;&nbsp; ' + done + ' resolved</span>' +
         '<button type="button" class="toggle' + (SHOW_RESOLVED ? ' on' : '') + '" id="toggle" aria-pressed="' + SHOW_RESOLVED + '">' +
@@ -1623,7 +1620,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var revision = poolRevision;
     pollBusy = true;
     if (!poolLoaded) {
-      document.getElementById('pool-load-status').textContent = 'Loading Pool…';
+      document.getElementById('pool-load-status').textContent = 'Loading Constellations…';
       poolLoading.querySelector('.stellar-spinner').hidden = false; poolRetry.hidden = true;
     }
     return fetch('/api/pool?resolved=true', { cache: 'no-store', priority: 'low' }).then(function (res) {
@@ -1631,7 +1628,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       return res.json();
     }).then(function (state) {
       if (revision !== poolRevision || poolEditing()) return false;
-      if (state.schema_missing) throw new Error('Pool is unavailable');
+      if (state.schema_missing) throw new Error('Constellations are unavailable');
       var tasks = state.tasks || [], edges = state.edges || [], awaitingPosition = false;
       tasks.forEach(function (task) {
         var position = positions[task.id];
@@ -1672,7 +1669,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     }).catch(function () {
       /* Background refresh failure should not disturb a usable cached page. */
       if (!poolLoaded) {
-        document.getElementById('pool-load-status').textContent = 'Could not load Pool. Check your connection and retry.';
+        document.getElementById('pool-load-status').textContent = 'Could not load Constellations. Check your connection and retry.';
         poolLoading.querySelector('.stellar-spinner').hidden = true; poolRetry.hidden = false;
       }
       return false;

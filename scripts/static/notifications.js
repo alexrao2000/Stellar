@@ -55,7 +55,7 @@
         if (device !== subscription || !root.isConnected) return;
         const fields = [
           ['daily_warnings', 'Daily deadlines', 'About 30 minutes before an unreported task with a deadline is due.'],
-          ['collapse_warnings', 'Black hole warnings', 'About 3 days before an open Pool star becomes a black hole.'],
+          ['collapse_warnings', 'Black hole warnings', 'About 3 days before an open star becomes a black hole.'],
         ];
         preferences.replaceChildren(...fields.map(([key, title, description]) => {
           const label = document.createElement('label');

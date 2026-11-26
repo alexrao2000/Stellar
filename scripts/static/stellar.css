@@ -140,10 +140,8 @@ body[data-page=pool] { --surface: #111; --surface-2: #1d1d1d; --ink: #f4f4f4; --
 #swagger-ui { background: #fff; min-height: 100dvh; color-scheme: light; }
 @media (max-width: 760px) {
   html body .sidenav { background: var(--surface); }
-  html body .sidenav .nav-toggle { background: transparent; border-color: transparent; font-weight: 600; }
-  html body .sidenav .nav-toggle img { border-radius: 7px; }
   html body .sidenav .install-button { border-color: var(--rule); background: var(--surface-2); }
-  html body .sidenav .nav-links { border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 14px 14px; box-shadow: var(--shadow); }
+  html[data-mobile-menu=top] body .sidenav .nav-links { border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 14px 14px; box-shadow: var(--shadow); }
   html body .wrap { padding-top: 28px; }
   html body .views, html body .bar, html body .card, html body .readout { border-radius: 14px; }
   html body[data-page=today] #day-card {

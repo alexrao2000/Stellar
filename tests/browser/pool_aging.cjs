@@ -32,7 +32,7 @@ async function check(engine) {
     });
     await page.goto(base + '/pool');
     if (mobile) {
-      const list = page.getByRole('list', { name: 'Pool tasks' });
+      const list = page.getByRole('list', { name: 'Constellation tasks' });
       await list.getByRole('button', { name: /Revisit the archive.*195 days open/ }).waitFor();
       assert.match(await list.locator('li').first().innerText(), /Revisit the archive/);
       assert.match(await list.locator('li').nth(1).innerText(), /Plan the next chapter/);

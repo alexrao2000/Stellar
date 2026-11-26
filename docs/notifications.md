@@ -1,6 +1,6 @@
 # Stellar push notifications
 
-New Pool stars get a single reminder 24 hours after creation. Existing stars keep
+New stars get a single reminder 24 hours after creation. Existing stars keep
 no reminder until you set one. Open a star to choose a different local date and
 time, reset it to **In 24 hours**, or **Clear** it. Resolving or deleting a star
 cancels pending deliveries. Restoring a resolved star does not restore its old
@@ -20,7 +20,7 @@ Notifications may show the star title on the device's lock screen.
 Two optional warning types live in **Settings → Notifications**. **Daily
 deadlines** warns about 30 minutes before an unreported task with an explicit
 deadline is due, and opens that day's task list. **Black hole warnings** warns
-about three days before an open Pool star reaches day 90, and opens the star.
+about three days before an open star reaches day 90, and opens the star.
 Both start off and apply only to the current device.
 
 ## Server setup

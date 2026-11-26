@@ -390,7 +390,7 @@ NAV_ITEMS = (
     ("/calendar", "Calendar"),
     ("/metrics", "Metrics"),
     ("/data", "Activity"),
-    ("/pool", "Pool"),
+    ("/pool", "Constellations"),
     ("/tasks", "Settings"),
     ("/docs", "API"),
 )
@@ -590,11 +590,18 @@ def _nav(active: str) -> str:
         '<button type="button" class="sidebar-collapse" aria-expanded="true" aria-controls="app-nav-links" aria-label="Collapse sidebar" title="Collapse sidebar">'
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
         '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path class="collapse-chevron" d="m15 9-3 3 3 3"/></svg></button></div>'
+        '<div class="mobile-brand"><img src="/app-assets/stellar.svg" width="24" height="24" alt="">Stellar</div>'
         '<button type="button" class="nav-toggle" aria-expanded="false" '
         'aria-controls="app-nav-links" aria-label="Navigation menu">'
-        '<img src="/app-assets/stellar.svg" width="24" height="24" alt="">'
-        '<span class="nav-current">Stellar</span><span class="nav-hint">Menu</span></button>'
-        '<div class="nav-links" id="app-nav-links">' + links + signout + '</div>' + install + "</nav>"
+        '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" '
+        'stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>'
+        '<div class="nav-scrim" aria-hidden="true"></div>'
+        '<div class="nav-links" id="app-nav-links">'
+        '<div class="nav-drawer-header"><span>Stellar</span>'
+        '<button type="button" class="nav-drawer-close" aria-label="Close menu">'
+        '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" '
+        'stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>'
+        + links + signout + '</div>' + install + "</nav>"
     )
 
 
@@ -652,7 +659,7 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     themed = not embedded and template not in {"today.html", "pool.html"}
     backdrop = '<div class="space-backdrop" aria-hidden="true"></div>' if themed else ""
     reminder_assets = ('<link rel="stylesheet" href="/app-assets/notifications.css?v=2">'
-                       '<script src="/app-assets/notifications.js?v=2" defer></script>'
+                       '<script src="/app-assets/notifications.js?v=3" defer></script>'
                        ) if template in {"pool.html", "tasks.html"} else ""
     attributes = 'data-page="' + (active.strip("/") or "today") + '"'
     if embedded:
@@ -2209,7 +2216,7 @@ def api_pool_notes(task_id: int, text: str = "") -> dict:
         .eq("id", task_id).execute().data or []
     )
     if not updated:
-        raise HTTPException(404, f"no pool task {task_id}")
+        raise HTTPException(404, f"Star {task_id} not found")
     row = updated[0]
     def _patch(s):
         for t in s["tasks"]:
@@ -2256,7 +2263,7 @@ def api_pool_move(task_id: int, x: float, y: float) -> dict:
         .eq("id", task_id).execute().data or []
     )
     if not updated:
-        raise HTTPException(404, f"no pool task {task_id}")
+        raise HTTPException(404, f"Star {task_id} not found")
     def _patch(s):
         for t in s["tasks"]:
             if t["id"] == task_id:
@@ -2280,7 +2287,7 @@ def api_pool_resolve(task_id: int, done: bool = True) -> dict:
         .eq("id", task_id).execute().data or []
     )
     if not updated:
-        raise HTTPException(404, f"no pool task {task_id}")
+        raise HTTPException(404, f"Star {task_id} not found")
     row = updated[0]
     def _patch(s):
         for t in s["tasks"]:
@@ -2331,7 +2338,7 @@ def api_pool_delete(task_id: int) -> dict:
         _sb().table("pool_tasks").delete().eq("id", task_id).execute().data or []
     )
     if not removed:
-        raise HTTPException(404, f"no pool task {task_id}")
+        raise HTTPException(404, f"Star {task_id} not found")
     def _patch(s):
         s["tasks"] = [t for t in s["tasks"] if t["id"] != task_id]
         s["edges"] = [e for e in s["edges"]

@@ -13,7 +13,7 @@ async function check(engine) {
   const browser = await ({ chromium, webkit }[engine]).launch(options);
   try {
     const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
-    const state = { tasks: [{ id: 1, title: 'Demo star', x: .3, y: .4,
+    const state = { tasks: [{ id: 1, title: 'Draft eBay listing', x: .3, y: .4,
       created_at: new Date(Date.now() - 135 * 86400000).toISOString(), resolved_at: null }], edges: [] };
     const original = JSON.stringify(state);
     let stale = false, hold = false, finish, writes = 0, fail = false;
@@ -61,6 +61,8 @@ async function check(engine) {
     await page.locator('.star[data-id="1"] .hit').waitFor();
     await page.waitForTimeout(300);
     const star = page.locator('.star[data-id="1"]');
+    assert.equal(await star.locator('.name').innerText(), state.tasks[0].title);
+    assert.equal(await star.locator('.name').evaluate(el => getComputedStyle(el).textTransform), 'none');
     const point = () => star.evaluate(el => ({ x: parseFloat(el.style.left), y: parseFloat(el.style.top) }));
     const near = async (expected, tolerance = .2) => {
       const actual = await point();

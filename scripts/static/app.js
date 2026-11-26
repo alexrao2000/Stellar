@@ -91,6 +91,22 @@
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
     });
   }
+  const menuKey = 'stellar:mobile-menu';
+  const menuSetting = document.querySelector('[data-mobile-menu-setting]');
+  const applyMenu = value => {
+    const menu = value === 'top' ? 'top' : 'drawer';
+    document.documentElement.dataset.mobileMenu = menu;
+    if (menuSetting) menuSetting.value = menu;
+  };
+  try { applyMenu(localStorage.getItem(menuKey)); } catch { applyMenu('drawer'); }
+  menuSetting?.addEventListener('change', () => {
+    applyMenu(menuSetting.value);
+    try { localStorage.setItem(menuKey, menuSetting.value); } catch {}
+  });
+  window.addEventListener('storage', event => {
+    if (event.key === menuKey) applyMenu(event.newValue);
+  });
+
   const nav = document.querySelector('.sidenav');
   if (nav) {
     let navigationVersion = 0;
@@ -126,26 +142,63 @@
     window.addEventListener('pagehide', clearTransition);
     window.addEventListener('pageshow', clearTransition);
     window.addEventListener('keydown', event => { if (event.key === 'Escape') clearTransition(); });
+    const mobile = matchMedia('(max-width: 760px)');
     const toggle = nav.querySelector('.nav-toggle');
-    const setMenu = open => {
+    const links = nav.querySelector('.nav-links');
+    const close = nav.querySelector('.nav-drawer-close');
+    const root = document.documentElement;
+    const setMenu = (open, restoreFocus = false) => {
+      const drawer = open && root.dataset.mobileMenu !== 'top';
       nav.classList.toggle('menu-open', open);
       toggle.setAttribute('aria-expanded', String(open));
+      root.classList.toggle('mobile-drawer-open', drawer);
+      if (drawer) {
+        links.setAttribute('role', 'dialog');
+        links.setAttribute('aria-modal', 'true');
+        links.setAttribute('aria-label', 'Navigation');
+      } else {
+        links.removeAttribute('role');
+        links.removeAttribute('aria-modal');
+        links.removeAttribute('aria-label');
+      }
+      if (restoreFocus && mobile.matches) toggle.focus({ preventScroll: true });
+      links.inert = mobile.matches && !open;
+      if (drawer) close.focus({ preventScroll: true });
     };
     toggle.addEventListener('click', () => setMenu(toggle.getAttribute('aria-expanded') !== 'true'));
-    nav.querySelector('.nav-links').addEventListener('click', event => {
-      if (event.target.closest('a')) setMenu(false);
+    close.addEventListener('click', () => setMenu(false, true));
+    nav.querySelector('.nav-scrim').addEventListener('click', () => setMenu(false, true));
+    links.addEventListener('click', event => {
+      if (mobile.matches && event.target.closest('a')) setMenu(false, true);
     });
-    document.addEventListener('click', event => { if (!nav.contains(event.target)) setMenu(false); });
+    document.addEventListener('click', event => {
+      if (root.dataset.mobileMenu === 'top' && !nav.contains(event.target) &&
+          toggle.getAttribute('aria-expanded') === 'true') setMenu(false);
+    });
     window.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
-        setMenu(false);
-        toggle.focus();
+      if (toggle.getAttribute('aria-expanded') !== 'true') return;
+      if (event.key === 'Escape') {
+        setMenu(false, true);
+        event.preventDefault();
         event.stopPropagation();
+      } else if (event.key === 'Tab' && root.classList.contains('mobile-drawer-open')) {
+        const focusable = links.querySelectorAll('button, a[href]');
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (!links.contains(active) || active === (event.shiftKey ? first : last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
       }
     }, true);
     const measure = () => document.documentElement.style.setProperty('--mobile-nav-height', nav.offsetHeight + 'px');
     new ResizeObserver(measure).observe(nav);
-    matchMedia('(max-width: 760px)').addEventListener('change', () => setMenu(false));
+    mobile.addEventListener('change', () => setMenu(false));
+    window.addEventListener('storage', event => {
+      if (event.key === menuKey && toggle.getAttribute('aria-expanded') === 'true') setMenu(false, true);
+    });
+    window.addEventListener('pageshow', () => setMenu(false));
+    setMenu(false);
     measure();
   }
   if (window.visualViewport) {

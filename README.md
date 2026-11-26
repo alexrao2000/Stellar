@@ -9,7 +9,7 @@ These screenshots show the running app with synthetic tasks, records, and weathe
 
 ### Space
 
-Daily tasks float inside the Pool alongside undated work arranged as stars.
+Daily tasks float inside Constellations alongside undated work arranged as stars.
 Switch between Day, 3 days, Week, Month, and a custom range. Reorder the task list,
 move stars, and connect related work.
 
@@ -54,11 +54,12 @@ The installation screenshot shows the app’s own install dialog.
 
 | Route | View |
 | --- | --- |
-| `/` or `/today` | Space, daily check-in, range views, and the Pool |
+| `/` or `/today` | Space, daily check-in, range views, and Constellations |
 | `/calendar` | Timed events and task planning in Day or Week view |
 | `/metrics` | Overview, Weight, Wake, and individual task charts |
 | `/data` | Activity records |
-| `/tasks` | Task settings, planning rules, icons, and calendar connections |
+| `/pool` | Constellations star map and list |
+| `/tasks` | Tasks, planning rules, calendar connections, notifications, and appearance |
 | `/docs` | Generated API documentation |
 
 Task outcomes include done, incomplete, unreported, and don’t know. Optional tasks
@@ -91,12 +92,12 @@ require a connection. Writes are sent to the server when made.
 
 ## Push notifications
 
-New Pool stars default to a reminder after 24 hours. Open a star to change or clear
+New stars default to a reminder after 24 hours. Open a star to change or clear
 its reminder, then enable notifications on each device. **Send test** checks
 delivery. Resolving or deleting a star cancels pending reminders.
 
 In **Settings → Notifications**, each device can opt into warnings about 30 minutes
-before a daily task’s deadline or about three days before an open Pool star collapses.
+before a daily task’s deadline or about three days before an open star collapses.
 Stars age from protostars through supernovae. At 90 days, they become black holes
 that continue to grow.
 
