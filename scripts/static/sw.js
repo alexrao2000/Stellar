@@ -43,7 +43,13 @@ self.addEventListener('notificationclick', event => {
   let target = new URL('/pool', self.location.origin);
   try {
     const requested = new URL(event.notification.data?.url || '/pool', self.location.origin);
-    if (requested.origin === self.location.origin && requested.pathname === '/pool') target = requested;
+    if (requested.origin === self.location.origin) {
+      if (requested.pathname === '/pool') target = requested;
+      const day = requested.searchParams.get('day');
+      if (requested.pathname === '/today' && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        target = new URL('/today?day=' + day + '&view=day', self.location.origin);
+      }
+    }
   } catch {}
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clients => {
     const client = clients.find(client => client.frameType === 'top-level' && client.url.startsWith(self.location.origin + '/'));

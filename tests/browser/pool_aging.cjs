@@ -25,6 +25,7 @@ async function check(engine) {
           { id: 4, title: 'Try a different sketch', x: .48, y: .29, created_at: created(90 - 60000 / day) },
           { id: 5, title: 'Old completed task', x: .7, y: .7, created_at: created(220), resolved_at: created(1) },
           { id: 6, title: 'Plan the next chapter', x: .23, y: .78, created_at: created(125) },
+          { id: 7, title: 'Red star', x: .73, y: .35, created_at: created(71) },
         ],
         edges: [{ before_id: 1, after_id: 2 }],
       } });
@@ -42,9 +43,19 @@ async function check(engine) {
     const shadows = page.locator('#lines circle');
     const biggest = Math.max(...await shadows.evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('r')))));
     assert.match(await page.locator('#lines > path').getAttribute('d'), /Q/, 'A link bends in the old black hole’s vicinity');
-    assert.equal(await page.locator('.star[data-id="4"].black-hole').count(), 0);
+    await page.locator('.star[data-id="1"][data-stage="protostar"]').waitFor({ state: 'attached' });
+    await page.locator('.star[data-id="2"][data-stage="main"]').waitFor({ state: 'attached' });
+    await page.locator('.star[data-id="7"][data-stage="supergiant"]').waitFor({ state: 'attached' });
+    const newborn = page.locator('.star[data-id="4"]');
+    const supernova = newborn.locator('.stellar-shockwave');
+    assert.equal(await supernova.count(), 2);
+    const supernovaSize = Number(await newborn.locator('svg').getAttribute('width'));
     await page.clock.fastForward(61000);
-    await page.locator('.star[data-id="4"].black-hole').waitFor({ state: 'attached' });
+    await newborn.locator('.pool-vortex').waitFor({ state: 'attached' });
+    const width = element => element.evaluate(el => el.offsetWidth);
+    const firstVortex = await width(newborn.locator('.pool-vortex'));
+    assert(firstVortex > supernovaSize && firstVortex < supernovaSize * 1.2, 'A newborn black hole starts slightly larger than the supernova');
+    assert(await width(older.locator('.pool-vortex')) > firstVortex + 20, 'The visible vortex grows with age');
     const smallest = Math.min(...await shadows.evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('r')))));
     assert(biggest > smallest * 2, 'Older black holes have a larger effect');
     await page.getByRole('button', { name: 'Show resolved', exact: true }).click();

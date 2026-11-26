@@ -22,7 +22,9 @@
     const status = document.createElement('p');
     status.setAttribute('role', 'status'); status.textContent = 'Checking notifications…';
     const actions = document.createElement('div'); actions.className = 'notification-actions';
-    root.replaceChildren(status, actions);
+    const preferences = document.createElement('div'); preferences.className = 'notification-preferences';
+    root.replaceChildren(status, actions, preferences);
+    const showPreferences = root.hasAttribute('data-warning-preferences');
     const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone ||
       (parent !== window && parent.matchMedia('(display-mode: standalone)').matches);
@@ -32,7 +34,7 @@
     }
     try {
       const settings = await config();
-      if (!settings.enabled) { status.textContent = 'Notifications are not available yet. Your reminder time is saved.'; return; }
+      if (!settings.enabled) { status.textContent = 'Notifications are not available yet.'; return; }
       if (Notification.permission === 'denied') { status.textContent = 'Notifications are blocked. Allow them in your browser or device settings, then reopen Stellar.'; return; }
       const reg = await registration();
       let subscription = await reg.pushManager.getSubscription();
@@ -45,8 +47,42 @@
         });
         actions.appendChild(element); return element;
       }
+      async function renderPreferences(device) {
+        if (!showPreferences) return;
+        const endpoint = device.endpoint;
+        const path = '/api/notifications/warnings';
+        const values = await api(path, 'POST', { endpoint });
+        if (device !== subscription || !root.isConnected) return;
+        const fields = [
+          ['daily_warnings', 'Daily deadlines', 'About 30 minutes before an unreported task with a deadline is due.'],
+          ['collapse_warnings', 'Black hole warnings', 'About 3 days before an open Pool star becomes a black hole.'],
+        ];
+        preferences.replaceChildren(...fields.map(([key, title, description]) => {
+          const label = document.createElement('label');
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.checked = values[key];
+          const text = document.createElement('span');
+          const name = document.createElement('strong'); name.textContent = title;
+          const hint = document.createElement('small'); hint.textContent = description;
+          text.append(name, hint);
+          label.append(input, text);
+          input.addEventListener('change', async () => {
+            input.disabled = true;
+            try {
+              await api(path, 'POST', { endpoint, [key]: input.checked });
+              status.textContent = 'Notification preferences saved on this device.';
+            } catch (error) {
+              input.checked = !input.checked;
+              status.textContent = error.message;
+            } finally { input.disabled = false; }
+          });
+          return label;
+        }));
+      }
       function render() {
         actions.replaceChildren();
+        preferences.replaceChildren();
         if (subscription && Notification.permission === 'granted') {
           status.textContent = 'Notifications are on for this device.';
           button('Send test', async () => {
@@ -57,8 +93,11 @@
             await api('/api/notifications/subscribe', 'DELETE', { endpoint: subscription.endpoint });
             await subscription.unsubscribe(); subscription = null; render();
           });
+          renderPreferences(subscription).catch(error => { status.textContent = error.message; });
         } else {
-          status.textContent = 'Enable notifications on this device to receive star reminders.';
+          status.textContent = showPreferences
+            ? 'Enable notifications on this device to choose which warnings you receive.'
+            : 'Enable notifications on this device to receive star reminders.';
           button('Enable notifications', async () => {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') throw Error('Notifications were not enabled. You can allow them in browser settings.');
@@ -74,5 +113,9 @@
     } catch (error) { status.textContent = error.message; root.dataset.mounted = ''; }
   }
   window.StellarNotifications = { mount };
-  document.querySelectorAll('[data-notification-controls]').forEach(mount);
+  document.querySelectorAll('[data-notification-controls]').forEach(root => {
+    const disclosure = root.closest('details');
+    if (!disclosure || disclosure.open) mount(root);
+    if (disclosure) disclosure.addEventListener('toggle', () => { if (disclosure.open) mount(root); });
+  });
 })();

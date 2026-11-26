@@ -89,11 +89,16 @@ The service worker caches the public Space shell and public assets. Task records
 also have a local cache for fast startup. Saving check-ins and refreshing records
 require a connection. Writes are sent to the server when made.
 
-## Star reminders
+## Push notifications
 
 New Pool stars default to a reminder after 24 hours. Open a star to change or clear
 its reminder, then enable notifications on each device. **Send test** checks
 delivery. Resolving or deleting a star cancels pending reminders.
+
+In **Settings → Notifications**, each device can opt into warnings about 30 minutes
+before a daily task’s deadline or about three days before an open Pool star collapses.
+Stars age from protostars through supernovae. At 90 days, they become black holes
+that continue to grow.
 
 For iPhone and iPad, enable notifications from the installed Home Screen app.
 See [notification setup](docs/notifications.md).

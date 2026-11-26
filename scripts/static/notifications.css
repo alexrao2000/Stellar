@@ -10,3 +10,19 @@
 #panel .reminder p { margin: 8px 0 0; color: var(--ink-sky); overflow-wrap: anywhere; }
 #panel .reminder button:focus-visible, #panel .reminder input:focus-visible { outline: 2px solid #b6b0db; outline-offset: 2px; }
 @media(pointer:coarse) { #panel .reminder button { min-height: 44px; } #panel .reminder input { font-size: 16px; } }
+.settings-notifications { padding: 0 14px 14px; font-size: .85rem; }
+.settings-notifications p { margin: 0 0 10px; color: var(--ink-muted); overflow-wrap: anywhere; }
+.settings-notifications .notification-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-notifications button {
+  min-height: 44px; padding: 8px 14px; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--rule); border-radius: 8px; font: inherit; cursor: pointer;
+}
+.settings-notifications button:disabled { opacity: .55; }
+.notification-preferences:not(:empty) { margin-top: 12px; border-top: 1px solid var(--rule); }
+.notification-preferences label {
+  min-height: 48px; padding: 10px 0; display: flex; align-items: flex-start; gap: 10px; cursor: pointer;
+}
+.notification-preferences label + label { border-top: 1px solid var(--rule); }
+.notification-preferences input { width: 18px; height: 18px; margin: 2px 0 0; flex: 0 0 auto; accent-color: var(--accent); }
+.notification-preferences strong, .notification-preferences small { display: block; }
+.notification-preferences small { margin-top: 2px; color: var(--ink-muted); line-height: 1.45; }

@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -48,6 +48,11 @@ class Subscription(Endpoint):
     expirationTime: int | None = None
 
 
+class WarningPreferences(Endpoint):
+    daily_warnings: bool | None = None
+    collapse_warnings: bool | None = None
+
+
 def validate_endpoint(endpoint: str) -> None:
     try:
         url = urlsplit(endpoint)
@@ -71,13 +76,13 @@ def validate_subscription(subscription: dict) -> None:
         raise HTTPException(400, "Invalid push subscription keys") from None
 
 
-def send_push(subscription: dict, payload: dict) -> None:
+def send_push(subscription: dict, payload: dict, *, ttl: int = 3600) -> None:
     from pywebpush import webpush
     validate_subscription(subscription)
     webpush(subscription_info=subscription, data=json.dumps(payload),
             vapid_private_key=os.environ["VAPID_PRIVATE_KEY"],
             vapid_claims={"sub": os.getenv("VAPID_SUBJECT", "https://stellar-record.vercel.app")},
-            ttl=3600, timeout=8, headers={"Urgency": "normal"})
+            ttl=ttl, timeout=8, headers={"Urgency": "normal"})
 
 
 @router.get("/api/notifications/config")
@@ -115,6 +120,22 @@ def test_notification(body: Endpoint) -> dict:
         log.warning("Test notification delivery failed")
         raise HTTPException(503, "Could not send the test notification. Try enabling notifications again.") from None
     return {"ok": True}
+
+
+@router.post("/api/notifications/warnings")
+def warning_preferences(body: WarningPreferences, response: Response) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    if not configured():
+        raise HTTPException(503, "Notifications are not configured yet")
+    validate_endpoint(body.endpoint)
+    fields = "daily_warnings,collapse_warnings"
+    changes = body.model_dump(exclude={"endpoint"}, exclude_none=True)
+    table = _db().table("push_subscriptions")
+    query = table.update(changes) if changes else table.select(fields)
+    rows = query.eq("endpoint", body.endpoint).execute().data
+    if not rows:
+        raise HTTPException(404, "Enable notifications on this device first")
+    return {key: rows[0][key] for key in fields.split(",")}
 
 
 class ReminderTime(BaseModel):
@@ -173,10 +194,50 @@ def dispatch_reminders() -> dict:
     return counts
 
 
+def dispatch_warnings() -> dict:
+    from .server import _app_tz
+
+    db = _db()
+    tz = _app_tz().key
+    deliveries = db.rpc("claim_stellar_warnings", {"app_tz": tz}).data
+    counts = {"sent": 0, "retry": 0, "failed": 0, "cancelled": 0}
+    titles = {"daily": "Stellar · Deadline approaching", "collapse": "Stellar · Black hole approaching"}
+    for delivery in deliveries:
+        token = delivery["claim_token"]
+        current = db.rpc("stellar_warning_for_delivery", {"app_tz": tz, "token": token}).data
+        outcome = "cancelled"
+        expired = False
+        if current and current[0]["ttl"] > 0:
+            warning = current[0]
+            try:
+                send_push(warning["subscription"], {
+                    "title": titles[delivery["kind"]],
+                    "body": warning["title"],
+                    "tag": f"stellar-{delivery['kind']}-{delivery['event_key']}",
+                    "url": warning["url"],
+                }, ttl=min(warning["ttl"], 86400))
+                outcome = "sent"
+            except Exception as exc:
+                response = getattr(exc, "response", None)
+                status = getattr(exc, "status_code", None) or (response.status_code if response is not None else None)
+                expired = status in (404, 410)
+                outcome = "failed" if expired or isinstance(exc, HTTPException) else "retry"
+                log.warning("Task warning delivery: %s", outcome)
+        counts[outcome] += 1
+        db.table("stellar_warning_deliveries").update({
+            "finished": outcome in {"sent", "failed"},
+            "available_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+            "claim_token": None,
+        }).eq("claim_token", token).execute()
+        if expired:
+            db.table("push_subscriptions").delete().eq("id", delivery["subscription_id"]).execute()
+    return counts
+
+
 @router.post(DISPATCH_PATH, include_in_schema=False)
-def dispatch(request: Request) -> dict:
+def dispatch(request: Request, warnings: bool = False) -> dict:
     if not dispatcher_authorized(request):
         raise HTTPException(401, "Unauthorized")
     if not configured():
         raise HTTPException(503, "Notifications are not configured")
-    return dispatch_reminders()
+    return dispatch_warnings() if warnings else dispatch_reminders()

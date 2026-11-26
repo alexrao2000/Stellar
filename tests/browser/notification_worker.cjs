@@ -19,6 +19,10 @@ async function event(type, extras) {
   assert.equal(shown[0][1].tag, 'star-7');
   await event('notificationclick', { notification: { close() {}, data: { url: '/pool?star=7' } } });
   assert.equal(opened.pop(), 'https://stellar.invalid/pool?star=7');
+  await event('notificationclick', { notification: { close() {}, data: { url: '/today?day=2026-11-25&view=day' } } });
+  assert.equal(opened.pop(), 'https://stellar.invalid/today?day=2026-11-25&view=day');
+  await event('notificationclick', { notification: { close() {}, data: { url: '/today?day=tomorrow' } } });
+  assert.equal(opened.pop(), 'https://stellar.invalid/pool');
   await event('notificationclick', { notification: { close() {}, data: { url: 'https://outside.invalid/pool' } } });
   assert.equal(opened.pop(), 'https://stellar.invalid/pool');
   let navigated, focused = false;

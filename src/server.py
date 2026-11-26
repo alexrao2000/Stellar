@@ -651,8 +651,9 @@ def _render(template: str, boot: dict, active: str = "") -> str:
     tab_frame = bool(boot.get("tab_frame"))
     themed = not embedded and template not in {"today.html", "pool.html"}
     backdrop = '<div class="space-backdrop" aria-hidden="true"></div>' if themed else ""
-    reminder_assets = ('<link rel="stylesheet" href="/app-assets/notifications.css?v=1">'
-                       '<script src="/app-assets/notifications.js?v=1" defer></script>') if template == "pool.html" else ""
+    reminder_assets = ('<link rel="stylesheet" href="/app-assets/notifications.css?v=2">'
+                       '<script src="/app-assets/notifications.js?v=2" defer></script>'
+                       ) if template in {"pool.html", "tasks.html"} else ""
     attributes = 'data-page="' + (active.strip("/") or "today") + '"'
     if embedded:
         attributes += ' data-embedded="true"'

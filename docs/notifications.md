@@ -1,4 +1,4 @@
-# Star reminders
+# Stellar push notifications
 
 New Pool stars get a single reminder 24 hours after creation. Existing stars keep
 no reminder until you set one. Open a star to choose a different local date and
@@ -6,7 +6,7 @@ time, reset it to **In 24 hours**, or **Clear** it. Resolving or deleting a star
 cancels pending deliveries. Restoring a resolved star does not restore its old
 reminder.
 
-Open any star and choose **Enable notifications** on each device you want to
+Open **Settings → Notifications** or any star and choose **Enable notifications** on each device you want to
 receive reminders. Permission is requested only after that click. **Send test**
 sends an immediate notification to that device; **Turn off** removes its
 subscription. On iPhone and iPad, open Stellar from its installed Home Screen
@@ -16,6 +16,12 @@ A notification opens the matching star. Reminders can arrive while Stellar is
 closed. Delivery depends on the browser push service, device permissions, and
 connectivity; a push already accepted by the push service cannot be recalled.
 Notifications may show the star title on the device's lock screen.
+
+Two optional warning types live in **Settings → Notifications**. **Daily
+deadlines** warns about 30 minutes before an unreported task with an explicit
+deadline is due, and opens that day's task list. **Black hole warnings** warns
+about three days before an open Pool star reaches day 90, and opens the star.
+Both start off and apply only to the current device.
 
 ## Server setup
 
@@ -44,6 +50,11 @@ worker URL in that file. The database's cron job checks once per minute and
 calls the worker only when eligible deliveries exist. Its Vault credential is
 separate from database credentials. It does not rely on a browser timer or a
 computer staying awake.
+
+For deadline and collapse warnings, apply [the warning migration](../sql/migrations/2026-11-25_task_push_warnings.sql)
+and [the warning scheduler](../sql/schedule_task_warnings.sql). Use the app's
+`LOCAL_TIMEZONE` in the cron registration and the same worker URL and credential
+as star reminders. The warning scheduler checks every five minutes.
 
 The dispatcher accepts only a matching bearer credential. Browser subscription,
 test, and reminder APIs use the app's existing authenticated, same-origin write

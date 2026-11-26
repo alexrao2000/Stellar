@@ -67,6 +67,27 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 }
 .star:is(:hover,:focus-visible,.held) svg,
 .sky[data-motion-paused=true] .star svg { animation-play-state: paused; }
+.star[data-stage=protostar] {
+  --stellar-core: #fff0da; --stellar-bloom: #ffc785; --stellar-halo: #d57f5790;
+}
+.star[data-stage=supergiant] {
+  --stellar-core: #ffe9db; --stellar-bloom: #ffad99; --stellar-halo: #db677373;
+}
+.star[data-stage=supernova] {
+  --stellar-core: #fff7ff; --stellar-bloom: #f6dbff; --stellar-halo: #a592ff88;
+}
+.stellar-shockwave {
+  transform-origin: center; opacity: .52;
+  animation: stellar-shockwave var(--glow-period) ease-out var(--glow-phase) infinite;
+}
+.stellar-shockwave + .stellar-shockwave { animation-delay: calc(var(--glow-phase) - var(--glow-period) / 2); }
+.star:is(:hover,:focus-visible,.held) .stellar-shockwave,
+.sky[data-motion-paused=true] .stellar-shockwave { animation-play-state: paused; }
+@keyframes stellar-shockwave {
+  0% { opacity: 0; transform: scale(.37); }
+  24% { opacity: .62; }
+  100% { opacity: 0; transform: scale(1); }
+}
 .pool-vortex {
   position: absolute; width: var(--vortex-size); height: var(--vortex-size);
   transform: translate(-50%, -50%); pointer-events: none;
@@ -76,7 +97,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .pool-vortex .accretion-flow { animation: vortex-turn var(--vortex-period) linear var(--vortex-phase) infinite; }
 .pool-vortex .vortex-filaments { animation: vortex-turn calc(var(--vortex-period) * 1.46) linear var(--vortex-phase) infinite; }
 .vortex-horizon {
-  position: absolute; inset: 36.5%; border-radius: 50%;
+  position: absolute; inset: 34%; border-radius: 50%;
   background: #010208; box-shadow: 0 0 6px 1px #060615, inset 0 0 0 1px #a798e555;
 }
 .vortex-mote {
@@ -356,7 +377,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
 .star.ghost input::placeholder { color: rgba(150,146,185,.4); letter-spacing: .14em; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
-  .star svg, .star.igniting, .star-art, .vortex-mote,
+  .star svg, .star.igniting, .star-art, .vortex-mote, .stellar-shockwave,
   .sky[data-loading=false] :is(.pool-toolbar,.pool-list,.key) { animation: none !important; }
   .star.igniting::before { display: none; }
 }
@@ -567,6 +588,13 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   }
   var SHOW_RESOLVED = false;
   var dayMs = 86400000, collapseAfter = 90, priorityAfter = 120, ageTimer;
+  var lifecycle = [
+    { key: 'protostar', label: 'Protostar', until: 3, size: 68 },
+    { key: 'main', label: 'Main sequence', until: 60, size: 90 },
+    { key: 'supergiant', label: 'Red supergiant', until: 87, size: 96 },
+    { key: 'supernova', label: 'Supernova', until: collapseAfter, size: 104 }
+  ];
+  var firstVortexSize = 116;
   var PENDING = null;                 // a star being named, not yet saved
   function isOpen(t) { return t && !t.resolved_at; }
   function canAddPrerequisite(before, after) {
@@ -585,6 +613,11 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var days = daysOpen(task, now);
     return isOpen(task) && days >= collapseAfter ? days : 0;
   }
+  function starStage(task, now) {
+    if (!task.created_at || !Number.isFinite(Date.parse(task.created_at))) return lifecycle[1];
+    var age = daysOpen(task, now);
+    return lifecycle.find(function (stage) { return age < stage.until; });
+  }
   function refreshAge(now) {
     clearTimeout(ageTimer);
     var next = Infinity;
@@ -592,7 +625,8 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       if (!isOpen(task)) return;
       var created = Date.parse(task.created_at);
       var age = daysOpen(task, now);
-      var nextDay = age < collapseAfter ? collapseAfter : Math.floor(age) + 1;
+      var stage = starStage(task, now);
+      var nextDay = stage ? stage.until : Math.floor(age) + 1;
       var delay = created + nextDay * dayMs - now;
       if (delay > 0) next = Math.min(next, delay);
     });
@@ -651,29 +685,38 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
   /* Magnitude carries age: the longer something has sat in the pool unresolved,
      the brighter it burns. It is the one property worth encoding, and it costs
      nothing to read. */
-  function magnitude(t) {
+  function magnitude(t, now) {
     if (!t.created_at) return 1.4;
-    var days = daysOpen(t, Date.now());
+    var days = daysOpen(t, now);
     return 1.0 + Math.min(days / 45, 1) * 1.5;
   }
 
   /* ---- painting -------------------------------------------------------- */
-  function starSVG(id, m) {
+  function starSVG(id, m, stage) {
     var core = 1.5 + m * 1.15, bloom = 7 + m * 7, spike = 9 + m * 9;
-    var s = '<svg width="90" height="90" viewBox="-45 -45 90 90" ' +
-      'style="display:block;--star-offset:-45px;transform:translate(-45px,-45px);pointer-events:none">';
+    var size = stage ? stage.size : 90, half = size / 2;
+    var supernova = stage && stage.key === 'supernova';
+    if (stage && stage.key === 'protostar') { core *= .76; bloom *= 1.45; }
+    if (stage && stage.key === 'supergiant') { core *= 2.15; bloom *= 1.38; spike *= 1.06; }
+    if (supernova) { core *= 1.53; bloom *= 1.7; spike *= 1.35; }
+    var s = '<svg width="' + size + '" height="' + size + '" viewBox="-' + half + ' -' + half + ' ' + size + ' ' + size + '" ' +
+      'style="display:block;--star-offset:-' + half + 'px;transform:translate(var(--star-offset),var(--star-offset));pointer-events:none">';
     s += '<defs><radialGradient id="bl' + id + '">' +
-         '<stop offset="0%" stop-color="rgba(255,252,245,.85)"/>' +
-         '<stop offset="38%" stop-color="rgba(206,214,255,.20)"/>' +
-         '<stop offset="100%" stop-color="rgba(150,170,255,0)"/>' +
+         '<stop offset="0%" stop-color="var(--stellar-bloom,rgba(255,252,245,.85))"/>' +
+         '<stop offset="38%" stop-color="var(--stellar-halo,rgba(206,214,255,.20))"/>' +
+         '<stop offset="100%" stop-color="var(--stellar-halo,#96aaff)" stop-opacity="0"/>' +
          '</radialGradient></defs>';
+    if (supernova) {
+      s += '<g fill="none" stroke="#d8c8ff" stroke-width=".8">' +
+        '<circle class="stellar-shockwave" r="40"/><circle class="stellar-shockwave" r="43"/></g>';
+    }
     s += '<g class="star-glow"><circle cx="0" cy="0" r="' + bloom + '" fill="url(#bl' + id + ')"/>';
     if (m > 1.4) {
       s += '<path d="M' + -spike + ' 0 H' + spike + ' M0 ' + -spike + ' V' + spike +
            '" stroke="rgba(255,250,240,' + (0.10 + m * 0.055).toFixed(2) +
            ')" stroke-width="0.8" stroke-linecap="round"/>';
     }
-    s += '</g><circle class="star-core" cx="0" cy="0" r="' + core.toFixed(2) + '" fill="var(--star)"/></svg>';
+    s += '</g><circle class="star-core" cx="0" cy="0" r="' + core.toFixed(2) + '" fill="var(--stellar-core,var(--star))"/></svg>';
     return s;
   }
 
@@ -705,7 +748,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     var period = 10 - strength * 4;
     var phase = performance.now() / 1000 + Math.abs(Number(id) || 0) % 13;
     var gradient = 'pool-vortex-' + esc(id);
-    return '<span class="pool-vortex" aria-hidden="true" style="--vortex-size:' + (88 + 42 * strength).toFixed(1) +
+    return '<span class="pool-vortex" aria-hidden="true" style="--vortex-size:' + (firstVortexSize + 54 * strength).toFixed(1) +
       'px;--vortex-period:' + period + 's;--vortex-phase:' + -phase.toFixed(3) + 's;opacity:' + (waiting ? '.68' : '1') + '">' +
       '<svg class="accretion-flow" viewBox="-60 -60 120 120"><defs><radialGradient id="' + gradient +
       '" cx="0" cy="0" r="52" gradientUnits="userSpaceOnUse"><stop offset=".24" stop-color="#ece5ff"/>' +
@@ -783,10 +826,13 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       var done = !isOpen(t);
       var waits = done ? [] : prereqsOf(t.id);
       var holeAge = blackHoleAge(t, now);
+      var stage = !done && !holeAge ? starStage(t, now) : null;
       var el = document.createElement('div');
       el.className = 'star' + (done ? ' ember' : (waits.length ? ' dim' : '')) +
         (t.x > .74 ? ' flip' : '') + (holeAge ? ' black-hole' : '');
       el.dataset.id = t.id;
+      if (stage) el.dataset.stage = stage.key;
+      if (holeAge) el.dataset.stage = 'black-hole';
       el.classList.toggle('link-source', t.id === linkSource);
       setStarMotion(el, t.id);
       if (!done && !holeAge && !waits.length && sky.dataset.view === 'map') {
@@ -807,7 +853,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       el.style.top = point.y + 'px';
       el.innerHTML =
         '<span class="star-art">' + (holeAge ? blackHoleArt(t.id, holeAge, waits.length) :
-          done ? emberSVG() : waits.length ? unlitSVG() : starSVG(t.id, magnitude(t))) + '</span>' +
+          done ? emberSVG() : waits.length ? unlitSVG() : starSVG(t.id, magnitude(t, now), stage)) + '</span>' +
         '<div class="hit"></div>' +
         '<div class="name">' + esc(t.title) + '</div>' +
         (done ? '<div class="resolvedwhen">resolved</div>' : '') +
@@ -828,7 +874,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       fitLabel(el);
     });
     var list = visible().filter(function (t) { return !t.pending; }).map(function (task) {
-      return { task: task, age: Math.floor(blackHoleAge(task, now)) };
+      return { task: task, age: Math.floor(blackHoleAge(task, now)), stage: starStage(task, now) };
     });
     list.sort(function (a, b) { return (b.age >= priorityAfter ? b.age : 0) - (a.age >= priorityAfter ? a.age : 0); });
     poolList.innerHTML = list.map(function (item) {
@@ -837,7 +883,7 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
       return '<li><button type="button" data-open-task="' + esc(t.id) + '">' +
         '<span>' + esc(t.title) + '</span><small>' +
         (item.age ? 'Black hole · ' + item.age + ' days open' + (waits ? ' · ' : '') : '') +
-        (!isOpen(t) ? 'Resolved' : waits ? 'Waiting on ' + waits + ' task' + (waits === 1 ? '' : 's') : item.age ? '' : 'Ready') +
+        (!isOpen(t) ? 'Resolved' : waits ? 'Waiting on ' + waits + ' task' + (waits === 1 ? '' : 's') : item.age ? '' : item.stage.label) +
         '</small></button></li>';
     }).join('') || '<li class="pool-empty">No tasks here yet. Add one above.</li>';
 
@@ -1188,8 +1234,10 @@ body[data-workspace-overlay=true] .sky .pool-loading { left: var(--workspace-ins
     } else if (t.created_at) {
       var c = new Date(t.created_at);
       when = isNaN(c) ? '' : 'added ' + c.toISOString().slice(0, 10);
-      var holeAge = Math.floor(blackHoleAge(t, Date.now()));
+      var now = Date.now();
+      var holeAge = Math.floor(blackHoleAge(t, now));
       if (holeAge) when = 'Black hole · ' + holeAge + ' days open';
+      else if (!done && when) when = starStage(t, now).label + ' · ' + when;
     }
 
     var html = '<div class="ptitle" id="pool-title">' + esc(t.title) + '</div>' +

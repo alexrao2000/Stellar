@@ -16,19 +16,28 @@ const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
         const Notification = { permission: 'default', requestPermission: async () => { window.permissionRequests++; Notification.permission = 'granted'; return 'granted'; } };
         Object.defineProperty(window, 'Notification', { value: Notification, configurable: true });
         Object.defineProperty(window, 'PushManager', { value: function () {}, configurable: true });
-        let subscribed = false;
-        const subscription = { endpoint: 'https://fcm.googleapis.com/demo-device', toJSON() { return { endpoint: this.endpoint, keys: { auth: 'demo', p256dh: 'demo' } }; }, unsubscribe: async () => { subscribed = false; return true; } };
-        const registration = { pushManager: { getSubscription: async () => subscribed ? subscription : null, subscribe: async () => { subscribed = true; return subscription; } } };
+        if (sessionStorage.getItem('fixture.push')) Notification.permission = 'granted';
+        const subscription = { endpoint: 'https://fcm.googleapis.com/demo-device', toJSON() { return { endpoint: this.endpoint, keys: { auth: 'demo', p256dh: 'demo' } }; }, unsubscribe: async () => { sessionStorage.removeItem('fixture.push'); return true; } };
+        const registration = { pushManager: { getSubscription: async () => sessionStorage.getItem('fixture.push') ? subscription : null, subscribe: async () => { sessionStorage.setItem('fixture.push', 'true'); return subscription; } } };
         Object.defineProperty(navigator, 'serviceWorker', { value: { register: async () => registration, ready: Promise.resolve(registration) }, configurable: true });
       });
       const state = { tasks: [{ id: 1, title: 'Demo reminder star', notes: '', x: .4, y: .4, resolved_at: null,
         remind_at: new Date(Date.now() + 86400000).toISOString(), reminder_version: 'one', reminder_sent_at: null }], edges: [] };
       const requests = [];
+      const warnings = { daily_warnings: false, collapse_warnings: false };
       await context.route('**/api/**', async route => {
         const request = route.request(), url = new URL(request.url());
         let data;
         if (url.pathname === '/api/pool') data = state;
         else if (url.pathname === '/api/notifications/config') data = { enabled: true, public_key: 'BA', default_hours: 24 };
+        else if (url.pathname === '/api/changes') data = {};
+        else if (url.pathname === '/api/task_settings') data = { tasks: [] };
+        else if (url.pathname === '/api/notifications/warnings') {
+          const update = request.postDataJSON();
+          for (const key of Object.keys(warnings)) if (key in update) warnings[key] = update[key];
+          requests.push({ path: url.pathname, body: update });
+          data = warnings;
+        }
         else if (url.pathname.startsWith('/api/notifications/')) {
           requests.push({ path: url.pathname, method: request.method(), body: request.postDataJSON() }); data = { ok: true, id: 'device' };
         } else if (url.pathname.endsWith('/reminder')) {
@@ -76,6 +85,30 @@ const base = process.env.STELLAR_TEST_URL || 'http://127.0.0.1:8000';
         await page.waitForTimeout(80);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       }
+      await page.setViewportSize({ width: 320, height: 690 });
+      await page.goto(base + '/tasks');
+      assert(!requests.some(request => request.path === '/api/notifications/warnings'), 'Closed section skips loading preferences');
+      await page.getByText('Notifications', { exact: true }).click();
+      await page.getByRole('button', { name: 'Enable notifications', exact: true }).click();
+      const daily = page.getByRole('checkbox', { name: /Daily deadlines/ });
+      const collapse = page.getByRole('checkbox', { name: /Black hole warnings/ });
+      await daily.waitFor();
+      assert.equal(await daily.isChecked(), false);
+      assert.equal(await collapse.isChecked(), false);
+      await daily.check();
+      await page.getByText('Notification preferences saved on this device.').waitFor();
+      assert.equal(warnings.daily_warnings, true);
+      assert.equal(warnings.collapse_warnings, false);
+      await collapse.check();
+      await page.waitForFunction(() => !document.querySelector('.notification-preferences label:nth-child(2) input').disabled);
+      await page.reload();
+      if (!await page.locator('[data-warning-preferences]').isVisible()) {
+        await page.getByText('Notifications', { exact: true }).click();
+      }
+      await collapse.waitFor();
+      assert.equal(await daily.isChecked(), true);
+      assert.equal(await collapse.isChecked(), true);
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       assert.deepEqual(errors, []);
       console.log(engine + ': deep links, explicit permission, device test/disable, reminder changes and compact layouts passed');
     } finally { await browser.close(); }

@@ -89,6 +89,60 @@ def test_dispatcher_uses_its_own_auth_without_opening_user_apis(client,monkeypat
     assert client.post(reminders.DISPATCH_PATH,headers={'Authorization':'Bearer test-dispatch'}).json() == {'sent':0}
     assert client.post('/api/notifications/subscribe',json=subscription()).status_code != 200
     assert client.get('/api/notifications/config').status_code != 200
+    assert client.post('/api/notifications/warnings', json={'endpoint': subscription()['endpoint']}).status_code != 200
+    assert client.post(reminders.DISPATCH_PATH + '?warnings=true').status_code == 401
+
+
+def test_warning_preferences_patch_one_device_and_return_only_preferences(client, monkeypatch):
+    device = subscription()
+    calls = []
+
+    def database(request):
+        calls.append(request)
+        return httpx.Response(200, json=[{
+            'daily_warnings': False, 'collapse_warnings': True, 'subscription': device,
+        }])
+
+    with httpx.Client(transport=httpx.MockTransport(database)) as http:
+        monkeypatch.setattr(postgrest, '_http', lambda: http)
+        monkeypatch.setattr(reminders, '_db', lambda: postgrest.Client('https://database.invalid', 'test'))
+        path = '/api/notifications/warnings'
+        body = {'endpoint': device['endpoint']}
+        assert client.post(path, json=body).json() == {'daily_warnings': False, 'collapse_warnings': True}
+        assert calls[-1].method == 'GET'
+        updated = client.post(path, json={**body, 'daily_warnings': False})
+        assert updated.status_code == 200 and updated.headers['cache-control'] == 'no-store'
+        assert 'subscription' not in updated.json()
+        assert calls[-1].method == 'PATCH'
+        assert calls[-1].url.params['endpoint'] == 'eq.' + device['endpoint']
+        assert json.loads(calls[-1].content) == {'daily_warnings': False}
+
+
+def test_warning_worker_rechecks_delivery_and_sets_expiration(client, monkeypatch):
+    sent, finished = [], []
+    claims = [
+        dict(kind='daily', event_key='1:2026-11-25', subscription_id='device', claim_token='current'),
+        dict(kind='collapse', event_key='2', subscription_id='device', claim_token='cancelled'),
+    ]
+
+    def database(request):
+        body = json.loads(request.content)
+        if request.url.path.endswith('/claim_stellar_warnings'):
+            return httpx.Response(200, json=claims)
+        if request.url.path.endswith('/stellar_warning_for_delivery'):
+            current = [dict(title='Demo task', url='/today?day=2026-11-25&view=day', subscription=subscription(), ttl=122)]
+            return httpx.Response(200, json=current if body['token'] == 'current' else [])
+        finished.append((request.url.params['claim_token'], body['finished']))
+        return httpx.Response(200, json=[])
+
+    with httpx.Client(transport=httpx.MockTransport(database)) as http:
+        monkeypatch.setattr(postgrest, '_http', lambda: http)
+        monkeypatch.setattr(reminders, '_db', lambda: postgrest.Client('https://database.invalid', 'test'))
+        monkeypatch.setattr(reminders, 'send_push', lambda device, payload, *, ttl: sent.append((payload, ttl)))
+        result = client.post(reminders.DISPATCH_PATH + '?warnings=true', headers={'Authorization': 'Bearer test-dispatch'})
+        assert result.json() == {'sent': 1, 'retry': 0, 'failed': 0, 'cancelled': 1}
+        assert sent[0][1] == 122 and sent[0][0]['url'] == '/today?day=2026-11-25&view=day'
+        assert finished == [('eq.current', True), ('eq.cancelled', False)]
 
 
 def test_worker_rechecks_resolved_and_rescheduled_stars_and_retries(monkeypatch):
