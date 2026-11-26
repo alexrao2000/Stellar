@@ -50,8 +50,17 @@ async function check(engine) {
     const supernova = newborn.locator('.stellar-shockwave');
     assert.equal(await supernova.count(), 2);
     const supernovaSize = Number(await newborn.locator('svg').getAttribute('width'));
-    await page.clock.fastForward(61000);
+    const labelBefore = await newborn.locator('.name').boundingBox();
+    const crossDeadline = async () => {
+      const wait = now + 60060 - await page.evaluate(() => Date.now());
+      await page.clock.fastForward(wait);
+    };
+    await crossDeadline();
     await newborn.locator('.pool-vortex').waitFor({ state: 'attached' });
+    await newborn.locator('.pool-collapse-core').waitFor({ state: 'attached' });
+    assert.deepEqual(await newborn.locator('.name').boundingBox(), labelBefore, 'The star label stays in place during collapse');
+    assert.equal(await older.locator('.pool-collapse').count(), 0, 'Previously collapsed stars do not replay the effect');
+    const started = await newborn.getAttribute('data-collapse-started');
     const width = element => element.evaluate(el => el.offsetWidth);
     const firstVortex = await width(newborn.locator('.pool-vortex'));
     assert(firstVortex > supernovaSize && firstVortex < supernovaSize * 1.2, 'A newborn black hole starts slightly larger than the supernova');
@@ -59,6 +68,11 @@ async function check(engine) {
     const smallest = Math.min(...await shadows.evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('r')))));
     assert(biggest > smallest * 2, 'Older black holes have a larger effect');
     await page.getByRole('button', { name: 'Show resolved', exact: true }).click();
+    assert.equal(await newborn.getAttribute('data-collapse-started'), started, 'A map redraw preserves the collapse timeline');
+    await newborn.locator('.pool-vortex').evaluate(el => {
+      el.getAnimations().find(animation => animation.animationName === 'collapse-vortex').finish();
+    });
+    await newborn.locator('.pool-collapse').waitFor({ state: 'detached' });
     await page.locator('.star[data-id="5"].ember').waitFor({ state: 'attached' });
     assert.equal(await page.locator('.star[data-id="5"].black-hole').count(), 0);
     const art = older.locator('.pool-vortex');
@@ -85,8 +99,26 @@ async function check(engine) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await older.locator('.accretion-flow').evaluate(el => getComputedStyle(el).animationName), 'none');
     assert.equal(await art.locator('.vortex-mote').first().evaluate(el => getComputedStyle(el).animationName), 'none');
+    await page.clock.setSystemTime(now + 53000);
+    await page.reload();
+    await newborn.locator('.stellar-shockwave').first().waitFor({ state: 'attached' });
+    await crossDeadline();
+    assert.equal(await newborn.locator('.pool-vortex').count(), 1);
+    assert.equal(await newborn.locator('.pool-collapse').count(), 0, 'Reduced motion skips the collapse effect');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.clock.setSystemTime(now + 53000);
+    await page.reload();
+    await newborn.locator('.stellar-shockwave').first().waitFor({ state: 'attached' });
+    await page.evaluate(() => window.stellarSetActive(false));
+    await crossDeadline();
+    await page.evaluate(() => window.stellarSetActive(true));
+    assert.equal(await newborn.locator('.pool-vortex').count(), 1);
+    assert.equal(await newborn.locator('.pool-collapse').count(), 0, 'A hidden map does not play the effect when it returns');
+    await page.reload();
+    await newborn.locator('.pool-vortex').waitFor({ state: 'attached' });
+    assert.equal(await newborn.locator('.pool-collapse').count(), 0, 'Opening an already collapsed star skips the effect');
     assert.deepEqual(errors, []);
-    console.log(`${engine}: age transition, widening shadow, curved link, list priority and reduced motion passed`);
+    console.log(`${engine}: one-shot collapse, visibility, reduced motion, widening shadow and curved links passed`);
   } finally { await browser.close(); }
 }
 
